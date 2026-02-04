@@ -1,47 +1,28 @@
-# Roadmap
+# Roadmap — Performance, UI Testing, Design
 
-## Now
+## Performance
 
-- Run the full scenario loop after the home-only configs are validated.
-- Keep the Web UI review flow tight: metrics on passes, clear diff visibility, and stable cross-compare pairs.
+- [ ] Profile compare pipeline (CPU + disk I/O) on large suites
+- [ ] Avoid sync PNG decode/write on hot paths
+- [ ] Add bounded concurrency for compare tasks
+- [ ] Skip diff image writes when not needed (optional)
+- [ ] Add basic telemetry (time per scenario + totals)
 
-## Done (Feb 2026)
+## UI Testing
 
-### Fullscreen tall-image compare
+- [ ] Make UI tests runnable without privileged bind (configurable host/port)
+- [ ] Run UI smoke suite in CI with retries on infra errors only
+- [ ] Add coverage for project filtering, batch approve, cross-compare viewer
+- [ ] Add a stress fixture set to catch UI performance regressions
 
-- [x] Auto-columns based on viewport ratio
-- [x] Linked scroll across baseline/test/diff
-- [x] Toggle single vs multi-column
-- [x] Fit logic without layout shift
+## Design
 
-### Cross-compare workflow
+- [ ] Card hierarchy cleanup (status, tags, primary actions)
+- [ ] Stronger contrast defaults for light/dark themes
+- [ ] Compact filters + batch actions row
+- [ ] Multi-column viewer controls clarity (labels + tooltips)
 
-- [x] Approve/revoke per pair persisted to disk
-- [x] Pair summaries and filters in UI
-- [x] Report/UI parity
+## Tooling
 
-### Auto-thresholds from approvals
-
-- [x] Capture diff %, pixels, viewport, scenario, browser pair
-- [x] Compute P95 caps with min sample size
-- [x] Apply softly under global ceilings
-- [x] Review queue for auto-pass candidates
-
-### Architecture
-
-- [x] Core separation (config, paths, task planning)
-- [x] Web test flow split: capture/compare/persist
-- [x] Metadata contract + versioned schema
-
-### Testing
-
-- [x] Unit: config validation, filename/metadata, diff thresholds
-- [x] Integration: CLI, cross-compare persistence, project service flow
-- [x] UI: smoke + fullscreen + theme persistence
-- [x] Regression fixtures: engines + small vrtini project
-
-### Tooling
-
-- [x] Husky pre-push for typecheck + unit tests
-- [x] Keep pre-commit fast with lint-staged
-- [x] CI workflow for typecheck, unit, build, UI
+- [ ] Update docs for performance + UI testing workflow
+- [ ] Add perf troubleshooting section (CPU, memory, I/O)

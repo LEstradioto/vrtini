@@ -11,6 +11,15 @@ Make vrtini fast on large suites, keep UI responsive under heavy data, and harde
 - Improve UI test reliability and coverage.
 - Raise visual quality and consistency.
 
+## Initial Tasks (from Performance Review)
+
+1. Replace sync PNG decode/write with async pipeline or worker pool (`src/compare.ts`).
+2. Add bounded concurrency for compare loops (`src/commands/test.ts`, `src/commands/cross-compare.ts`).
+3. Fix UI test server binding for restricted environments (`playwright.config.ts`).
+4. Avoid diff image writes for matches when not needed (`src/compare.ts`).
+5. Optimize UI list membership checks with Sets (`web/client/src/pages/Project.svelte`).
+6. Add debounce to text filter (`web/client/src/pages/Project.svelte`).
+
 ## Non‑Goals
 
 - New comparison engines.

@@ -1,0 +1,154 @@
+{
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VRT Configuration - Full Reference
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Copy this file to vrt.config.json and customize for your project.
+  // Most options have sensible defaults - see vrt.config.minimal.json for quick start.
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Output Directories
+  // ───────────────────────────────────────────────────────────────────────────
+
+  "baselineDir": "./.vrt/baselines",   // Where approved baseline images are stored
+  "outputDir": "./.vrt/output",        // Where test results, diffs, and reports go
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Browsers
+  // ───────────────────────────────────────────────────────────────────────────
+  // Simple: ["chromium", "webkit"]
+  // Versioned: [{ "name": "chromium", "version": "120" }]
+  // Run `vrt build` after adding versioned browsers.
+
+  "browsers": ["chromium", "webkit"],
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Viewports
+  // ───────────────────────────────────────────────────────────────────────────
+
+  "viewports": [
+    { "name": "desktop", "width": 1920, "height": 1080 },
+    { "name": "tablet", "width": 1024, "height": 768 },
+    { "name": "mobile", "width": 375, "height": 812 }
+  ],
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Comparison Engines
+  // ───────────────────────────────────────────────────────────────────────────
+  // All enabled by default. Set to false to exclude an engine.
+
+  "engines": {
+    "pixelmatch": true,   // Pixel-by-pixel comparison (fast, JS-based)
+    "odiff": true,        // Better antialiasing detection (OCaml binary)
+    "ssim": true,         // Structural similarity index
+    "phash": true         // Perceptual hash (detects similar images)
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // pixelmatch Options
+  // ───────────────────────────────────────────────────────────────────────────
+
+  "pixelmatch": {
+    "threshold": 0.1,       // Color tolerance (0 = exact, 1 = any color)
+    "antialiasing": true,   // Detect and ignore antialiased pixels
+    "alpha": 0.1            // Alpha channel tolerance
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // odiff Options
+  // ───────────────────────────────────────────────────────────────────────────
+
+  "odiff": {
+    "threshold": 0.1,           // Diff threshold percentage
+    "antialiasing": true,       // Ignore antialiasing differences (great for fonts)
+    "failOnLayoutDiff": true,   // Fail if images have different dimensions
+    "outputDiffMask": false     // true = mask only, false = overlay on image
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Global Diff Thresholds (soft tolerances)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Allows small, acceptable diffs to pass without failing the test.
+
+  "threshold": 0.1,             // Base threshold for diff engine sensitivity
+  "diffThreshold": {
+    "maxDiffPercentage": 1,     // Allow up to 1% diff
+    "maxDiffPixels": 1500       // Or 1,500 pixels
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Confidence Scoring
+  // ───────────────────────────────────────────────────────────────────────────
+  // Unified score combining all enabled engines.
+  // Weights: pixelmatch 30%, odiff 30%, ssim 25%, phash 15%
+
+  "confidence": {
+    "passThreshold": 95,    // >= 95% = pass (green)
+    "warnThreshold": 80     // >= 80% = warning (yellow), < 80% = fail (red)
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Cross-Compare Normalization (optional)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Controls how cross-compare handles size mismatches between browsers.
+  // normalization: "pad" (default), "resize", "crop"
+  // mismatch: "strict" (default) or "ignore"
+
+  "crossCompare": {
+    "normalization": "pad",
+    "mismatch": "strict"
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Scenario Defaults
+  // ───────────────────────────────────────────────────────────────────────────
+  // Applied to all scenarios unless overridden.
+
+  "scenarioDefaults": {
+    "waitFor": "networkidle",              // "load", "networkidle", "domcontentloaded"
+    "fullPage": false,                     // Capture entire scrollable page
+    "delay": 0,                            // Wait ms after page load
+    "hideSelectors": [],                   // CSS selectors to hide (visibility: hidden)
+    "removeSelectors": []                  // CSS selectors to remove (display: none)
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Scenarios
+  // ───────────────────────────────────────────────────────────────────────────
+  // Each scenario captures screenshots across all browsers and viewports.
+  // Use host.docker.internal instead of localhost for Docker.
+
+  "scenarios": [
+    {
+      "name": "homepage",
+      "url": "http://host.docker.internal:3000/"
+    },
+    {
+      "name": "login",
+      "url": "http://host.docker.internal:3000/login",
+      "waitForSelector": ".login-form"     // Wait for element before screenshot
+    },
+    {
+      "name": "dashboard",
+      "url": "http://host.docker.internal:3000/dashboard",
+      "waitFor": "networkidle",
+      "hideSelectors": [".timestamp", ".live-counter"],
+      "removeSelectors": ["#cookie-banner"]
+    },
+    {
+      "name": "modal-open",
+      "url": "http://host.docker.internal:3000/",
+      "clickSelector": ".open-modal-btn",  // Click before screenshot
+      "postInteractionWait": 500           // Wait ms after click
+    },
+    {
+      "name": "header-component",
+      "url": "http://host.docker.internal:3000/",
+      "selector": "header.main-nav"        // Capture specific element
+    },
+    {
+      "name": "full-page",
+      "url": "http://host.docker.internal:3000/about",
+      "fullPage": true
+    }
+  ]
+}

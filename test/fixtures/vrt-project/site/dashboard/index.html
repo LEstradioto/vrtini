@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VRT Fixture - Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="page dashboard">
+    <header class="site-header">
+      <div class="brand">
+        <img src="/assets/logo.svg" alt="VRT Fixture" />
+        <span>VRT Fixture</span>
+      </div>
+      <nav class="nav">
+        <a href="/">Home</a>
+        <a href="/about/">About</a>
+        <a href="/pricing/">Pricing</a>
+        <a class="active" href="/dashboard/">Dashboard</a>
+        <a href="/status/">Status</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="page-title">
+        <div class="tag">Workspace</div>
+        <h1>Release dashboard</h1>
+      </div>
+
+      <section class="dashboard">
+        <aside class="sidebar">
+          <strong>Navigation</strong>
+          <nav class="nav">
+            <a class="active" href="/dashboard/">Overview</a>
+            <a href="/status/">Service health</a>
+            <a href="/pricing/">Plans</a>
+          </nav>
+        </aside>
+
+        <div>
+          <div class="metrics">
+            <div class="card">
+              <div class="tag">Runs</div>
+              <strong>18</strong>
+              <p>Completed this month</p>
+            </div>
+            <div class="card">
+              <div class="tag">Diffs</div>
+              <strong>6</strong>
+              <p>Open for review</p>
+            </div>
+            <div class="card">
+              <div class="tag">Approved</div>
+              <strong>92%</strong>
+              <p>Auto-pass rate</p>
+            </div>
+          </div>
+
+          <div class="section chart">
+            <strong>Confidence trend</strong>
+            <div class="chart-bars">
+              <span style="height: 40%"></span>
+              <span style="height: 65%"></span>
+              <span style="height: 52%"></span>
+              <span style="height: 72%"></span>
+              <span style="height: 58%"></span>
+              <span style="height: 80%"></span>
+            </div>
+          </div>
+
+          <div class="section activity">
+            <strong>Latest activity</strong>
+            <div class="activity-item">
+              <span>Marketing site</span>
+              <span class="pill ok">Approved</span>
+            </div>
+            <div class="activity-item">
+              <span>Billing flow</span>
+              <span class="pill warn">Needs review</span>
+            </div>
+            <div class="activity-item">
+              <span>Docs updates</span>
+              <span class="pill ok">Approved</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">Fixture project for VRT regression coverage.</footer>
+  </body>
+</html>

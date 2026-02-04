@@ -1,0 +1,16 @@
+{
+  "scenarios": [
+    {
+      "name": "home",
+      "url": "http://host.docker.internal:3000/"
+    },
+    {
+      "name": "about",
+      "url": "http://host.docker.internal:3000/about"
+    },
+    {
+      "name": "pricing",
+      "url": "http://host.docker.internal:3000/pricing"
+    }
+  ]
+}

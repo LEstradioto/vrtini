@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VRT Fixture - Home</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="page home">
+    <header class="site-header">
+      <div class="brand">
+        <img src="/assets/logo.svg" alt="VRT Fixture" />
+        <span>VRT Fixture</span>
+      </div>
+      <nav class="nav">
+        <a class="active" href="/">Home</a>
+        <a href="/about/">About</a>
+        <a href="/pricing/">Pricing</a>
+        <a href="/dashboard/">Dashboard</a>
+        <a href="/status/">Status</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <h1>Ship calm, confident UI releases every week.</h1>
+          <p>
+            A tiny sample site for VRT smoke coverage. Static content, stable layout, and a
+            consistent visual rhythm across routes.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="/pricing/">Start a run</a>
+            <a class="button ghost" href="/about/">See how it works</a>
+          </div>
+        </div>
+        <div class="hero-card">
+          <div class="tag">Release snapshot</div>
+          <h3>Weekly compare recap</h3>
+          <p>14 routes captured, 3 differences flagged, 1 approved.</p>
+          <div class="stats">
+            <div class="stat">
+              <strong>98.1%</strong>
+              <span>Similarity score</span>
+            </div>
+            <div class="stat">
+              <strong>4m 12s</strong>
+              <span>Capture time</span>
+            </div>
+            <div class="stat">
+              <strong>2.3%</strong>
+              <span>Diff pixels</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Highlights</h2>
+        <div class="card-grid">
+          <article class="card">
+            <div class="tag">Stable</div>
+            <h3>Deterministic UI</h3>
+            <p>Static routes avoid jitter so diff output remains consistent.</p>
+          </article>
+          <article class="card">
+            <div class="tag">Fast</div>
+            <h3>Lean assets</h3>
+            <p>Local SVGs and system fonts remove network variance.</p>
+          </article>
+          <article class="card">
+            <div class="tag">Useful</div>
+            <h3>Coverage</h3>
+            <p>Hero, cards, pricing tables, and dashboards in one fixture.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="cta">
+        <div>
+          <h2>Ready for the baseline?</h2>
+          <p>Run VRT against this fixture in CI to keep regressions obvious.</p>
+        </div>
+        <a class="button ghost" href="/dashboard/">Open dashboard</a>
+      </section>
+    </main>
+
+    <footer class="footer">Fixture project for VRT regression coverage.</footer>
+  </body>
+</html>

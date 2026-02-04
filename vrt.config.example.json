@@ -1,0 +1,27 @@
+{
+  "baselineDir": "./.vrt/baselines",
+  "outputDir": "./.vrt/output",
+  "browsers": ["chromium", "webkit"],
+  "viewports": [
+    { "name": "desktop", "width": 1920, "height": 1080 },
+    { "name": "mobile", "width": 375, "height": 812 }
+  ],
+  "threshold": 0.1,
+  "diffThreshold": {
+    "maxDiffPercentage": 1,
+    "maxDiffPixels": 1500
+  },
+  "scenarios": [
+    {
+      "name": "homepage",
+      "url": "https://example.com",
+      "waitFor": "networkidle"
+    },
+    {
+      "name": "login",
+      "url": "https://example.com/login",
+      "waitForSelector": "#login-form",
+      "beforeScreenshot": "document.querySelector('.cookie-banner')?.remove()"
+    }
+  ]
+}

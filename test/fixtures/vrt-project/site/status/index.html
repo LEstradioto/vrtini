@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VRT Fixture - Status</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="page status">
+    <header class="site-header">
+      <div class="brand">
+        <img src="/assets/logo.svg" alt="VRT Fixture" />
+        <span>VRT Fixture</span>
+      </div>
+      <nav class="nav">
+        <a href="/">Home</a>
+        <a href="/about/">About</a>
+        <a href="/pricing/">Pricing</a>
+        <a href="/dashboard/">Dashboard</a>
+        <a class="active" href="/status/">Status</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="page-title">
+        <div class="tag">Health</div>
+        <h1>Service status</h1>
+      </div>
+
+      <table class="status-table">
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Region</th>
+            <th>Uptime</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Capture pipeline</td>
+            <td>us-west</td>
+            <td>99.98%</td>
+            <td><span class="pill ok">Operational</span></td>
+          </tr>
+          <tr>
+            <td>Diff workers</td>
+            <td>us-east</td>
+            <td>99.72%</td>
+            <td><span class="pill warn">Degraded</span></td>
+          </tr>
+          <tr>
+            <td>Report service</td>
+            <td>eu-central</td>
+            <td>100%</td>
+            <td><span class="pill ok">Operational</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <section class="section">
+        <div class="card-grid">
+          <article class="card">
+            <div class="tag">Incident</div>
+            <strong>Oct 02</strong>
+            <p>Diff worker queue delay (resolved).</p>
+          </article>
+          <article class="card">
+            <div class="tag">Maintenance</div>
+            <strong>Oct 10</strong>
+            <p>Browser image refresh scheduled.</p>
+          </article>
+          <article class="card">
+            <div class="tag">Release</div>
+            <strong>Oct 18</strong>
+            <p>New view shortcuts in fullscreen compare.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">Fixture project for VRT regression coverage.</footer>
+  </body>
+</html>

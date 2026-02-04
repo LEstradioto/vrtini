@@ -1,0 +1,87 @@
+{
+  "name": "vrt",
+  "version": "0.1.0",
+  "description": "Visual Regression Testing tool using Playwright and Docker",
+  "main": "dist/src/index.js",
+  "bin": {
+    "vrt": "./dist/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:client": "cd web/client && npm run build",
+    "build:all": "npm run build && npm run build:client",
+    "dev": "tsc --watch",
+    "dev:client": "cd web/client && npm run dev",
+    "fixture:serve": "node scripts/serve-fixture-site.js",
+    "vrt": "node dist/src/index.js",
+    "vrt:build": "node dist/src/index.js build",
+    "vrt:test": "node dist/src/index.js test",
+    "vrt:report": "node dist/src/index.js report",
+    "vrt:serve": "node dist/src/index.js serve",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:ui": "playwright test",
+    "test": "npm run build && npm run test:unit",
+    "full": "npm run build && npm run vrt:build && npm run vrt:test",
+    "serve": "npm run build:all && npm run vrt:serve",
+    "postinstall": "cd web/client && npm install",
+    "lint": "eslint src web/server",
+    "lint:fix": "eslint src web/server --fix",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@fastify/cors": "^9.0.0",
+    "@fastify/static": "^7.0.0",
+    "@types/pngjs": "^6.0.5",
+    "blockhash-core": "^0.1.0",
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "dockerode": "^4.0.0",
+    "dotenv": "^17.2.3",
+    "fastify": "^4.28.0",
+    "glob": "^10.0.0",
+    "image-ssim": "^0.2.0",
+    "odiff-bin": "^4.3.2",
+    "openai": "^4.77.0",
+    "pino-pretty": "^11.0.0",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "@playwright/test": "^1.49.1",
+    "prettier": "^3.8.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.53.1",
+    "vitest": "^4.0.17"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix --cache",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "type": "module",
+  "keywords": [
+    "visual-regression",
+    "testing",
+    "playwright",
+    "docker",
+    "screenshot"
+  ],
+  "license": "Apache-2.0"
+}

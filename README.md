@@ -22,7 +22,7 @@ Docker-based visual regression testing with Playwright, a web UI, and optional A
 
 ```bash
 git clone https://github.com/your-org/vrtini.git
-cd vrt
+cd vrtini
 npm install
 npm run build
 npm link

@@ -45,7 +45,7 @@ async function runBuildStep(options: {
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
-    .description('Initialize VRT project with full setup')
+    .description('Initialize vrtini project with full setup')
     .option('-f, --force', 'Overwrite existing config')
     .option('--skip-build', 'Skip TypeScript, client, and Docker builds')
     .action(async (options) => {
@@ -58,7 +58,7 @@ export function registerInitCommand(program: Command): void {
         const minimalConfigPath = resolve(VRT_ROOT, 'vrt.config.minimal.json');
         await copyFile(minimalConfigPath, configPath);
         console.log('✓ Created vrt.config.json (from minimal template)');
-        console.log('  See vrt.config.full.json5 in the VRT directory for all options');
+        console.log('  See vrt.config.full.json5 in the vrtini directory for all options');
       }
 
       const { baselineDir, outputDir } = getProjectDirs(cwd);
@@ -67,11 +67,11 @@ export function registerInitCommand(program: Command): void {
       console.log('✓ Created .vrt/baselines/ and .vrt/output/ directories');
 
       if (options.skipBuild) {
-        console.log('\n✓ VRT initialized (builds skipped)');
+        console.log('\n✓ vrtini initialized (builds skipped)');
         console.log('\nTo complete setup manually:');
         console.log('  1. npm run build (TypeScript)');
         console.log('  2. npm run build:client (Svelte UI)');
-        console.log('  3. vrt build (Docker image)');
+        console.log('  3. vrtini build (Docker image)');
         return;
       }
 
@@ -81,7 +81,7 @@ export function registerInitCommand(program: Command): void {
         failureLabel: 'TypeScript build failed',
         command: 'npm run build',
         cwd: VRT_ROOT,
-        failureHint: 'cd vrt && npm run build',
+        failureHint: 'cd vrtini && npm run build',
       });
       await runBuildStep({
         startLabel: 'Building Svelte client',
@@ -89,7 +89,7 @@ export function registerInitCommand(program: Command): void {
         failureLabel: 'Client build failed',
         command: 'npm run build:client',
         cwd: VRT_ROOT,
-        failureHint: 'cd vrt && npm run build:client',
+        failureHint: 'cd vrtini && npm run build:client',
       });
 
       const dockerDir = resolve(__dirname, '..', '..', '..', 'docker');
@@ -99,7 +99,7 @@ export function registerInitCommand(program: Command): void {
         console.log('✓ Docker image built');
       } catch (err) {
         console.error('✗ Docker build failed:', getErrorMessage(err));
-        console.log('  Run manually: vrt build');
+        console.log('  Run manually: vrtini build');
       }
 
       console.log('\n🔍 Validating setup...');
@@ -109,15 +109,15 @@ export function registerInitCommand(program: Command): void {
 
       if (hasDocker && hasConfig && hasDirs) {
         console.log('✓ All checks passed!\n');
-        console.log('VRT is ready. Run your first test with:');
-        console.log('  vrt test\n');
+        console.log('vrtini is ready. Run your first test with:');
+        console.log('  vrtini test\n');
         console.log('Or start the web UI:');
-        console.log('  vrt serve --open');
+        console.log('  vrtini serve --open');
       } else {
         console.log('\n⚠ Setup incomplete:');
         if (!hasConfig) console.log('  - Missing config file');
         if (!hasDirs) console.log('  - Missing directories');
-        if (!hasDocker) console.log('  - Missing Docker image (run: vrt build)');
+        if (!hasDocker) console.log('  - Missing Docker image (run: vrtini build)');
       }
     });
 }

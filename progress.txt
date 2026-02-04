@@ -71,7 +71,7 @@
 - Ran `npx playwright test --grep "theme persists"` (fails: no network access to npm registry).
 - Added small engine fixture set and fixture-based runEnabledEngines coverage.
 - Ran `npm run test:unit -- src/engines/index.test.ts`.
-- Added a small 5-route VRT fixture project for CI regression coverage and a local fixture server script.
+- Added a small 5-route vrtini fixture project for CI regression coverage and a local fixture server script.
 - Tests not run (fixture assets + server script only).
 - Added Husky pre-push hook to run `npm run typecheck` and `npm run test:unit`.
 - Ran `npm run typecheck` (fails: missing @playwright/test types, DOM lib errors in test/ui/smoke.spec.ts, nullability errors in tests, cross-compare-service type errors).

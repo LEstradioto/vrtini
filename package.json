@@ -1,10 +1,10 @@
 {
-  "name": "vrt",
+  "name": "vrtini",
   "version": "0.1.0",
   "description": "Visual Regression Testing tool using Playwright and Docker",
   "main": "dist/src/index.js",
   "bin": {
-    "vrt": "./dist/src/index.js"
+    "vrtini": "./dist/src/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -13,17 +13,17 @@
     "dev": "tsc --watch",
     "dev:client": "cd web/client && npm run dev",
     "fixture:serve": "node scripts/serve-fixture-site.js",
-    "vrt": "node dist/src/index.js",
-    "vrt:build": "node dist/src/index.js build",
-    "vrt:test": "node dist/src/index.js test",
-    "vrt:report": "node dist/src/index.js report",
-    "vrt:serve": "node dist/src/index.js serve",
+    "vrtini": "node dist/src/index.js",
+    "vrtini:build": "node dist/src/index.js build",
+    "vrtini:test": "node dist/src/index.js test",
+    "vrtini:report": "node dist/src/index.js report",
+    "vrtini:serve": "node dist/src/index.js serve",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:ui": "playwright test",
     "test": "npm run build && npm run test:unit",
-    "full": "npm run build && npm run vrt:build && npm run vrt:test",
-    "serve": "npm run build:all && npm run vrt:serve",
+    "full": "npm run build && npm run vrtini:build && npm run vrtini:test",
+    "serve": "npm run build:all && npm run vrtini:serve",
     "postinstall": "cd web/client && npm install",
     "lint": "eslint src web/server",
     "lint:fix": "eslint src web/server --fix",

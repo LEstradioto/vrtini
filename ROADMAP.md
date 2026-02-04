@@ -38,7 +38,7 @@
 - [x] Unit: config validation, filename/metadata, diff thresholds
 - [x] Integration: CLI, cross-compare persistence, project service flow
 - [x] UI: smoke + fullscreen + theme persistence
-- [x] Regression fixtures: engines + small VRT project
+- [x] Regression fixtures: engines + small vrtini project
 
 ### Tooling
 

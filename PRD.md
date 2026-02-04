@@ -1,8 +1,8 @@
-# PRD - VRT UI + Cross Compare
+# PRD - vrtini UI + Cross Compare
 
 ## Goal
 
-Improve the VRT web UI and cross-compare workflow to be more reliable, actionable, and easier to review at scale.
+Improve the vrtini web UI and cross-compare workflow to be more reliable, actionable, and easier to review at scale.
 
 ## Recent updates
 
@@ -46,7 +46,7 @@ Improve the VRT web UI and cross-compare workflow to be more reliable, actionabl
 - Added config validation unit tests and split config schema to avoid load-time cycles.
 - Added project service integration test covering config load/save and images metadata.
 - Added Playwright UI coverage for theme persistence and contrast checks.
-- Added a small 5-route VRT fixture project for CI regression coverage.
+- Added a small 5-route vrtini fixture project for CI regression coverage.
 - Added Husky pre-push hook to run typecheck and unit tests.
 - Kept pre-commit fast by limiting lint-staged to eslint/prettier with cache on staged JS/TS.
 - Added GitHub Actions CI workflow to run typecheck, unit tests, build, and UI tests.
@@ -106,7 +106,7 @@ Improve the VRT web UI and cross-compare workflow to be more reliable, actionabl
   - [x] Theme persistence + contrast
 - [x] Regression sets
   - [x] Small static fixture set for engines
-  - [x] Small VRT project (3–5 routes) for CI
+  - [x] Small vrtini project (3–5 routes) for CI
 
 ### Tooling
 

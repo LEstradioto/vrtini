@@ -1,4 +1,4 @@
-# VRT
+# vrtini
 
 Docker-based visual regression testing with Playwright, a web UI, and optional AI analysis.
 
@@ -21,7 +21,7 @@ Docker-based visual regression testing with Playwright, a web UI, and optional A
 ### From source
 
 ```bash
-git clone https://github.com/your-org/vrt.git
+git clone https://github.com/your-org/vrtini.git
 cd vrt
 npm install
 npm run build
@@ -31,17 +31,17 @@ npm link
 ### From npm (coming soon)
 
 ```bash
-npm install -g @your-org/vrt
+npm install -g @your-org/vrtini
 ```
 
 ## Quick start
 
 ```bash
 cd /path/to/your/project
-vrt init
-vrt build
-vrt test
-vrt serve
+vrtini init
+vrtini build
+vrtini test
+vrtini serve
 ```
 
 Open the UI at `http://0.0.0.0:4173`.
@@ -60,18 +60,18 @@ Key options:
 
 ## CLI
 
-| Command              | Description                         |
-| -------------------- | ----------------------------------- |
-| `vrt init`           | Create example config               |
-| `vrt build`          | Build Docker images for your config |
-| `vrt test`           | Capture screenshots and compare     |
-| `vrt test -s <name>` | Test specific scenario(s)           |
-| `vrt test -q`        | Quick mode (skip expensive engines) |
-| `vrt approve`        | Approve scenario as baseline        |
-| `vrt approve --all`  | Approve all as baselines            |
-| `vrt cross-compare`  | Compare browser pairs               |
-| `vrt report`         | Regenerate HTML report              |
-| `vrt serve`          | Start the web UI                    |
+| Command                 | Description                         |
+| ----------------------- | ----------------------------------- |
+| `vrtini init`           | Create example config               |
+| `vrtini build`          | Build Docker images for your config |
+| `vrtini test`           | Capture screenshots and compare     |
+| `vrtini test -s <name>` | Test specific scenario(s)           |
+| `vrtini test -q`        | Quick mode (skip expensive engines) |
+| `vrtini approve`        | Approve scenario as baseline        |
+| `vrtini approve --all`  | Approve all as baselines            |
+| `vrtini cross-compare`  | Compare browser pairs               |
+| `vrtini report`         | Regenerate HTML report              |
+| `vrtini serve`          | Start the web UI                    |
 
 ## Web UI
 
@@ -109,9 +109,9 @@ AI runs are optional and can be disabled per project.
 ## Docker
 
 ```bash
-vrt build                      # Build for your config
-vrt build --playwright 1.40.0  # Specific version
-vrt build --all-versions       # All supported versions
+vrtini build                      # Build for your config
+vrtini build --playwright 1.40.0  # Specific version
+vrtini build --all-versions       # All supported versions
 ```
 
 Use `host.docker.internal` instead of `localhost` in URLs.

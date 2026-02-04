@@ -73,7 +73,7 @@ export function registerReportCommand(program: Command): void {
         const reportPath = getReportPath(cwd, config);
         await generateReport(
           {
-            title: 'VRT Report',
+            title: 'vrtini Report',
             timestamp: new Date().toISOString(),
             results: comparisons,
             baselineDir,

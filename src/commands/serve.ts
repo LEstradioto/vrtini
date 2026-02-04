@@ -3,7 +3,7 @@ import type { Command } from 'commander';
 export function registerServeCommand(program: Command): void {
   program
     .command('serve')
-    .description('Start the VRT web UI server')
+    .description('Start the vrtini web UI server')
     .option('-p, --port <port>', 'Port number', '4173')
     .option('--host <host>', 'Host to bind', '0.0.0.0')
     .option('-o, --open', 'Open browser automatically')

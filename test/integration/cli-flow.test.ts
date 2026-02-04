@@ -60,7 +60,7 @@ describe('CLI integration', () => {
 
       const reportPath = getReportPath(tempDir, config);
       const reportHtml = await readFile(reportPath, 'utf-8');
-      expect(reportHtml).toContain('VRT Report');
+      expect(reportHtml).toContain('vrtini Report');
       expect(reportHtml).toContain('homepage');
 
       const { baselineDir, outputDir, diffDir } = getProjectDirs(tempDir, config);

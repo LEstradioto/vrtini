@@ -135,7 +135,7 @@
 
   async function deleteProject() {
     const confirmed = confirm(
-      'Remove this project from VRT?\n\n' +
+      'Remove this project from vrtini?\n\n' +
       '• The project will be removed from the dashboard\n' +
       '• All baseline, test, and diff images will be KEPT on disk\n' +
       '• You can re-add the project later'

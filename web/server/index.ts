@@ -87,7 +87,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
     await fastify.listen({ port, host });
 
     const url = `http://localhost:${port}`;
-    console.log(`\n  VRT Web UI running at: ${url}\n`);
+    console.log(`\n  vrtini Web UI running at: ${url}\n`);
 
     if (open) {
       const cmd = getOpenCommand(process.platform);

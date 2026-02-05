@@ -827,7 +827,7 @@
   }
 
   let crossCompareQueue = $derived.by(() => {
-    if (!crossResults) return [];
+    if (!crossResults || !showCompareFullscreen || compareMode !== 'cross') return [];
     const baselineLabel = crossResults.baselineLabel || 'Baseline';
     const testLabel = crossResults.testLabel || 'Test';
     return crossFilteredItems.map((item) => ({
@@ -2173,15 +2173,33 @@
                     </div>
                     <div class="cross-images">
                       <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
-                        <img src={getFileUrl(item.baseline)} alt="Baseline" />
+                        <img
+                          src={getFileUrl(item.baseline)}
+                          alt="Baseline"
+                          loading="lazy"
+                          decoding="async"
+                          fetchpriority="low"
+                        />
                       </button>
                       {#if item.diff}
                         <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
-                          <img src={getFileUrl(item.diff)} alt="Diff" />
+                          <img
+                            src={getFileUrl(item.diff)}
+                            alt="Diff"
+                            loading="lazy"
+                            decoding="async"
+                            fetchpriority="low"
+                          />
                         </button>
                       {/if}
                       <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
-                        <img src={getFileUrl(item.test)} alt="Test" />
+                        <img
+                          src={getFileUrl(item.test)}
+                          alt="Test"
+                          loading="lazy"
+                          decoding="async"
+                          fetchpriority="low"
+                        />
                       </button>
                     </div>
                     <div class="cross-actions">
@@ -3285,6 +3303,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
+    content-visibility: auto;
+    contain: layout paint;
+    contain-intrinsic-size: 280px 260px;
   }
 
   .cross-card.tag-approved {

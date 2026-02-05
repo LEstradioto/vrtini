@@ -379,6 +379,7 @@
   let lastImageKey = '';
   let lastView = currentView;
   let lastAutoFitKey = '';
+  let centerImage = $derived.by(() => !useColumnMode && zoom <= 1);
 
   $effect(() => {
     if (!imageContainer) return;
@@ -807,6 +808,10 @@
 
   $effect(() => {
     if (!panicActive) return;
+    const panicKey = isCompareMode
+      ? `compare:${compareIndexValue}`
+      : `queue:${currentImage?.filename ?? ''}`;
+    panicKey;
     startPanicLoop();
     return () => {
       if (panicFlipHandle) clearInterval(panicFlipHandle);
@@ -1217,6 +1222,7 @@
       class="image-container"
       class:dragging={isDragging}
       class:column-mode={useColumnMode}
+      class:centered={centerImage}
       bind:this={imageContainer}
       onwheel={handleWheel}
       onmousedown={handleMouseDown}
@@ -1806,7 +1812,7 @@
     overflow: auto;
     cursor: grab;
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     padding: 20px 70px;
     position: relative;
   }
@@ -1816,9 +1822,14 @@
     user-select: none;
   }
 
+  .image-container.centered {
+    justify-content: center;
+  }
+
   .image-stack {
     position: relative;
     transition: width 0.1s ease-out;
+    flex: 0 0 auto;
   }
 
   .image-stack img {

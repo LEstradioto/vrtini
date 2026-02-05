@@ -75,6 +75,9 @@ export function registerCrossCompareCommand(program: Command): void {
     .command('cross-compare')
     .description('Generate cross-browser comparison reports')
     .option('-c, --config <path>', 'Path to config file')
+    .option('-p, --pair <key>', 'Run a single cross-compare pair')
+    .option('-s, --scenario <name...>', 'Run specific scenarios')
+    .option('-v, --viewport <name...>', 'Run specific viewports')
     .action(async (options) => {
       try {
         const config = await loadConfig(options.config);
@@ -151,8 +154,17 @@ export function registerCrossCompareCommand(program: Command): void {
           throw new Error('No valid cross-compare pairs could be built from config browsers.');
         }
         const allowedPairs = new Set((crossCompare?.pairs ?? []).map((pair) => pair.trim()));
-        const selectedPairs =
+        let selectedPairs =
           allowedPairs.size > 0 ? pairs.filter((pair) => allowedPairs.has(pair.key)) : pairs;
+
+        if (options.pair) {
+          selectedPairs = selectedPairs.filter((pair) => pair.key === options.pair);
+          if (selectedPairs.length === 0) {
+            throw new Error(
+              `Unknown cross-compare pair: ${options.pair}. Available: ${availableKeys.join(', ')}`
+            );
+          }
+        }
 
         const quickMode = config.quickMode ?? false;
         const enginesConfig = buildEnginesConfig(quickMode, config.engines);
@@ -170,6 +182,42 @@ export function registerCrossCompareCommand(program: Command): void {
             );
           }
         }
+
+        const scenarioFilter = new Set(
+          (options.scenario ?? []).map((name: string) => name.trim()).filter(Boolean)
+        );
+        const viewportFilter = new Set(
+          (options.viewport ?? []).map((name: string) => name.trim()).filter(Boolean)
+        );
+
+        if (scenarioFilter.size > 0) {
+          const available = new Set(config.scenarios.map((scenario) => scenario.name));
+          const missing = [...scenarioFilter].filter((name) => !available.has(name));
+          if (missing.length > 0) {
+            throw new Error(
+              `Unknown scenario(s): ${missing.join(', ')}. Available: ${[...available].join(', ')}`
+            );
+          }
+        }
+
+        if (viewportFilter.size > 0) {
+          const available = new Set(config.viewports.map((viewport) => viewport.name));
+          const missing = [...viewportFilter].filter((name) => !available.has(name));
+          if (missing.length > 0) {
+            throw new Error(
+              `Unknown viewport(s): ${missing.join(', ')}. Available: ${[...available].join(', ')}`
+            );
+          }
+        }
+
+        const scenariosToRun =
+          scenarioFilter.size > 0
+            ? config.scenarios.filter((scenario) => scenarioFilter.has(scenario.name))
+            : config.scenarios;
+        const viewportsToRun =
+          viewportFilter.size > 0
+            ? config.viewports.filter((viewport) => viewportFilter.has(viewport.name))
+            : config.viewports;
 
         for (const pair of selectedPairs) {
           const results: ComparisonResult[] = [];
@@ -189,8 +237,8 @@ export function registerCrossCompareCommand(program: Command): void {
             diffPath: string;
           }[] = [];
 
-          for (const scenario of config.scenarios) {
-            for (const viewport of config.viewports) {
+          for (const scenario of scenariosToRun) {
+            for (const viewport of viewportsToRun) {
               const baselinePath = resolve(
                 outputDir,
                 getScreenshotFilename(
@@ -219,6 +267,10 @@ export function registerCrossCompareCommand(program: Command): void {
 
               comparisonTasks.push({ scenario, viewport, baselinePath, testPath, diffPath });
             }
+          }
+
+          if (comparisonTasks.length === 0) {
+            throw new Error('No cross-compare items matched the provided filters.');
           }
 
           const comparisonResults = await runWithConcurrency(

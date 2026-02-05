@@ -75,6 +75,7 @@
   // Constants
   const DEFAULT_COMPARISON_THRESHOLD = 0.1;
   const PAGE_SIZE = 56;
+  const CROSS_PAGE_SIZE = 24;
 
   function formatDuration(ms?: number): string {
     if (!ms) return '-';
@@ -86,18 +87,18 @@
     return err instanceof Error ? err.message : fallback;
   }
 
-  async function runCrossCompare() {
+  async function runCrossCompare(options?: { key?: string; itemKeys?: string[] }) {
     if (!project) return;
     crossCompareRunning = true;
     crossCompareError = null;
     try {
-      await crossCompare.run(project.id);
+      await crossCompare.run(project.id, options);
       const list = await crossCompare.list(project.id);
       crossReports = list.results;
-      if (crossReports.length > 0) {
-        const firstKey = crossReports[0].key;
-        selectedCrossKey = firstKey;
-        await loadCrossResults(firstKey);
+      const nextKey = options?.key ?? crossReports[0]?.key ?? null;
+      if (nextKey) {
+        selectedCrossKey = nextKey;
+        await loadCrossResults(nextKey);
         activeTab = 'cross';
       }
     } catch (err) {
@@ -105,6 +106,16 @@
     } finally {
       crossCompareRunning = false;
     }
+  }
+
+  async function runSelectedCrossPair() {
+    if (!selectedCrossKey) return;
+    await runCrossCompare({ key: selectedCrossKey });
+  }
+
+  async function rerunSelectedCrossItems() {
+    if (!selectedCrossKey || selectedCrossItems.size === 0) return;
+    await runCrossCompare({ key: selectedCrossKey, itemKeys: [...selectedCrossItems] });
   }
 
   async function clearCrossPair() {
@@ -266,6 +277,7 @@
   let crossSearchQuery = $state('');
   let crossStatusFilter = $state<'all' | 'diffs' | 'matches' | 'smart' | 'approved' | 'unapproved'>('all');
   let crossPairFilter = $state<'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches'>('all');
+  let crossCurrentPage = $state(0);
 
   // Cache-busting key for images (incremented after rerun)
   let imageCacheKey = $state(0);
@@ -578,6 +590,30 @@
     });
   });
 
+  let crossTotalPages = $derived(
+    Math.ceil(crossFilteredItems.length / CROSS_PAGE_SIZE)
+  );
+  let crossCurrentList = $derived(
+    crossFilteredItems.slice(
+      crossCurrentPage * CROSS_PAGE_SIZE,
+      (crossCurrentPage + 1) * CROSS_PAGE_SIZE
+    )
+  );
+
+  $effect(() => {
+    crossSearchQuery;
+    crossStatusFilter;
+    selectedCrossKey;
+    crossCurrentPage = 0;
+  });
+
+  $effect(() => {
+    const maxPage = Math.max(0, crossTotalPages - 1);
+    if (crossCurrentPage > maxPage) {
+      crossCurrentPage = maxPage;
+    }
+  });
+
   let crossPairSummary = $derived.by(() => {
     if (!crossResults) return null;
     const summary = {
@@ -627,7 +663,13 @@
   });
 
   let selectedCrossCount = $derived(selectedCrossItems.size);
-  let allCrossSelected = $derived(
+  let allCrossPageSelected = $derived(
+    crossCurrentList.length > 0 &&
+      crossCurrentList.every((item) =>
+        selectedCrossItems.has(item.itemKey ?? `${item.scenario}__${item.viewport}`)
+      )
+  );
+  let allCrossFilteredSelected = $derived(
     crossFilteredItems.length > 0 &&
       crossFilteredItems.every((item) =>
         selectedCrossItems.has(item.itemKey ?? `${item.scenario}__${item.viewport}`)
@@ -647,11 +689,23 @@
 
   function selectAllCross() {
     if (crossFilteredItems.length === 0) return;
-    if (allCrossSelected) return;
-    selectedCrossItems = new Set(
-      crossFilteredItems.map((item) => item.itemKey ?? `${item.scenario}__${item.viewport}`)
-    );
+    if (allCrossFilteredSelected) return;
+    if (allCrossPageSelected && crossTotalPages > 1) {
+      selectedCrossItems = new Set(
+        crossFilteredItems.map((item) => item.itemKey ?? `${item.scenario}__${item.viewport}`)
+      );
+    } else {
+      selectedCrossItems = new Set(
+        crossCurrentList.map((item) => item.itemKey ?? `${item.scenario}__${item.viewport}`)
+      );
+    }
   }
+
+  let selectAllCrossLabel = $derived.by(() => {
+    if (allCrossFilteredSelected) return `All (${crossFilteredItems.length})`;
+    if (allCrossPageSelected && crossTotalPages > 1) return `All Pages (${crossFilteredItems.length})`;
+    return 'Select All';
+  });
 
   function deselectAllCross() {
     selectedCrossItems = new Set();
@@ -1739,7 +1793,10 @@
               </select>
             </div>
             <button class="btn" onclick={runCrossCompare} disabled={crossCompareRunning}>
-              {crossCompareRunning ? 'Cross Comparing...' : 'Run Cross Compare'}
+              {crossCompareRunning ? 'Cross Comparing...' : 'Run All Pairs'}
+            </button>
+            <button class="btn" onclick={runSelectedCrossPair} disabled={!selectedCrossKey || crossCompareRunning}>
+              {crossCompareRunning ? 'Cross Comparing...' : 'Run Pair'}
             </button>
             <button class="btn danger" onclick={clearCrossPair} disabled={!selectedCrossKey || crossCompareRunning}>
               Delete Pair
@@ -1808,9 +1865,18 @@
             <div class="cross-selection-controls">
               {#if selectedCrossCount > 0}
                 <span class="selected-count">{selectedCrossCount} selected</span>
+                <button class="btn small rerun" onclick={rerunSelectedCrossItems} disabled={crossCompareRunning}>
+                  {crossCompareRunning ? 'Running...' : `Rerun (${selectedCrossCount})`}
+                </button>
               {/if}
-              <button class="btn small" onclick={selectAllCross} disabled={crossFilteredItems.length === 0 || allCrossSelected}>
-                Select All
+              <button
+                class="btn small"
+                class:expanded={allCrossPageSelected && !allCrossFilteredSelected && crossTotalPages > 1}
+                class:all-selected={allCrossFilteredSelected}
+                onclick={selectAllCross}
+                disabled={crossFilteredItems.length === 0 || allCrossFilteredSelected}
+              >
+                {selectAllCrossLabel}
               </button>
               <button class="btn small" onclick={deselectAllCross} disabled={selectedCrossCount === 0}>
                 Deselect
@@ -1853,8 +1919,29 @@
             {#if crossFilteredItems.length === 0}
               <div class="compare-hint">No cross-compare items match your filter.</div>
             {:else}
+              {#if crossTotalPages > 1}
+                <div class="pagination">
+                  <button
+                    class="btn small"
+                    onclick={() => crossCurrentPage = Math.max(0, crossCurrentPage - 1)}
+                    disabled={crossCurrentPage === 0}
+                  >
+                    Prev
+                  </button>
+                  <span class="page-info">
+                    Page {crossCurrentPage + 1} of {crossTotalPages} ({crossFilteredItems.length} items)
+                  </span>
+                  <button
+                    class="btn small"
+                    onclick={() => crossCurrentPage = Math.min(crossTotalPages - 1, crossCurrentPage + 1)}
+                    disabled={crossCurrentPage >= crossTotalPages - 1}
+                  >
+                    Next
+                  </button>
+                </div>
+              {/if}
               <div class="cross-grid">
-                {#each crossFilteredItems as item}
+                {#each crossCurrentList as item}
                   {@const smartPass = item.match && item.diffPercentage > 0}
                   {@const crossTag = item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
                   <div class="cross-card tag-{crossTag}">

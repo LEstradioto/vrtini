@@ -104,6 +104,13 @@ export interface CrossResultsSummary {
   issueCount: number;
 }
 
+export interface CrossCompareRunOptions {
+  key?: string;
+  itemKeys?: string[];
+  scenarios?: string[];
+  viewports?: string[];
+}
+
 interface CrossAcceptanceRecord {
   acceptedAt: string;
   reason?: string;
@@ -162,6 +169,35 @@ async function clearCrossDeletions(projectPath: string, key: string): Promise<vo
   if (!deletions[key]) return;
   const { [key]: _removed, ...rest } = deletions;
   await saveCrossDeletions(projectPath, rest);
+}
+
+async function clearCrossDeletionsForItems(
+  projectPath: string,
+  key: string,
+  itemKeys: string[]
+): Promise<void> {
+  if (itemKeys.length === 0) return;
+  const deletions = await loadCrossDeletions(projectPath);
+  const pairDeletions = deletions[key];
+  if (!pairDeletions) return;
+
+  const itemKeySet = new Set(itemKeys);
+  const nextEntries = Object.entries(pairDeletions).filter(([itemKey]) => !itemKeySet.has(itemKey));
+
+  if (nextEntries.length === Object.keys(pairDeletions).length) {
+    return;
+  }
+
+  if (nextEntries.length === 0) {
+    const { [key]: _removed, ...rest } = deletions;
+    await saveCrossDeletions(projectPath, rest);
+    return;
+  }
+
+  await saveCrossDeletions(projectPath, {
+    ...deletions,
+    [key]: Object.fromEntries(nextEntries),
+  });
 }
 
 function buildItemKey(scenario: string, viewport: string): string {
@@ -284,7 +320,8 @@ function summarizeCrossItems(
 export async function runCrossCompare(
   projectId: string,
   projectPath: string,
-  config: VRTConfig
+  config: VRTConfig,
+  options: CrossCompareRunOptions = {}
 ): Promise<CrossReport[]> {
   const { outputDir } = getProjectDirs(projectPath, config);
   const chromiumPair = tryFindLatestAndOld(config.browsers, 'chromium');
@@ -337,23 +374,88 @@ export async function runCrossCompare(
     throw new Error('Cross compare requires at least one latest+old browser pair');
   }
 
+  const availableKeys = pairs.map((pair) => pair.key);
+  const selectedPairs = options.key ? pairs.filter((pair) => pair.key === options.key) : pairs;
+  if (options.key && selectedPairs.length === 0) {
+    throw new Error(
+      `Unknown cross-compare pair: ${options.key}. Available: ${availableKeys.join(', ')}`
+    );
+  }
+
+  const scenarioFilter = new Set(
+    (options.scenarios ?? []).map((name) => name.trim()).filter(Boolean)
+  );
+  const viewportFilter = new Set(
+    (options.viewports ?? []).map((name) => name.trim()).filter(Boolean)
+  );
+  const itemKeyFilter =
+    options.itemKeys && options.itemKeys.length > 0 ? new Set(options.itemKeys) : null;
+
+  if (scenarioFilter.size > 0) {
+    const available = new Set(config.scenarios.map((scenario) => scenario.name));
+    const missing = [...scenarioFilter].filter((name) => !available.has(name));
+    if (missing.length > 0) {
+      throw new Error(
+        `Unknown scenario(s): ${missing.join(', ')}. Available: ${[...available].join(', ')}`
+      );
+    }
+  }
+
+  if (viewportFilter.size > 0) {
+    const available = new Set(config.viewports.map((viewport) => viewport.name));
+    const missing = [...viewportFilter].filter((name) => !available.has(name));
+    if (missing.length > 0) {
+      throw new Error(
+        `Unknown viewport(s): ${missing.join(', ')}. Available: ${[...available].join(', ')}`
+      );
+    }
+  }
+
+  const scenariosToRun =
+    scenarioFilter.size > 0
+      ? config.scenarios.filter((scenario) => scenarioFilter.has(scenario.name))
+      : config.scenarios;
+  const viewportsToRun =
+    viewportFilter.size > 0
+      ? config.viewports.filter((viewport) => viewportFilter.has(viewport.name))
+      : config.viewports;
+  const isFilteredRun =
+    itemKeyFilter !== null || scenarioFilter.size > 0 || viewportFilter.size > 0;
+
   const quickMode = config.quickMode ?? false;
   const enginesConfig = buildEnginesConfig(quickMode, config.engines);
 
   const reports: CrossReport[] = [];
 
-  for (const pair of pairs) {
-    const results: ComparisonResult[] = [];
+  for (const pair of selectedPairs) {
     const items: CrossResultItem[] = [];
+    const updatedItemKeys: string[] = [];
     const diffDir = resolve(outputDir, 'cross-diffs', pair.key);
     const reportPath = resolve(outputDir, 'cross-reports', pair.key, 'report.html');
     const resultsPath = resolve(outputDir, 'cross-reports', pair.key, 'results.json');
 
     await mkdir(diffDir, { recursive: true });
-    await clearCrossDeletions(projectPath, pair.key);
+    await mkdir(dirname(resultsPath), { recursive: true });
 
-    for (const scenario of config.scenarios) {
-      for (const viewport of config.viewports) {
+    if (!isFilteredRun) {
+      await clearCrossDeletions(projectPath, pair.key);
+    }
+
+    const existingItemsByKey = new Map<string, CrossResultItem>();
+    if (isFilteredRun && existsSync(resultsPath)) {
+      const existing = await loadCrossResultsRaw(projectPath, config, pair.key);
+      for (const item of existing.items) {
+        const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+        existingItemsByKey.set(itemKey, { ...item, itemKey });
+      }
+    }
+
+    for (const scenario of scenariosToRun) {
+      for (const viewport of viewportsToRun) {
+        const itemKey = buildItemKey(scenario.name, viewport.name);
+        if (itemKeyFilter && !itemKeyFilter.has(itemKey)) {
+          continue;
+        }
         const baselinePath = resolve(
           outputDir,
           getScreenshotFilename(
@@ -389,11 +491,9 @@ export async function runCrossCompare(
           maxDiffPixels:
             scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
         });
-        results.push(result);
 
         const diffPathValue = getDiffPath(result);
-        const itemKey = buildItemKey(scenario.name, viewport.name);
-        items.push({
+        const item: CrossResultItem = {
           itemKey,
           name: scenario.name,
           scenario: scenario.name,
@@ -408,15 +508,55 @@ export async function runCrossCompare(
           ssimScore: 'ssimScore' in result ? result.ssimScore : undefined,
           phash: 'phash' in result ? result.phash : undefined,
           error: result.reason === 'error' ? result.error : undefined,
-        });
+        };
+
+        items.push(item);
+        updatedItemKeys.push(itemKey);
+        if (isFilteredRun) {
+          existingItemsByKey.set(itemKey, item);
+        }
       }
     }
+
+    if (isFilteredRun && items.length === 0) {
+      throw new Error('No cross-compare items matched the provided filters.');
+    }
+
+    if (isFilteredRun && updatedItemKeys.length > 0) {
+      await clearCrossDeletionsForItems(projectPath, pair.key, updatedItemKeys);
+    }
+
+    let finalItems = items;
+    if (isFilteredRun) {
+      const orderedKeys = new Set<string>();
+      const orderedItems: CrossResultItem[] = [];
+      for (const scenario of config.scenarios) {
+        for (const viewport of config.viewports) {
+          const itemKey = buildItemKey(scenario.name, viewport.name);
+          const item = existingItemsByKey.get(itemKey);
+          if (item) {
+            orderedItems.push(item);
+            orderedKeys.add(itemKey);
+          }
+        }
+      }
+      for (const [itemKey, item] of existingItemsByKey.entries()) {
+        if (!orderedKeys.has(itemKey)) {
+          orderedItems.push(item);
+        }
+      }
+      finalItems = orderedItems;
+    }
+
+    const reportResults: ComparisonResult[] = finalItems.map((item) =>
+      toComparisonResult(item, projectPath)
+    );
 
     await generateReport(
       {
         title: pair.title,
         timestamp: new Date().toISOString(),
-        results,
+        results: reportResults,
         baselineDir: outputDir,
         outputDir,
       },
@@ -429,7 +569,7 @@ export async function runCrossCompare(
       generatedAt: new Date().toISOString(),
       baselineLabel: formatBrowser(pair.baseline),
       testLabel: formatBrowser(pair.test),
-      items,
+      items: finalItems,
     };
     await writeFile(resultsPath, JSON.stringify(crossResults, null, 2));
 

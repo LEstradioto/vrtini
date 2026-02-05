@@ -43,20 +43,24 @@ function rewriteReportImageSources(
 }
 
 export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.post<{ Params: { id: string } }>(
-    '/projects/:id/cross-compare',
-    { preHandler: requireProject },
-    async (request, reply) => {
-      const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-      const { config } = await loadConfig(project.path, project.configFile);
-      const reports = await runCrossCompare(project.id, project.path, config as VRTConfig);
-      return reply.send({ reports });
+  fastify.post<{
+    Params: { id: string };
+    Body?: { key?: string; itemKeys?: string[]; scenarios?: string[]; viewports?: string[] };
+  }>('/projects/:id/cross-compare', { preHandler: requireProject }, async (request, reply) => {
+    const project = request.project;
+    if (!project) {
+      reply.code(404);
+      return { error: 'Project not found' };
     }
-  );
+    const { config } = await loadConfig(project.path, project.configFile);
+    const reports = await runCrossCompare(project.id, project.path, config as VRTConfig, {
+      key: request.body?.key,
+      itemKeys: request.body?.itemKeys,
+      scenarios: request.body?.scenarios,
+      viewports: request.body?.viewports,
+    });
+    return reply.send({ reports });
+  });
 
   fastify.get<{ Params: { id: string; key: string } }>(
     '/projects/:id/cross-reports/:key',

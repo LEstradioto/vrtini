@@ -887,22 +887,34 @@
         {/if}
         {#if effectiveCompareMetrics}
           <div class="metrics-display">
-            <span class="metric">
+            <span
+              class="metric"
+              title="Number of pixels that differ between baseline and test."
+            >
               <span class="metric-label">Pixels</span>
               <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
             </span>
-            <span class="metric">
+            <span
+              class="metric"
+              title="Percentage of differing pixels (pixel diff ÷ total pixels)."
+            >
               <span class="metric-label">Diff</span>
               <span class="metric-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
             </span>
             {#if effectiveCompareMetrics.ssimScore !== undefined}
-              <span class="metric">
+              <span
+                class="metric"
+                title="SSIM (Structural Similarity Index). Higher is more similar."
+              >
                 <span class="metric-label">SSIM</span>
                 <span class="metric-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
               </span>
             {/if}
             {#if effectiveCompareMetrics.phash}
-              <span class="metric">
+              <span
+                class="metric"
+                title="Perceptual hash similarity. Higher is more similar."
+              >
                 <span class="metric-label">pHash</span>
                 <span class="metric-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%</span>
               </span>
@@ -923,12 +935,18 @@
           {/if}
           {#if currentImage.metrics}
             <div class="metrics-display compact">
-              <span class="metric">
+              <span
+                class="metric"
+                title="Percentage of differing pixels (pixel diff ÷ total pixels)."
+              >
                 <span class="metric-label">Diff</span>
                 <span class="metric-value">{currentImage.metrics.diffPercentage.toFixed(2)}%</span>
               </span>
               {#if currentImage.metrics.ssimScore !== undefined}
-                <span class="metric">
+                <span
+                  class="metric"
+                  title="SSIM (Structural Similarity Index). Higher is more similar."
+                >
                   <span class="metric-label">SSIM</span>
                   <span class="metric-value">{(currentImage.metrics.ssimScore * 100).toFixed(1)}%</span>
                 </span>

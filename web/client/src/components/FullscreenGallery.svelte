@@ -689,12 +689,15 @@
         }
         break;
       case '1':
+        if (panicActive) stopPanic();
         if (hasBaseline) currentView = 'baseline';
         break;
       case '2':
+        if (panicActive) stopPanic();
         currentView = 'test';
         break;
       case '3':
+        if (panicActive) stopPanic();
         if (hasDiff) currentView = 'diff';
         break;
       case 'a':

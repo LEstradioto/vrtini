@@ -1,1 +1,52 @@
+vrtini — Review Action Items
+=============================
 
+Legend: [ ] todo  [~] in progress  [x] done
+
+
+SECURITY
+--------
+[ ] Fix command injection in src/commands/utils.ts:11 — replace exec() with execFile() + args array
+[ ] Fix command injection in web/server/index.ts:94 — replace exec() with execFile() + args array
+[ ] Add input validation on project path/name in web/server/api/projects.ts:43-50
+[ ] Wrap JSON.parse() in try-catch in web/server/services/store.ts:32 and project-service.ts:181
+[ ] Add security headers (CSP, X-Frame-Options, X-Content-Type-Options) to web/server/index.ts
+[ ] Add rate limiting on AI analysis and test run endpoints
+[ ] Add authentication if server will be exposed beyond localhost
+
+
+DEAD CODE ELIMINATION
+---------------------
+[ ] Remove blockhash-core from package.json and run npm uninstall (custom phash.ts is used instead)
+[ ] Delete web/client/src/components/ComparisonTable.svelte (587 lines, zero imports, superseded)
+[ ] Delete web/client/src/components/ConfidenceScore.svelte (121 lines, zero imports, orphaned)
+
+
+PERFORMANCE
+-----------
+[ ] Fix memory leak: add cleanup for hashchange listener in web/client/src/App.svelte:15
+[ ] Fix polling cleanup: harden setInterval teardown in App.svelte:92-148
+[ ] Add requestAnimationFrame throttle on scroll handler in FullscreenGallery.svelte:493
+[ ] Add requestAnimationFrame throttle on mousemove handler in FullscreenGallery.svelte:481
+[ ] Add debounce on resize handler in FullscreenGallery.svelte:362
+[ ] Single-pass counting: replace 3x .filter().length in FullscreenGalleryFooter.svelte:41-46 with one loop
+[ ] Reduce Set/Map churn in Project.svelte:741-743 derived blocks (9 instances)
+[ ] Reduce Map cloning in App.svelte polling (runningTests = new Map(runningTests) every 500ms)
+[ ] Investigate virtualization for Project.svelte image grid
+
+
+CODE QUALITY
+------------
+[ ] Break up Project.svelte (3,955 lines) — extract cross-compare panel, image grid, bulk ops, comparison dialog
+[ ] Break up FullscreenGallery.svelte (2,050 lines) — extract gallery controls, image viewer, comparison tools
+[ ] Break up Config.svelte (1,017 lines) — separate form logic from presentation
+[ ] Extract shared formatBrowser() utility (duplicated in cross-compare.ts, cross-compare-service.ts, CompareSelector.svelte)
+[ ] Extract shared error message helper (duplicated in Project.svelte, server services)
+[ ] Replace prop drilling with Svelte context/stores for runningTests, testErrors, navigate, startTest, abortTest
+[ ] Standardize error handling pattern across codebase (pick one: try/catch + state, or .catch chain)
+[ ] Replace raw console.log (74+ occurrences) with structured logger
+[ ] Extract magic numbers to named constants in a shared constants file
+[ ] Move business logic out of Project.svelte into services/stores (cross-compare filtering, status calcs, acceptance merging)
+[ ] Add runtime Zod validation for API responses in web/client/src/lib/api.ts
+[ ] Break down registerCrossCompareCommand (291 lines) into smaller functions
+[ ] Break down registerTestCommand (182 lines) into smaller functions

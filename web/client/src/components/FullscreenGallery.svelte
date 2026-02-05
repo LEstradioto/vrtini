@@ -187,6 +187,13 @@
   let localThreshold = $state(compareThreshold);
   let columnMode = $state<ColumnMode>(loadSavedColumnMode());
   let lastMultiColumnMode = $state<ColumnMode>(columnMode === '1' ? 'auto' : columnMode);
+  let panicActive = $state(false);
+  let panicPrevView = $state<'baseline' | 'test' | 'diff'>(currentView);
+  let panicFlipHandle = 0;
+  let panicDiffHandle = 0;
+  let panicResumeHandle = 0;
+  let panicShowingDiff = false;
+  let panicNextView: 'baseline' | 'test' = 'baseline';
 
   // Zoom constants
   const ZOOM_STEP = 0.1;
@@ -656,6 +663,8 @@
       'F',
       'c',
       'C',
+      'p',
+      'P',
     ];
     if (handledKeys.includes(e.key)) {
       e.preventDefault();
@@ -733,8 +742,79 @@
       case 'C':
         if (baseImageSrc) toggleColumnMode();
         break;
+      case 'p':
+      case 'P':
+        if (isCompareMode) togglePanic();
+        break;
     }
   }
+
+  function stopPanic() {
+    panicActive = false;
+    if (panicFlipHandle) {
+      clearInterval(panicFlipHandle);
+      panicFlipHandle = 0;
+    }
+    if (panicDiffHandle) {
+      clearInterval(panicDiffHandle);
+      panicDiffHandle = 0;
+    }
+    if (panicResumeHandle) {
+      clearTimeout(panicResumeHandle);
+      panicResumeHandle = 0;
+    }
+    panicShowingDiff = false;
+    currentView = panicPrevView;
+  }
+
+  function togglePanic() {
+    if (!isCompareMode) return;
+    if (panicActive) {
+      stopPanic();
+      return;
+    }
+    panicPrevView = currentView;
+    panicActive = true;
+  }
+
+  function startPanicLoop() {
+    panicNextView = 'baseline';
+    panicShowingDiff = false;
+    currentView = panicNextView;
+    panicNextView = panicNextView === 'baseline' ? 'test' : 'baseline';
+
+    panicFlipHandle = window.setInterval(() => {
+      if (!panicActive || panicShowingDiff) return;
+      currentView = panicNextView;
+      panicNextView = panicNextView === 'baseline' ? 'test' : 'baseline';
+    }, 100);
+
+    panicDiffHandle = window.setInterval(() => {
+      if (!panicActive || !hasDiff) return;
+      panicShowingDiff = true;
+      currentView = 'diff';
+      if (panicResumeHandle) clearTimeout(panicResumeHandle);
+      panicResumeHandle = window.setTimeout(() => {
+        panicShowingDiff = false;
+        currentView = panicNextView;
+        panicNextView = panicNextView === 'baseline' ? 'test' : 'baseline';
+      }, 500);
+    }, 3000);
+  }
+
+  $effect(() => {
+    if (!panicActive) return;
+    startPanicLoop();
+    return () => {
+      if (panicFlipHandle) clearInterval(panicFlipHandle);
+      if (panicDiffHandle) clearInterval(panicDiffHandle);
+      if (panicResumeHandle) clearTimeout(panicResumeHandle);
+      panicFlipHandle = 0;
+      panicDiffHandle = 0;
+      panicResumeHandle = 0;
+      panicShowingDiff = false;
+    };
+  });
 
   // Close gallery if queue becomes empty (only in queue mode)
   $effect(() => {
@@ -1017,6 +1097,16 @@
           {diffLabel} <kbd>3</kbd>
         </button>
       </div>
+      {#if isCompareMode}
+        <button
+          class="panic-btn"
+          class:active={panicActive}
+          onclick={togglePanic}
+          title="Panic check: alternates baseline/test every 100ms and flashes diff every 3s (P)"
+        >
+          Panic
+        </button>
+      {/if}
 
       <div class="zoom-controls">
         <button class="zoom-btn" onclick={zoomOut}>-</button>
@@ -1505,6 +1595,28 @@
     background: var(--border);
     padding: 4px 8px;
     border-radius: 4px;
+  }
+
+  .panic-btn {
+    background: var(--border);
+    border: 1px solid var(--border-soft);
+    color: var(--text-strong);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .panic-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .panic-btn.active {
+    border-color: rgba(239, 68, 68, 0.8);
+    color: rgb(239, 68, 68);
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
   }
 
   .column-controls {

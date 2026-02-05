@@ -3,6 +3,11 @@
   import ProjectPage from './pages/Project.svelte';
   import Config from './pages/Config.svelte';
   import { test, type Project } from './lib/api';
+  import { SvelteMap } from 'svelte/reactivity';
+  import { setAppContext, type TestState } from './lib/app-context';
+  import { getErrorMessage } from './lib/errors';
+  import { log } from './lib/logger';
+  import { POLL_INTERVAL_MS, MAX_POLL_FAILURES } from '../../shared/constants';
 
   // Simple hash-based routing
   let route = $state(window.location.hash.slice(1) || '/');
@@ -12,8 +17,12 @@
     route = path;
   }
 
-  window.addEventListener('hashchange', () => {
-    route = window.location.hash.slice(1) || '/';
+  $effect(() => {
+    const onHashChange = () => {
+      route = window.location.hash.slice(1) || '/';
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
   });
 
   // Parse route
@@ -55,19 +64,23 @@
   });
 
   // Global running tests state - persists across navigation
-  interface TestState {
-    jobId: string;
-    progress: number;
-    total: number;
-    aborting?: boolean;
-    phase?: string;
-    error?: string;
-  }
-  let runningTests = $state<Map<string, TestState>>(new Map());
-  let pollIntervals = new Map<string, number>();
+  let runningTests = new SvelteMap<string, TestState>();
+  let pollIntervals = new Map<string, ReturnType<typeof setInterval>>();
+  let pollFailCounts = new Map<string, number>();
+
+  // Clean up all poll intervals on unmount
+  $effect(() => {
+    return () => {
+      for (const interval of pollIntervals.values()) {
+        clearInterval(interval);
+      }
+      pollIntervals.clear();
+      pollFailCounts.clear();
+    };
+  });
 
   // Global test errors - shown after tests complete with failure
-  let testErrors = $state<Map<string, string>>(new Map());
+  let testErrors = new SvelteMap<string, string>();
 
   // Start a test run for a project
   async function startTest(project: Project, onComplete?: () => void) {
@@ -79,33 +92,38 @@
         total: res.total,
         phase: 'Starting...'
       });
-      runningTests = new Map(runningTests);
 
       // Start polling
       startPolling(project.id, res.jobId, onComplete);
     } catch (err) {
-      console.error('Failed to start test:', err);
+      log.error('Failed to start test:', getErrorMessage(err));
       throw err;
     }
   }
 
+  function stopPolling(projectId: string) {
+    const interval = pollIntervals.get(projectId);
+    if (interval) {
+      clearInterval(interval);
+      pollIntervals.delete(projectId);
+    }
+    pollFailCounts.delete(projectId);
+  }
+
   function startPolling(projectId: string, jobId: string, onComplete?: () => void) {
     // Clear any existing poll for this project
-    const existingPoll = pollIntervals.get(projectId);
-    if (existingPoll) {
-      clearInterval(existingPoll);
-    }
+    stopPolling(projectId);
 
     const poll = setInterval(async () => {
       const testState = runningTests.get(projectId);
       if (!testState) {
-        clearInterval(poll);
-        pollIntervals.delete(projectId);
+        stopPolling(projectId);
         return;
       }
 
       try {
         const status = await test.status(projectId, jobId);
+        pollFailCounts.set(projectId, 0);
 
         // Use phase from server
         let phaseText = 'Starting...';
@@ -123,28 +141,30 @@
           total: status.total,
           phase: phaseText
         });
-        runningTests = new Map(runningTests);
 
         if (status.status !== 'running') {
-          clearInterval(poll);
-          pollIntervals.delete(projectId);
+          stopPolling(projectId);
           runningTests.delete(projectId);
-          runningTests = new Map(runningTests);
 
           // Capture error if test failed
           if (status.status === 'failed' && status.error) {
             testErrors.set(projectId, status.error);
-            testErrors = new Map(testErrors);
           }
 
           onComplete?.();
         }
       } catch {
-        // Status check failed, keep polling
+        const fails = (pollFailCounts.get(projectId) ?? 0) + 1;
+        pollFailCounts.set(projectId, fails);
+        if (fails >= MAX_POLL_FAILURES) {
+          stopPolling(projectId);
+          runningTests.delete(projectId);
+          testErrors.set(projectId, 'Lost connection to test runner');
+        }
       }
-    }, 500);
+    }, POLL_INTERVAL_MS);
 
-    pollIntervals.set(projectId, poll as unknown as number);
+    pollIntervals.set(projectId, poll);
   }
 
   async function abortTest(projectId: string) {
@@ -153,19 +173,12 @@
 
     // Mark as aborting
     runningTests.set(projectId, { ...testState, aborting: true });
-    runningTests = new Map(runningTests);
 
     try {
       await test.abort(projectId, testState.jobId);
     } finally {
-      // Clear polling and state
-      const poll = pollIntervals.get(projectId);
-      if (poll) {
-        clearInterval(poll);
-        pollIntervals.delete(projectId);
-      }
+      stopPolling(projectId);
       runningTests.delete(projectId);
-      runningTests = new Map(runningTests);
     }
   }
 
@@ -179,19 +192,19 @@
         total: res.total,
         phase: 'Starting...'
       });
-      runningTests = new Map(runningTests);
 
       startPolling(project.id, res.jobId, onComplete);
     } catch (err) {
-      console.error('Failed to rerun:', err);
+      log.error('Failed to rerun:', getErrorMessage(err));
       throw err;
     }
   }
 
   function clearTestError(projectId: string) {
     testErrors.delete(projectId);
-    testErrors = new Map(testErrors);
   }
+
+  setAppContext({ navigate, runningTests, startTest, abortTest, rerunImage, testErrors, clearTestError });
 </script>
 
 <div class="app">
@@ -230,11 +243,11 @@
 
   <main>
     {#if page === 'dashboard'}
-      <Dashboard {navigate} {runningTests} {startTest} {abortTest} {testErrors} {clearTestError} />
+      <Dashboard />
     {:else if page === 'project' && projectId}
-      <ProjectPage {projectId} {navigate} {runningTests} {startTest} {abortTest} {rerunImage} {testErrors} {clearTestError} initialTab={projectTab} />
+      <ProjectPage {projectId} initialTab={projectTab} />
     {:else if page === 'config' && projectId}
-      <Config {projectId} {navigate} />
+      <Config {projectId} />
     {/if}
   </main>
 </div>

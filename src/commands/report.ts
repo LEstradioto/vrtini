@@ -7,6 +7,7 @@ import type { ComparisonResult } from '../types/index.js';
 import { generateReport } from '../report.js';
 import { getProjectDirs, getScreenshotFilename, getReportPath } from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
 import { openInBrowser } from './utils.js';
 
 function buildComparisonPaths(
@@ -82,13 +83,13 @@ export function registerReportCommand(program: Command): void {
           { outputPath: reportPath, embedImages: config.report?.embedImages }
         );
 
-        console.log(`Report saved: ${reportPath}`);
+        log.info(`Report saved: ${reportPath}`);
 
         if (options.open) {
           openInBrowser(reportPath);
         }
       } catch (err) {
-        console.error('Error:', getErrorMessage(err));
+        log.error('Error:', getErrorMessage(err));
         process.exit(1);
       }
     });

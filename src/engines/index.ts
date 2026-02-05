@@ -6,6 +6,7 @@ import pixelmatch from 'pixelmatch';
 import * as ImageSSIM from 'image-ssim';
 import { comparePerceptualHash } from '../phash.js';
 import { compareWithOdiff, isOdiffAvailable } from './odiff.js';
+import { getErrorMessage } from '../core/errors.js';
 import type { EngineResult, EnginesConfig, EngineName, PixelmatchConfig } from './types.js';
 import { DEFAULT_ENGINES_CONFIG } from './types.js';
 
@@ -113,7 +114,7 @@ async function runPixelmatch(
       engine: 'pixelmatch',
       diffPercent: 0,
       similarity: 0,
-      error: err instanceof Error ? err.message : 'pixelmatch failed',
+      error: getErrorMessage(err, 'pixelmatch failed'),
     };
   }
 }
@@ -205,7 +206,7 @@ async function runSSIM(baseline: string, test: string): Promise<EngineResult> {
       engine: 'ssim',
       diffPercent: 0,
       similarity: 0,
-      error: err instanceof Error ? err.message : 'SSIM failed',
+      error: getErrorMessage(err, 'SSIM failed'),
     };
   }
 }
@@ -223,7 +224,7 @@ function runPHash(baseline: string, test: string): EngineResult {
       engine: 'phash',
       diffPercent: 0,
       similarity: 0,
-      error: err instanceof Error ? err.message : 'pHash failed',
+      error: getErrorMessage(err, 'pHash failed'),
     };
   }
 }

@@ -1,58 +1,15 @@
 <script lang="ts">
   import FullscreenGalleryFooter from './FullscreenGalleryFooter.svelte';
-  type ImageStatus = 'passed' | 'failed' | 'new';
-
-  interface GalleryImage {
-    filename: string;
-    status: ImageStatus;
-    confidence?: { score: number; pass: boolean; verdict: 'pass' | 'warn' | 'fail' };
-    metrics?: { pixelDiff: number; diffPercentage: number; ssimScore?: number };
-  }
-
-  interface ImageInfo {
-    src: string;
-    label: string;
-  }
-
-  interface CompareImages {
-    left: ImageInfo;
-    right: ImageInfo;
-    diff?: ImageInfo;
-  }
-
-  interface CompareMetrics {
-    pixelDiff: number;
-    diffPercentage: number;
-    ssimScore?: number;
-    phash?: { similarity: number };
-  }
-
-  interface CompareQueueItem {
-    images: CompareImages;
-    title: string;
-    metrics?: CompareMetrics;
-    accepted?: boolean;
-    badge?: { label: string; tone: 'approved' | 'smart' | 'passed' | 'diff' | 'unapproved' | 'issue' };
-    viewport?: string;
-  }
-
-  type ColumnMode =
-    | 'auto'
-    | '1'
-    | '2'
-    | '3'
-    | '4'
-    | '5'
-    | '6'
-    | '7'
-    | '8'
-    | '9'
-    | '10'
-    | '11'
-    | '12'
-    | '13'
-    | '14'
-    | '15';
+  import GalleryHeader from './GalleryHeader.svelte';
+  import GalleryImageViewer from './GalleryImageViewer.svelte';
+  import GalleryThumbnailStrip from './GalleryThumbnailStrip.svelte';
+  import type {
+    GalleryImage,
+    CompareImages,
+    CompareMetrics,
+    CompareQueueItem,
+    ColumnMode,
+  } from './gallery-types.js';
 
   interface Props {
     // Queue mode (for review workflow)
@@ -155,24 +112,11 @@
     const saved = sessionStorage.getItem(COLUMN_MODE_KEY);
     const allowed = new Set([
       'auto',
-      '1',
-      '2',
-      '3',
-      '4',
-      '5',
-      '6',
-      '7',
-      '8',
-      '9',
-      '10',
-      '11',
-      '12',
-      '13',
-      '14',
-      '15',
+      '1', '2', '3', '4', '5', '6', '7', '8',
+      '9', '10', '11', '12', '13', '14', '15',
     ]);
     if (saved && allowed.has(saved)) {
-      return saved;
+      return saved as ColumnMode;
     }
     return 'auto';
   }
@@ -360,8 +304,17 @@
   }
 
   function handleResize() {
+    if (resizeRafHandle) return;
+    resizeRafHandle = requestAnimationFrame(() => {
+      resizeRafHandle = 0;
+      updateContainerSize();
+      scheduleScrollRestore('anchor');
+    });
+  }
+
+  function handleContainerReady(el: HTMLDivElement) {
+    imageContainer = el;
     updateContainerSize();
-    scheduleScrollRestore('anchor');
   }
 
   $effect(() => {
@@ -442,19 +395,16 @@
   function fitToHeight() {
     if (!imageContainer || !imageNaturalHeight || !imageNaturalWidth) return;
 
-    // Account for container padding to get actual available space
     const style = getComputedStyle(imageContainer);
     const paddingTop = parseFloat(style.paddingTop) || 0;
     const paddingBottom = parseFloat(style.paddingBottom) || 0;
     const paddingLeft = parseFloat(style.paddingLeft) || 0;
     const paddingRight = parseFloat(style.paddingRight) || 0;
 
-    // Small buffer to prevent any cutoff from rounding/subpixel issues
     const buffer = 4;
     const availableHeight = imageContainer.clientHeight - paddingTop - paddingBottom - buffer;
     const availableWidth = imageContainer.clientWidth - paddingLeft - paddingRight;
 
-    // Calculate zoom so image height fits available height
     const targetZoom = (availableHeight * imageNaturalWidth) / (availableWidth * imageNaturalHeight);
 
     zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom));
@@ -480,21 +430,33 @@
 
   function handleMouseMove(e: MouseEvent) {
     if (!isDragging) return;
-    const dx = e.clientX - dragStartX;
-    const dy = e.clientY - dragStartY;
-    imageContainer.scrollLeft = scrollStartX - dx;
-    imageContainer.scrollTop = scrollStartY - dy;
+    if (dragRafHandle) return;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    dragRafHandle = requestAnimationFrame(() => {
+      dragRafHandle = 0;
+      imageContainer.scrollLeft = scrollStartX - (clientX - dragStartX);
+      imageContainer.scrollTop = scrollStartY - (clientY - dragStartY);
+    });
   }
 
   function handleMouseUp() {
     isDragging = false;
+    if (dragRafHandle) {
+      cancelAnimationFrame(dragRafHandle);
+      dragRafHandle = 0;
+    }
   }
 
   function handleScroll() {
-    if (!imageContainer) return;
-    columnScrollTop = imageContainer.scrollTop;
-    updateScrollRatio();
-    updateScrollAnchor();
+    if (scrollRafHandle) return;
+    scrollRafHandle = requestAnimationFrame(() => {
+      scrollRafHandle = 0;
+      if (!imageContainer) return;
+      columnScrollTop = imageContainer.scrollTop;
+      updateScrollRatio();
+      updateScrollAnchor();
+    });
   }
 
   function getMaxScrollable(): number {
@@ -555,7 +517,10 @@
     updateScrollAnchor();
   }
 
+  let scrollRafHandle = 0;
+  let dragRafHandle = 0;
   let scrollRestoreHandle = 0;
+  let resizeRafHandle = 0;
   let scrollRestoreMode: 'ratio' | 'anchor' = 'ratio';
 
   function scheduleScrollRestore(mode: 'ratio' | 'anchor' = 'ratio'): void {
@@ -576,14 +541,12 @@
   function navigatePrev() {
     if (currentIndex > 0) {
       currentIndex--;
-      resetViewForCurrentImage();
     }
   }
 
   function navigateNext() {
     if (currentIndex < queue.length - 1) {
       currentIndex++;
-      resetViewForCurrentImage();
     }
   }
 
@@ -591,7 +554,6 @@
     if (!hasCompareQueue || !onCompareNavigate) return;
     if (compareIndexValue > 0) {
       onCompareNavigate(compareIndexValue - 1);
-      resetViewForCurrentImage();
     }
   }
 
@@ -599,19 +561,13 @@
     if (!hasCompareQueue || !onCompareNavigate) return;
     if (compareIndexValue < compareQueue.length - 1) {
       onCompareNavigate(compareIndexValue + 1);
-      resetViewForCurrentImage();
     }
   }
 
   function navigateTo(index: number) {
     if (index >= 0 && index < queue.length) {
       currentIndex = index;
-      resetViewForCurrentImage();
     }
-  }
-
-  function resetViewForCurrentImage() {
-    // Keep current view selection when navigating - don't reset
   }
 
   function handleApprove() {
@@ -627,45 +583,20 @@
   }
 
   function autoAdvance() {
-    // After approve/reject, move to next image in queue
-    // If at end, try to stay at last index (will be recomputed if queue shrinks)
     if (currentIndex < queue.length - 1) {
       // Don't increment - the queue will update and shift
     } else if (currentIndex > 0) {
       currentIndex--;
     }
-    // If queue becomes empty, gallery will close automatically
   }
 
   function handleKeyDown(e: KeyboardEvent) {
     const handledKeys = [
-      'Escape',
-      'ArrowLeft',
-      'ArrowRight',
-      '1',
-      '2',
-      '3',
-      'a',
-      'A',
-      'u',
-      'U',
-      'r',
-      'R',
-      't',
-      'T',
-      '+',
-      '=',
-      '-',
-      'w',
-      'W',
-      'h',
-      'H',
-      'f',
-      'F',
-      'c',
-      'C',
-      'p',
-      'P',
+      'Escape', 'ArrowLeft', 'ArrowRight',
+      '1', '2', '3',
+      'a', 'A', 'u', 'U', 'r', 'R', 't', 'T',
+      '+', '=', '-',
+      'w', 'W', 'h', 'H', 'f', 'F', 'c', 'C', 'p', 'P',
     ];
     if (handledKeys.includes(e.key)) {
       e.preventDefault();
@@ -676,18 +607,12 @@
         onClose();
         break;
       case 'ArrowLeft':
-        if (isCompareMode) {
-          navigateComparePrev();
-        } else {
-          navigatePrev();
-        }
+        if (isCompareMode) navigateComparePrev();
+        else navigatePrev();
         break;
       case 'ArrowRight':
-        if (isCompareMode) {
-          navigateCompareNext();
-        } else {
-          navigateNext();
-        }
+        if (isCompareMode) navigateCompareNext();
+        else navigateNext();
         break;
       case '1':
         if (panicActive) stopPanic();
@@ -846,17 +771,6 @@
     };
   });
 
-  function getStatusColor(status: ImageStatus): string {
-    switch (status) {
-      case 'failed':
-        return '#ef4444';
-      case 'new':
-        return '#f59e0b';
-      case 'passed':
-        return '#22c55e';
-    }
-  }
-
   function parseViewportRatio(viewport?: string | null): number | null {
     if (!viewport) return null;
     const match = viewport.match(/(\d+)\s*[xX]\s*(\d+)/);
@@ -958,359 +872,92 @@
 />
 
 <div class="gallery-overlay" role="dialog" aria-modal="true" aria-label="Image Gallery">
-  <!-- Top Bar -->
-  <div class="gallery-header">
-    <div class="header-left">
-      {#if isCompareMode}
-        <span class="filename" title={displayTitle}>{displayTitle}</span>
-        {#if effectiveCompareBadge}
-          <span class="compare-badge {`tone-${effectiveCompareBadge.tone}`.trim()}">
-            {effectiveCompareBadge.label}
-          </span>
-        {/if}
-        {#if hasCompareQueue}
-          <span class="position-indicator compare-count">
-            {compareIndexValue + 1} / {compareQueue.length}
-          </span>
-        {/if}
-        {#if effectiveCompareMetrics}
-          <div class="metrics-display">
-            <span
-              class="metric"
-              title="Number of pixels that differ between baseline and test."
-            >
-              <span class="metric-label">Pixels</span>
-              <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
-            </span>
-            <span
-              class="metric"
-              title="Percentage of differing pixels (pixel diff ÷ total pixels)."
-            >
-              <span class="metric-label">Diff</span>
-              <span class="metric-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
-            </span>
-            {#if effectiveCompareMetrics.ssimScore !== undefined}
-              <span
-                class="metric"
-                title="SSIM (Structural Similarity Index). Higher is more similar."
-              >
-                <span class="metric-label">SSIM</span>
-                <span class="metric-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
-              </span>
-            {/if}
-            {#if effectiveCompareMetrics.phash}
-              <span
-                class="metric"
-                title="Perceptual hash similarity. Higher is more similar."
-              >
-                <span class="metric-label">pHash</span>
-                <span class="metric-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%</span>
-              </span>
-            {/if}
-          </div>
-        {/if}
-      {:else}
-        <span class="position-indicator">{currentIndex + 1} / {queue.length}</span>
-        {#if currentImage}
-          <span class="filename" title={currentImage.filename}>{currentImage.filename}</span>
-          <span class="status-badge" style="background: {getStatusColor(currentImage.status)}">
-            {currentImage.status}
-          </span>
-          {#if currentImage.confidence}
-            <span class="confidence-badge {currentImage.confidence.verdict}">
-              {currentImage.confidence.score}%
-            </span>
-          {/if}
-          {#if currentImage.metrics}
-            <div class="metrics-display compact">
-              <span
-                class="metric"
-                title="Percentage of differing pixels (pixel diff ÷ total pixels)."
-              >
-                <span class="metric-label">Diff</span>
-                <span class="metric-value">{currentImage.metrics.diffPercentage.toFixed(2)}%</span>
-              </span>
-              {#if currentImage.metrics.ssimScore !== undefined}
-                <span
-                  class="metric"
-                  title="SSIM (Structural Similarity Index). Higher is more similar."
-                >
-                  <span class="metric-label">SSIM</span>
-                  <span class="metric-value">{(currentImage.metrics.ssimScore * 100).toFixed(1)}%</span>
-                </span>
-              {/if}
-            </div>
-          {/if}
-          {#if baselineDims || testDims}
-            <div class="dims-display">
-              {#if baselineDims}
-                <span class="dim-item">
-                  <span class="dim-label">B:</span>
-                  <span class="dim-value">{baselineDims.w}x{baselineDims.h}</span>
-                </span>
-              {/if}
-              {#if testDims}
-                <span class="dim-item">
-                  <span class="dim-label">T:</span>
-                  <span class="dim-value">{testDims.w}x{testDims.h}</span>
-                </span>
-              {/if}
-              {#if baselineDims && testDims && (baselineDims.w !== testDims.w || baselineDims.h !== testDims.h)}
-                <span class="dim-mismatch" title="Dimension mismatch">!</span>
-              {/if}
-            </div>
-          {/if}
-        {/if}
-      {/if}
-      {#if currentView === 'diff' && hasDiff}
-        <div class="opacity-control">
-          <span class="opacity-label">Diff:</span>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            bind:value={diffOpacity}
-            class="opacity-slider"
-          />
-          <span class="opacity-value">{diffOpacity}%</span>
-        </div>
-      {/if}
-    </div>
+  <GalleryHeader
+    {isCompareMode}
+    {displayTitle}
+    {effectiveCompareBadge}
+    {hasCompareQueue}
+    {compareIndexValue}
+    compareQueueLength={compareQueue.length}
+    {effectiveCompareMetrics}
+    {currentImage}
+    {currentIndex}
+    queueLength={queue.length}
+    {baselineDims}
+    {testDims}
+    {currentView}
+    {hasDiff}
+    {hasBaseline}
+    {diffOpacity}
+    {leftLabel}
+    {rightLabel}
+    {diffLabel}
+    {panicActive}
+    {zoom}
+    {columnMode}
+    {baseImageSrc}
+    {showThumbnails}
+    {localThreshold}
+    {recomparing}
+    onViewChange={(view) => { if (panicActive) stopPanic(); currentView = view; }}
+    onTogglePanic={togglePanic}
+    onZoomIn={zoomIn}
+    onZoomOut={zoomOut}
+    onResetZoom={resetZoom}
+    onFitToHeight={fitToHeight}
+    onColumnModeChange={(mode) => { columnMode = mode; }}
+    onToggleColumnMode={toggleColumnMode}
+    onFitColumnsToScreen={fitColumnsToScreen}
+    onDiffOpacityChange={(value) => { diffOpacity = value; }}
+    onToggleThumbnails={() => { showThumbnails = !showThumbnails; }}
+    onClose={onClose}
+    {onRecompare}
+    {onThresholdChange}
+    onLocalThresholdChange={(value) => { localThreshold = value; }}
+  />
 
-    <div class="header-center">
-      <div class="view-tabs">
-        <button
-          class="view-tab"
-          class:active={currentView === 'baseline'}
-          class:disabled={!hasBaseline}
-          onclick={() => hasBaseline && (currentView = 'baseline')}
-          disabled={!hasBaseline}
-        >
-          {leftLabel} <kbd>1</kbd>
-        </button>
-        <button
-          class="view-tab"
-          class:active={currentView === 'test'}
-          onclick={() => (currentView = 'test')}
-        >
-          {rightLabel} <kbd>2</kbd>
-        </button>
-        <button
-          class="view-tab"
-          class:active={currentView === 'diff'}
-          class:disabled={!hasDiff}
-          onclick={() => hasDiff && (currentView = 'diff')}
-          disabled={!hasDiff}
-        >
-          {diffLabel} <kbd>3</kbd>
-        </button>
-      </div>
-      {#if isCompareMode}
-        <button
-          class="panic-btn"
-          class:active={panicActive}
-          onclick={togglePanic}
-          title="Panic check: alternates baseline/test every 250ms and flashes diff every 7s (P)"
-        >
-          Panic
-        </button>
-      {/if}
+  <GalleryImageViewer
+    {isCompareMode}
+    {hasCompareQueue}
+    {currentImage}
+    {currentIndex}
+    queueLength={queue.length}
+    {compareIndexValue}
+    compareQueueLength={compareQueue.length}
+    {showThumbnails}
+    {isDragging}
+    {useColumnMode}
+    {centerImage}
+    {baseImageSrc}
+    {overlayImageSrc}
+    {displayTitle}
+    {zoom}
+    {diffOpacity}
+    {columnWidth}
+    {scaledHeight}
+    {columnSegmentHeight}
+    {columnScrollHeight}
+    {effectiveColumns}
+    {columnIndexes}
+    {getColumnOffset}
+    onNavigatePrev={isCompareMode ? navigateComparePrev : navigatePrev}
+    onNavigateNext={isCompareMode ? navigateCompareNext : navigateNext}
+    onWheel={handleWheel}
+    onMouseDown={handleMouseDown}
+    onScroll={handleScroll}
+    onImageLoad={handleImageLoad}
+    onContainerReady={handleContainerReady}
+  />
 
-      <div class="zoom-controls">
-        <button class="zoom-btn" onclick={zoomOut}>-</button>
-        <span class="zoom-level">{Math.round(zoom * 100)}%</span>
-        <button class="zoom-btn" onclick={zoomIn}>+</button>
-        <button class="zoom-btn" onclick={resetZoom} title="Fit width (W)">W</button>
-        <button class="zoom-btn" onclick={fitToHeight} title="Fit height (H)">H</button>
-      </div>
-      {#if baseImageSrc}
-        <div class="column-controls">
-          <label for="column-mode">Columns</label>
-          <select id="column-mode" bind:value={columnMode}>
-            <option value="auto">Auto</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-            <option value="10">10</option>
-            <option value="11">11</option>
-            <option value="12">12</option>
-            <option value="13">13</option>
-            <option value="14">14</option>
-            <option value="15">15</option>
-          </select>
-          <button class="fit-columns-btn" onclick={toggleColumnMode} title="Toggle single/multi column (C)">
-            {columnMode === '1' ? 'Multi' : 'Single'}
-          </button>
-          <button
-            class="fit-columns-btn"
-            class:active={columnMode === 'auto'}
-            onclick={fitColumnsToScreen}
-            title="Auto-fit columns (F)"
-          >
-            Auto Fit
-          </button>
-        </div>
-      {/if}
-    </div>
-
-    <div class="header-right">
-      {#if isCompareMode && onRecompare}
-        <div class="threshold-control">
-          <span class="threshold-label">Threshold:</span>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            bind:value={localThreshold}
-            class="threshold-slider"
-            onchange={() => onThresholdChange?.(localThreshold)}
-          />
-          <input
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            bind:value={localThreshold}
-            class="threshold-input"
-            onchange={() => onThresholdChange?.(localThreshold)}
-          />
-          <button
-            class="action-btn recompare"
-            onclick={onRecompare}
-            disabled={recomparing}
-          >
-            {recomparing ? 'Comparing...' : 'Re-compare'}
-          </button>
-        </div>
-      {/if}
-      {#if !isCompareMode}
-        <button class="thumbnail-toggle" class:active={showThumbnails} onclick={() => (showThumbnails = !showThumbnails)}>
-          Thumbnails <kbd>T</kbd>
-        </button>
-      {/if}
-      <button class="close-btn" onclick={onClose}>
-        Close <kbd>Esc</kbd>
-      </button>
-    </div>
-  </div>
-
-  <!-- Main Image Area -->
-  <div class="gallery-main" class:with-thumbnails={showThumbnails && !isCompareMode}>
-    <!-- Navigation Arrow Left -->
-    {#if !isCompareMode || hasCompareQueue}
-      <button
-        class="nav-arrow left"
-        onclick={isCompareMode ? navigateComparePrev : navigatePrev}
-        disabled={isCompareMode ? compareIndexValue === 0 : currentIndex === 0}
-        aria-label="Previous image"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </button>
-    {/if}
-
-    <!-- Image Container -->
-    <div
-      class="image-container"
-      class:dragging={isDragging}
-      class:column-mode={useColumnMode}
-      class:centered={centerImage}
-      bind:this={imageContainer}
-      onwheel={handleWheel}
-      onmousedown={handleMouseDown}
-      onscroll={handleScroll}
-      role="presentation"
-    >
-      {#if isCompareMode || currentImage}
-        {#if useColumnMode}
-          <div class="column-scroll-spacer" style="height: {columnScrollHeight}px"></div>
-          <div class="column-grid" style="width: {Math.max(0, (columnWidth + COLUMN_GAP) * effectiveColumns - COLUMN_GAP)}px; gap: {COLUMN_GAP}px;">
-            {#each columnIndexes as idx}
-              <div class="column" style="width: {columnWidth}px; height: {columnSegmentHeight}px;">
-                <div
-                  class="column-image"
-                  style="background-image: url('{baseImageSrc}'); background-size: {columnWidth}px {scaledHeight}px; background-position: 0 {-getColumnOffset(idx)}px;"
-                ></div>
-                {#if overlayImageSrc}
-                  <div
-                    class="column-overlay"
-                    style="background-image: url('{overlayImageSrc}'); background-size: {columnWidth}px {scaledHeight}px; background-position: 0 {-getColumnOffset(idx)}px; opacity: {diffOpacity / 100};"
-                  ></div>
-                {/if}
-              </div>
-            {/each}
-          </div>
-          <img
-            class="hidden-image"
-            src={baseImageSrc}
-            alt={isCompareMode ? displayTitle : currentImage?.filename}
-            onload={handleImageLoad}
-          />
-        {:else}
-          <div class="image-stack" style="width: {zoom * 100}%">
-            <img
-              src={baseImageSrc}
-              alt={isCompareMode ? displayTitle : currentImage?.filename}
-              onload={handleImageLoad}
-            />
-            {#if overlayImageSrc}
-              <img
-                class="img-overlay"
-                src={overlayImageSrc}
-                alt="Diff overlay"
-                style="opacity: {diffOpacity / 100}"
-              />
-            {/if}
-          </div>
-        {/if}
-      {/if}
-    </div>
-
-    <!-- Navigation Arrow Right -->
-    {#if !isCompareMode || hasCompareQueue}
-      <button
-        class="nav-arrow right"
-        onclick={isCompareMode ? navigateCompareNext : navigateNext}
-        disabled={isCompareMode ? compareIndexValue === compareQueue.length - 1 : currentIndex === queue.length - 1}
-        aria-label="Next image"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-      </button>
-    {/if}
-  </div>
-
-  <!-- Thumbnail Strip (queue mode only) -->
   {#if showThumbnails && !isCompareMode && getImageUrl}
-    <div class="thumbnail-strip">
-      {#each queue as item, index (item.filename)}
-        <button
-          class="thumbnail"
-          class:active={index === currentIndex}
-          onclick={() => navigateTo(index)}
-          title={item.filename}
-        >
-          <img
-            src={getImageUrl('test', item.filename)}
-            alt={item.filename}
-            loading="lazy"
-          />
-          <span class="thumb-status" style="background: {getStatusColor(item.status)}"></span>
-        </button>
-      {/each}
-    </div>
+    <GalleryThumbnailStrip
+      {queue}
+      {currentIndex}
+      {getImageUrl}
+      onNavigateTo={navigateTo}
+    />
   {/if}
 
-  <!-- Bottom Action Bar -->
   <FullscreenGalleryFooter
     {isCompareMode}
     {queue}
@@ -1337,714 +984,4 @@
     display: flex;
     flex-direction: column;
   }
-
-  /* Header */
-  .gallery-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    background: #1a1a2e;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-width: 0;
-    flex: 1;
-  }
-
-  .position-indicator {
-    font-size: 14px;
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .compare-count {
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--panel);
-    color: var(--text-strong);
-    font-size: 12px;
-  }
-
-  .filename {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-strong);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .compare-badge {
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border: 1px solid var(--border);
-    background: var(--panel-strong);
-    color: var(--text-muted);
-  }
-
-  .compare-badge.tone-approved {
-    border-color: rgba(34, 197, 94, 0.4);
-    background: rgba(34, 197, 94, 0.12);
-    color: #22c55e;
-  }
-
-  .compare-badge.tone-smart {
-    border-color: rgba(20, 184, 166, 0.4);
-    background: rgba(20, 184, 166, 0.12);
-    color: #14b8a6;
-  }
-
-  .compare-badge.tone-passed {
-    border-color: rgba(56, 189, 248, 0.4);
-    background: rgba(56, 189, 248, 0.12);
-    color: #38bdf8;
-  }
-
-  .compare-badge.tone-diff {
-    border-color: rgba(249, 115, 22, 0.4);
-    background: rgba(249, 115, 22, 0.12);
-    color: #f97316;
-  }
-
-  .compare-badge.tone-unapproved,
-  .compare-badge.tone-issue {
-    border-color: rgba(239, 68, 68, 0.4);
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
-  }
-
-  .status-badge {
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    color: var(--text-strong);
-  }
-
-  .confidence-badge {
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .confidence-badge.pass {
-    background: rgba(34, 197, 94, 0.2);
-    color: #4ade80;
-    border: 1px solid rgba(34, 197, 94, 0.3);
-  }
-
-  .confidence-badge.warn {
-    background: rgba(249, 115, 22, 0.2);
-    color: #fb923c;
-    border: 1px solid rgba(249, 115, 22, 0.3);
-  }
-
-  .confidence-badge.fail {
-    background: rgba(239, 68, 68, 0.2);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.3);
-  }
-
-  .metrics-display.compact {
-    display: flex;
-    gap: 12px;
-    padding: 4px 10px;
-    background: var(--border);
-    border-radius: 4px;
-  }
-
-  .dims-display {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    padding: 4px 10px;
-    background: #2a2a3e;
-    border-radius: 4px;
-    font-size: 12px;
-  }
-
-  .dim-item {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-  }
-
-  .dim-label {
-    color: var(--text-muted);
-    font-weight: 500;
-  }
-
-  .dim-value {
-    color: var(--text-muted);
-    font-family: monospace;
-  }
-
-  .dim-mismatch {
-    color: #f59e0b;
-    font-weight: 700;
-    font-size: 14px;
-  }
-
-  .opacity-control {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 10px;
-    background: var(--border);
-    border-radius: 4px;
-    margin-left: 8px;
-  }
-
-  .opacity-label {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .opacity-slider {
-    width: 80px;
-    height: 4px;
-    -webkit-appearance: none;
-    appearance: none;
-    background: var(--border-soft);
-    border-radius: 2px;
-    outline: none;
-    cursor: pointer;
-  }
-
-  .opacity-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-  }
-
-  .opacity-slider::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-    border: none;
-  }
-
-  .opacity-value {
-    font-size: 12px;
-    color: var(--text-muted);
-    min-width: 36px;
-  }
-
-  .header-center {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .view-tabs {
-    display: flex;
-    gap: 6px;
-  }
-
-  .view-tab {
-    padding: 8px 16px;
-    background: transparent;
-    border: 2px solid var(--border-soft);
-    color: var(--text-muted);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    transition: all 0.15s;
-  }
-
-  .view-tab:hover:not(:disabled) {
-    border-color: var(--text-muted);
-    color: var(--text-strong);
-  }
-
-  .view-tab.active {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: var(--text-strong);
-  }
-
-  .view-tab.disabled,
-  .view-tab:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .view-tab kbd {
-    display: inline-block;
-    padding: 2px 5px;
-    margin-left: 6px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 3px;
-    font-size: 10px;
-  }
-
-  .zoom-controls {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    background: var(--border);
-    padding: 4px 8px;
-    border-radius: 4px;
-  }
-
-  .panic-btn {
-    background: var(--border);
-    border: 1px solid var(--border-soft);
-    color: var(--text-strong);
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .panic-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .panic-btn.active {
-    border-color: rgba(239, 68, 68, 0.8);
-    color: rgb(239, 68, 68);
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
-  }
-
-  .column-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 8px;
-    background: var(--border);
-    border-radius: 4px;
-    color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .column-controls select {
-    background: var(--border-soft);
-    border: 1px solid var(--border);
-    color: var(--text-strong);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-  }
-
-  .fit-columns-btn {
-    background: var(--border-soft);
-    border: 1px solid var(--border);
-    color: var(--text-strong);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .fit-columns-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .fit-columns-btn.active {
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 0 1px rgba(120, 200, 255, 0.35);
-  }
-
-  .zoom-btn {
-    padding: 6px 10px;
-    background: var(--border-soft);
-    border: none;
-    color: var(--text-strong);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.15s;
-  }
-
-  .zoom-btn:hover {
-    background: var(--border-soft);
-  }
-
-  .zoom-level {
-    color: var(--text-muted);
-    font-size: 12px;
-    min-width: 45px;
-    text-align: center;
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .thumbnail-toggle {
-    padding: 8px 14px;
-    background: var(--border);
-    border: none;
-    color: var(--text-muted);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: all 0.15s;
-  }
-
-  .thumbnail-toggle:hover {
-    background: var(--border-soft);
-    color: var(--text-strong);
-  }
-
-  .thumbnail-toggle.active {
-    background: var(--accent);
-    color: var(--text-strong);
-  }
-
-  .thumbnail-toggle kbd {
-    display: inline-block;
-    padding: 2px 5px;
-    margin-left: 6px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 3px;
-    font-size: 10px;
-  }
-
-  .close-btn {
-    padding: 8px 14px;
-    background: #ef4444;
-    border: none;
-    color: var(--text-strong);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: background 0.15s;
-  }
-
-  .close-btn:hover {
-    background: #dc2626;
-  }
-
-  .close-btn kbd {
-    display: inline-block;
-    padding: 2px 5px;
-    margin-left: 6px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-    font-size: 10px;
-  }
-
-  /* Main Image Area */
-  .gallery-main {
-    flex: 1;
-    display: flex;
-    align-items: stretch;
-    position: relative;
-    min-height: 0;
-  }
-
-  .gallery-main.with-thumbnails {
-    padding-bottom: 0;
-  }
-
-  .nav-arrow {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 50px;
-    height: 80px;
-    background: rgba(0, 0, 0, 0.5);
-    border: none;
-    color: var(--text-strong);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-    z-index: 10;
-  }
-
-  .nav-arrow.left {
-    left: 0;
-    border-radius: 0 8px 8px 0;
-  }
-
-  .nav-arrow.right {
-    right: 0;
-    border-radius: 8px 0 0 8px;
-  }
-
-  .nav-arrow:hover:not(:disabled) {
-    background: rgba(99, 102, 241, 0.8);
-  }
-
-  .nav-arrow:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
-
-  .nav-arrow svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  .image-container {
-    flex: 1;
-    overflow: auto;
-    cursor: grab;
-    display: flex;
-    justify-content: flex-start;
-    padding: 20px 70px;
-    position: relative;
-  }
-
-  .image-container.dragging {
-    cursor: grabbing;
-    user-select: none;
-  }
-
-  .image-container.centered {
-    justify-content: center;
-  }
-
-  .image-stack {
-    position: relative;
-    transition: width 0.1s ease-out;
-    flex: 0 0 auto;
-  }
-
-  .image-stack img {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
-
-  .img-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none;
-  }
-
-  .hidden-image {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .image-container.column-mode {
-    align-items: flex-start;
-    padding: 20px;
-  }
-
-  .column-scroll-spacer {
-    width: 1px;
-  }
-
-  .column-grid {
-    position: sticky;
-    top: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    margin: 0 auto;
-  }
-
-  .column {
-    position: relative;
-    background: #0a0a0a;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-
-  .column-image,
-  .column-overlay {
-    position: absolute;
-    inset: 0;
-    background-repeat: no-repeat;
-  }
-
-  .column-overlay {
-    pointer-events: none;
-  }
-
-  /* Thumbnail Strip */
-  .thumbnail-strip {
-    display: flex;
-    gap: 8px;
-    padding: 12px 20px;
-    background: #1a1a2e;
-    border-top: 1px solid var(--border);
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .thumbnail {
-    position: relative;
-    flex-shrink: 0;
-    width: 80px;
-    height: 60px;
-    background: #0a0a0a;
-    border: 2px solid var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: all 0.15s;
-    padding: 0;
-  }
-
-  .thumbnail:hover {
-    border-color: var(--text-muted);
-  }
-
-  .thumbnail.active {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
-  }
-
-  .thumbnail img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .thumb-status {
-    position: absolute;
-    bottom: 2px;
-    right: 2px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, 0.5);
-  }
-
-  /* Compare mode specific styles */
-  .metrics-display {
-    display: flex;
-    gap: 16px;
-    padding: 4px 12px;
-    background: var(--border);
-    border-radius: 4px;
-  }
-
-  .metric {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .metric-label {
-    font-size: 10px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-  }
-
-  .metric-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-strong);
-  }
-
-  .threshold-control {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .threshold-label {
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
-  .threshold-slider {
-    width: 100px;
-    height: 6px;
-    -webkit-appearance: none;
-    appearance: none;
-    background: var(--border);
-    border-radius: 3px;
-    outline: none;
-    cursor: pointer;
-  }
-
-  .threshold-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .threshold-slider::-webkit-slider-thumb:hover {
-    background: var(--accent-strong);
-  }
-
-  .threshold-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-    border: none;
-  }
-
-  .threshold-input {
-    width: 60px;
-    padding: 6px 8px;
-    background: var(--border);
-    border: 1px solid var(--border-soft);
-    border-radius: 4px;
-    color: var(--text-strong);
-    font-size: 13px;
-    text-align: center;
-  }
-
-  .threshold-input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .action-btn.recompare {
-    background: var(--border);
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .action-btn.recompare:hover:not(:disabled) {
-    background: var(--accent);
-    color: var(--text-strong);
-  }
-
 </style>

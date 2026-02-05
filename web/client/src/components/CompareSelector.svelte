@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ImageMetadata } from '../lib/api';
+  import { formatBrowserLabel } from '../../../shared/api-types';
 
   interface Props {
     baselines: ImageMetadata[];
@@ -83,12 +84,9 @@
           const v2 = parseInt(img2.version || '999');
           const [left, right] = v1 > v2 ? [img2, img1] : [img1, img2];
 
-          const formatBrowser = (img: typeof left) =>
-            `${img.browser.charAt(0).toUpperCase() + img.browser.slice(1)} ${img.version ? 'v' + img.version : '(latest)'}`;
-
           pairs.push({
             key: `${groupKey}__${left.filename}__${right.filename}`,
-            label: `${left.scenario} ${left.viewport}: ${formatBrowser(left)} vs ${formatBrowser(right)}`,
+            label: `${left.scenario} ${left.viewport}: ${formatBrowserLabel(left.browser, left.version)} vs ${formatBrowserLabel(right.browser, right.version)}`,
             left,
             right,
             leftSource: left.source,

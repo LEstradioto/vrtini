@@ -1,4 +1,6 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
+import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
 
 function getOpenCommand(platform: NodeJS.Platform): string {
   if (platform === 'darwin') return 'open';
@@ -8,9 +10,9 @@ function getOpenCommand(platform: NodeJS.Platform): string {
 
 export function openInBrowser(filePath: string): void {
   const cmd = getOpenCommand(process.platform);
-  exec(`${cmd} "${filePath}"`, (err) => {
+  execFile(cmd, [filePath], (err) => {
     if (err) {
-      console.error(`Failed to open browser: ${err.message}`);
+      log.error(`Failed to open browser: ${getErrorMessage(err)}`);
     }
   });
 }

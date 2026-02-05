@@ -7,6 +7,7 @@ import { exec } from 'child_process';
 import { buildDockerImage, checkDockerImage } from '../docker.js';
 import { getProjectDirs } from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,13 +33,13 @@ async function runBuildStep(options: {
   cwd: string;
   failureHint: string;
 }): Promise<void> {
-  console.log(`\n📦 ${options.startLabel}...`);
+  log.info(`\n📦 ${options.startLabel}...`);
   try {
     await execPromise(options.command, { cwd: options.cwd });
-    console.log(`✓ ${options.successLabel}`);
+    log.info(`✓ ${options.successLabel}`);
   } catch (err) {
-    console.error(`✗ ${options.failureLabel}:`, getErrorMessage(err));
-    console.log(`  Run manually: ${options.failureHint}`);
+    log.error(`✗ ${options.failureLabel}:`, getErrorMessage(err));
+    log.info(`  Run manually: ${options.failureHint}`);
   }
 }
 
@@ -53,25 +54,25 @@ export function registerInitCommand(program: Command): void {
       const configPath = resolve(cwd, 'vrt.config.json');
 
       if (existsSync(configPath) && !options.force) {
-        console.log('✓ Config file already exists (use --force to overwrite)');
+        log.info('✓ Config file already exists (use --force to overwrite)');
       } else {
         const minimalConfigPath = resolve(VRT_ROOT, 'vrt.config.minimal.json');
         await copyFile(minimalConfigPath, configPath);
-        console.log('✓ Created vrt.config.json (from minimal template)');
-        console.log('  See vrt.config.full.json5 in the vrtini directory for all options');
+        log.info('✓ Created vrt.config.json (from minimal template)');
+        log.info('  See vrt.config.full.json5 in the vrtini directory for all options');
       }
 
       const { baselineDir, outputDir } = getProjectDirs(cwd);
       await mkdir(baselineDir, { recursive: true });
       await mkdir(outputDir, { recursive: true });
-      console.log('✓ Created .vrt/baselines/ and .vrt/output/ directories');
+      log.info('✓ Created .vrt/baselines/ and .vrt/output/ directories');
 
       if (options.skipBuild) {
-        console.log('\n✓ vrtini initialized (builds skipped)');
-        console.log('\nTo complete setup manually:');
-        console.log('  1. npm run build (TypeScript)');
-        console.log('  2. npm run build:client (Svelte UI)');
-        console.log('  3. vrtini build (Docker image)');
+        log.info('\n✓ vrtini initialized (builds skipped)');
+        log.info('\nTo complete setup manually:');
+        log.info('  1. npm run build (TypeScript)');
+        log.info('  2. npm run build:client (Svelte UI)');
+        log.info('  3. vrtini build (Docker image)');
         return;
       }
 
@@ -93,31 +94,31 @@ export function registerInitCommand(program: Command): void {
       });
 
       const dockerDir = resolve(__dirname, '..', '..', '..', 'docker');
-      console.log('\n🐳 Building Docker image...');
+      log.info('\n🐳 Building Docker image...');
       try {
         await buildDockerImage(dockerDir);
-        console.log('✓ Docker image built');
+        log.info('✓ Docker image built');
       } catch (err) {
-        console.error('✗ Docker build failed:', getErrorMessage(err));
-        console.log('  Run manually: vrtini build');
+        log.error('✗ Docker build failed:', getErrorMessage(err));
+        log.info('  Run manually: vrtini build');
       }
 
-      console.log('\n🔍 Validating setup...');
+      log.info('\n🔍 Validating setup...');
       const hasDocker = await checkDockerImage();
       const hasConfig = existsSync(configPath);
       const hasDirs = existsSync(baselineDir) && existsSync(outputDir);
 
       if (hasDocker && hasConfig && hasDirs) {
-        console.log('✓ All checks passed!\n');
-        console.log('vrtini is ready. Run your first test with:');
-        console.log('  vrtini test\n');
-        console.log('Or start the web UI:');
-        console.log('  vrtini serve --open');
+        log.info('✓ All checks passed!\n');
+        log.info('vrtini is ready. Run your first test with:');
+        log.info('  vrtini test\n');
+        log.info('Or start the web UI:');
+        log.info('  vrtini serve --open');
       } else {
-        console.log('\n⚠ Setup incomplete:');
-        if (!hasConfig) console.log('  - Missing config file');
-        if (!hasDirs) console.log('  - Missing directories');
-        if (!hasDocker) console.log('  - Missing Docker image (run: vrtini build)');
+        log.info('\n⚠ Setup incomplete:');
+        if (!hasConfig) log.info('  - Missing config file');
+        if (!hasDirs) log.info('  - Missing directories');
+        if (!hasDocker) log.info('  - Missing Docker image (run: vrtini build)');
       }
     });
 }

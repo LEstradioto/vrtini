@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { isAbsolute, relative, resolve, sep } from 'path';
 import { requireProject } from '../plugins/project.js';
+import { rateLimit } from '../plugins/rate-limit.js';
 import { loadConfig } from '../services/project-service.js';
 import type { VRTConfig } from '../../../src/core/config.js';
 import {
@@ -52,22 +53,32 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       viewports?: string[];
       resetAcceptances?: boolean;
     };
-  }>('/projects/:id/cross-compare', { preHandler: requireProject }, async (request, reply) => {
-    const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
+  }>(
+    '/projects/:id/cross-compare',
+    { preHandler: [rateLimit({ max: 3, windowMs: 60_000 }), requireProject] },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
+      }
+      const { config } = await loadConfig(project.path, project.configFile);
+      try {
+        const reports = await runCrossCompare(project.id, project.path, config as VRTConfig, {
+          key: request.body?.key,
+          itemKeys: request.body?.itemKeys,
+          scenarios: request.body?.scenarios,
+          viewports: request.body?.viewports,
+          resetAcceptances: request.body?.resetAcceptances,
+        });
+        return reply.send({ reports });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Cross compare failed';
+        reply.code(400);
+        return { error: message };
+      }
     }
-    const { config } = await loadConfig(project.path, project.configFile);
-    const reports = await runCrossCompare(project.id, project.path, config as VRTConfig, {
-      key: request.body?.key,
-      itemKeys: request.body?.itemKeys,
-      scenarios: request.body?.scenarios,
-      viewports: request.body?.viewports,
-      resetAcceptances: request.body?.resetAcceptances,
-    });
-    return reply.send({ reports });
-  });
+  );
 
   fastify.get<{ Params: { id: string; key: string } }>(
     '/projects/:id/cross-reports/:key',

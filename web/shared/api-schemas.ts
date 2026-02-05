@@ -1,0 +1,420 @@
+import { z } from 'zod';
+
+// --- Base type schemas (mirrors api-types.ts interfaces) ---
+
+export const ImageMetadataSchema = z.object({
+  filename: z.string(),
+  scenario: z.string(),
+  browser: z.string(),
+  version: z.string().optional(),
+  viewport: z.string(),
+});
+
+export const AcceptanceMetricsSchema = z.object({
+  diffPercentage: z.number(),
+  pixelDiff: z.number().optional(),
+  ssimScore: z.number().optional(),
+  phash: z.number().optional(),
+});
+
+export const AcceptanceSignalsSchema = z.object({
+  scenario: z.string().optional(),
+  viewport: z.string().optional(),
+  viewportWidth: z.number().optional(),
+  viewportHeight: z.number().optional(),
+  browserPair: z
+    .object({
+      baseline: z
+        .object({ name: z.string().optional(), version: z.string().optional() })
+        .optional(),
+      test: z.object({ name: z.string().optional(), version: z.string().optional() }).optional(),
+    })
+    .optional(),
+});
+
+export const AcceptanceSchema = z.object({
+  filename: z.string(),
+  acceptedAt: z.string(),
+  reason: z.string().optional(),
+  comparedAgainst: z.object({
+    filename: z.string(),
+    type: z.enum(['baseline', 'test']),
+  }),
+  metrics: AcceptanceMetricsSchema,
+  signals: AcceptanceSignalsSchema.optional(),
+});
+
+export const AutoThresholdCapSchema = z.object({
+  scenario: z.string(),
+  viewport: z.string(),
+  sampleSize: z.number(),
+  p95DiffPercentage: z.number(),
+  p95PixelDiff: z.number().optional(),
+  pixelSampleSize: z.number().optional(),
+});
+
+export const AutoThresholdCapsSchema = z.object({
+  percentile: z.number(),
+  minSampleSize: z.number(),
+  caps: z.record(z.string(), AutoThresholdCapSchema),
+});
+
+const ChangeCategorySchema = z.enum([
+  'regression',
+  'cosmetic',
+  'content_change',
+  'layout_shift',
+  'noise',
+]);
+
+const SeveritySchema = z.enum(['critical', 'warning', 'info']);
+const RecommendationSchema = z.enum(['approve', 'review', 'reject']);
+
+export const AIAnalysisResultSchema = z.object({
+  category: ChangeCategorySchema,
+  severity: SeveritySchema,
+  confidence: z.number(),
+  summary: z.string(),
+  details: z.array(z.string()),
+  recommendation: RecommendationSchema,
+  reasoning: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  tokensUsed: z.number().optional(),
+});
+
+export const CompareResultSchema = z.object({
+  diffUrl: z.string(),
+  diffFilename: z.string(),
+  pixelDiff: z.number(),
+  diffPercentage: z.number(),
+  ssimScore: z.number().optional(),
+  phash: z
+    .object({
+      similarity: z.number(),
+      baselineHash: z.string(),
+      testHash: z.string(),
+    })
+    .optional(),
+});
+
+export const ImageResultSchema = z.object({
+  status: z.enum(['passed', 'failed', 'new']),
+  confidence: z
+    .object({
+      score: z.number(),
+      pass: z.boolean(),
+      verdict: z.enum(['pass', 'warn', 'fail']),
+    })
+    .optional(),
+  metrics: z
+    .object({
+      pixelDiff: z.number(),
+      diffPercentage: z.number(),
+      ssimScore: z.number().optional(),
+    })
+    .optional(),
+});
+
+export const ProjectTimingSchema = z.object({
+  screenshotDuration: z.number().optional(),
+  compareDuration: z.number().optional(),
+  totalDuration: z.number().optional(),
+});
+
+export const ProjectSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  path: z.string(),
+  configFile: z.string(),
+  createdAt: z.string(),
+  lastRun: z.string().optional(),
+  lastStatus: z.enum(['passed', 'failed', 'new']).optional(),
+  lastTiming: ProjectTimingSchema.optional(),
+});
+
+export const CrossReportSchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  reportPath: z.string(),
+  url: z.string(),
+});
+
+export const CrossResultItemSchema = z.object({
+  itemKey: z.string().optional(),
+  name: z.string(),
+  scenario: z.string(),
+  viewport: z.string(),
+  baseline: z.string(),
+  test: z.string(),
+  diff: z.string().optional(),
+  match: z.boolean(),
+  reason: z.enum(['match', 'diff', 'no-baseline', 'no-test', 'error']),
+  diffPercentage: z.number(),
+  pixelDiff: z.number(),
+  ssimScore: z.number().optional(),
+  phash: z
+    .object({
+      similarity: z.number(),
+      baselineHash: z.string(),
+      testHash: z.string(),
+    })
+    .optional(),
+  error: z.string().optional(),
+  accepted: z.boolean().optional(),
+  acceptedAt: z.string().optional(),
+});
+
+export const CrossResultsSchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  generatedAt: z.string(),
+  baselineLabel: z.string(),
+  testLabel: z.string(),
+  items: z.array(CrossResultItemSchema),
+});
+
+export const CrossResultsSummarySchema = z.object({
+  key: z.string(),
+  title: z.string(),
+  generatedAt: z.string(),
+  baselineLabel: z.string(),
+  testLabel: z.string(),
+  itemCount: z.number(),
+  approvedCount: z.number(),
+  smartPassCount: z.number(),
+  matchCount: z.number(),
+  diffCount: z.number(),
+  issueCount: z.number(),
+});
+
+export const CrossAcceptanceSchema = z.object({
+  itemKey: z.string(),
+  acceptedAt: z.string(),
+  reason: z.string().optional(),
+});
+
+// BrowserConfig matches api-types.ts
+const BrowserConfigSchema = z.union([
+  z.literal('chromium'),
+  z.literal('webkit'),
+  z.object({
+    name: z.enum(['chromium', 'webkit']),
+    version: z.string().optional(),
+  }),
+]);
+
+// Simplified VRTConfig schema for API response validation (not config file parsing)
+export const VRTConfigSchema = z
+  .object({
+    baselineDir: z.string(),
+    outputDir: z.string(),
+    browsers: z.array(BrowserConfigSchema),
+    viewports: z.array(z.object({ name: z.string(), width: z.number(), height: z.number() })),
+    threshold: z.number(),
+    diffThreshold: z
+      .object({
+        maxDiffPercentage: z.number().optional(),
+        maxDiffPixels: z.number().optional(),
+      })
+      .optional(),
+    autoThresholds: z
+      .object({
+        enabled: z.boolean(),
+        percentile: z.number().optional(),
+        minSampleSize: z.number().optional(),
+      })
+      .optional(),
+    disableAnimations: z.boolean(),
+    diffColor: z.string(),
+    concurrency: z.number().optional(),
+    scenarioDefaults: z.record(z.unknown()).optional(),
+    scenarios: z.array(
+      z
+        .object({
+          name: z.string(),
+          url: z.string(),
+        })
+        .passthrough()
+    ),
+    crossCompare: z
+      .object({
+        normalization: z.enum(['pad', 'resize', 'crop']).optional(),
+        mismatch: z.enum(['strict', 'ignore']).optional(),
+      })
+      .optional(),
+    ai: z
+      .object({
+        enabled: z.boolean(),
+        provider: z.enum(['anthropic', 'openai']),
+        apiKey: z.string().optional(),
+        model: z.string().optional(),
+        analyzeThreshold: z.object({
+          maxPHashSimilarity: z.number(),
+          maxSSIM: z.number(),
+          minPixelDiff: z.number(),
+        }),
+        autoApprove: z.object({
+          enabled: z.boolean(),
+          rules: z.array(z.unknown()),
+        }),
+      })
+      .optional(),
+  })
+  .passthrough();
+
+// --- API response schemas ---
+
+export const InfoResponseSchema = z.object({
+  cwd: z.string(),
+  projectName: z.string(),
+  existingConfig: z.string().nullable(),
+  hasConfig: z.boolean(),
+});
+
+export const ProjectListResponseSchema = z.object({ projects: z.array(ProjectSchema) });
+export const ProjectResponseSchema = z.object({ project: ProjectSchema });
+export const SuccessResponseSchema = z.object({ success: z.boolean() });
+
+export const ConfigGetResponseSchema = z.object({
+  config: VRTConfigSchema,
+  raw: z.unknown(),
+  valid: z.boolean(),
+  errors: z.array(z.unknown()).nullable(),
+});
+
+export const ConfigSaveResponseSchema = z.object({
+  success: z.boolean(),
+  config: VRTConfigSchema,
+});
+
+export const SchemaResponseSchema = z.object({
+  browsers: z.array(z.string()),
+  waitForOptions: z.array(z.string()),
+  aiProviders: z.array(z.string()),
+  severityLevels: z.array(z.string()),
+  changeCategories: z.array(z.string()),
+  ruleActions: z.array(z.string()),
+});
+
+export const ImagesListResponseSchema = z.object({
+  baselines: z.array(z.string()),
+  tests: z.array(z.string()),
+  diffs: z.array(z.string()),
+  paths: z.object({
+    baselineDir: z.string(),
+    outputDir: z.string(),
+    diffDir: z.string(),
+  }),
+  metadata: z.object({
+    baselines: z.array(ImageMetadataSchema),
+    tests: z.array(ImageMetadataSchema),
+    diffs: z.array(ImageMetadataSchema),
+  }),
+  acceptances: z.record(z.string(), AcceptanceSchema),
+  autoThresholdCaps: AutoThresholdCapsSchema,
+});
+
+export const ApproveResponseSchema = z.object({
+  success: z.boolean(),
+  approved: z.string(),
+});
+
+export const RejectResponseSchema = z.object({
+  success: z.boolean(),
+  rejected: z.string(),
+});
+
+export const BulkApproveResponseSchema = z.object({
+  success: z.boolean(),
+  approved: z.array(z.string()),
+  failed: z.array(z.object({ filename: z.string(), error: z.string() })),
+});
+
+export const RevertResponseSchema = z.object({
+  success: z.boolean(),
+  reverted: z.string(),
+});
+
+export const ImageResultsResponseSchema = z.object({
+  results: z.record(z.string(), ImageResultSchema),
+});
+
+export const CrossCompareRunResponseSchema = z.object({
+  reports: z.array(CrossReportSchema),
+});
+
+export const CrossResultsResponseSchema = z.object({
+  results: CrossResultsSchema,
+});
+
+export const CrossResultsListResponseSchema = z.object({
+  results: z.array(CrossResultsSummarySchema),
+});
+
+export const CrossDeleteResponseSchema = z.object({
+  success: z.boolean(),
+  deleted: z.array(z.string()),
+  missing: z.array(z.string()),
+});
+
+export const CrossAcceptResponseSchema = z.object({
+  success: z.boolean(),
+  acceptance: CrossAcceptanceSchema,
+});
+
+export const AcceptanceListResponseSchema = z.object({
+  acceptances: z.array(AcceptanceSchema),
+  acceptanceMap: z.record(z.string(), AcceptanceSchema),
+});
+
+export const AcceptanceCreateResponseSchema = z.object({
+  success: z.boolean(),
+  acceptance: AcceptanceSchema,
+});
+
+export const RevokeResponseSchema = z.object({
+  success: z.boolean(),
+  revoked: z.string(),
+});
+
+export const AnalyzeResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      filename: z.string(),
+      analysis: AIAnalysisResultSchema.optional(),
+      error: z.string().optional(),
+    })
+  ),
+});
+
+export const TestRunResponseSchema = z.object({
+  jobId: z.string(),
+  status: z.string(),
+  total: z.number(),
+});
+
+export const TestStatusResponseSchema = z.object({
+  id: z.string(),
+  status: z.enum(['running', 'completed', 'failed', 'aborted']),
+  progress: z.number(),
+  total: z.number(),
+  phase: z.enum(['capturing', 'comparing', 'done']),
+  results: z.array(z.unknown()),
+  error: z.string().optional(),
+  timing: ProjectTimingSchema.optional(),
+});
+
+export const TestAbortResponseSchema = z.object({
+  status: z.literal('aborted'),
+  progress: z.number(),
+  total: z.number(),
+  results: z.array(z.unknown()),
+});
+
+export const TestRerunResponseSchema = z.object({
+  jobId: z.string(),
+  status: z.string(),
+  total: z.number(),
+  failed: z.array(z.string()).optional(),
+});

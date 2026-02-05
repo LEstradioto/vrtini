@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { listAvailableVersions, PLAYWRIGHT_VERSIONS } from '../browser-versions.js';
+import { log } from '../core/logger.js';
 
 type BrowserEngineKey = 'chromiumVersion' | 'webkitVersion';
 
@@ -15,10 +16,10 @@ function printBrowserVersions(
   versions: string[],
   engineKey: BrowserEngineKey
 ): void {
-  console.log(label);
+  log.info(label);
   versions.forEach((version) => {
     const year = getPlaywrightYear(version, engineKey);
-    console.log(`  ${version} (${year})`);
+    log.info(`  ${version} (${year})`);
   });
 }
 
@@ -29,17 +30,17 @@ export function registerListBrowsersCommand(program: Command): void {
     .action(() => {
       const versions = listAvailableVersions();
 
-      console.log('Available browser versions:\n');
+      log.info('Available browser versions:\n');
       printBrowserVersions('Chromium:', versions.chromium, 'chromiumVersion');
-      console.log('');
+      log.info('');
       printBrowserVersions('WebKit:', versions.webkit, 'webkitVersion');
 
-      console.log('\nConfig example:');
-      console.log('  "browsers": [');
-      console.log('    "chromium",');
-      console.log('    { "name": "chromium", "version": "120" },');
-      console.log('    "webkit",');
-      console.log('    { "name": "webkit", "version": "17.4" }');
-      console.log('  ]');
+      log.info('\nConfig example:');
+      log.info('  "browsers": [');
+      log.info('    "chromium",');
+      log.info('    { "name": "chromium", "version": "120" },');
+      log.info('    "webkit",');
+      log.info('    { "name": "webkit", "version": "17.4" }');
+      log.info('  ]');
     });
 }

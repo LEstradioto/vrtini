@@ -10,6 +10,7 @@ import { getImagePath, type ImageType } from '../../../src/core/paths.js';
 import { loadProjectConfig } from '../../../src/core/config-manager.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
 import { requireProject } from '../plugins/project.js';
+import { rateLimit } from '../plugins/rate-limit.js';
 
 interface AnalyzeItem {
   baseline: { type: 'baseline' | 'test'; filename: string };
@@ -39,126 +40,130 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
     Body: AnalyzeRequest;
-  }>('/projects/:id/analyze', { preHandler: requireProject }, async (request, reply) => {
-    const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
+  }>(
+    '/projects/:id/analyze',
+    { preHandler: [rateLimit({ max: 5, windowMs: 60_000 }), requireProject] },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
+      }
 
-    const { items } = request.body;
+      const { items } = request.body;
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      reply.code(400);
-      return { error: 'items array is required and must not be empty' };
-    }
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        reply.code(400);
+        return { error: 'items array is required and must not be empty' };
+      }
 
-    // Load project config to get AI settings
-    let aiConfig: { provider: AIProvider; apiKey?: string; model?: string } | undefined;
+      // Load project config to get AI settings
+      let aiConfig: { provider: AIProvider; apiKey?: string; model?: string } | undefined;
 
-    try {
-      const config = await loadProjectConfig(project.path, project.configFile);
-      if (config.ai?.enabled && config.ai?.provider) {
-        aiConfig = {
-          provider: config.ai.provider,
-          apiKey: config.ai.apiKey,
-          model: config.ai.model,
+      try {
+        const config = await loadProjectConfig(project.path, project.configFile);
+        if (config.ai?.enabled && config.ai?.provider) {
+          aiConfig = {
+            provider: config.ai.provider,
+            apiKey: config.ai.apiKey,
+            model: config.ai.model,
+          };
+        }
+      } catch {
+        // Ignore config errors, will check for API keys in env
+      }
+
+      // Check if AI is configured
+      const provider = aiConfig?.provider || resolveProvider();
+
+      if (!provider) {
+        reply.code(400);
+        return {
+          error:
+            'AI not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or configure AI in project settings.',
         };
       }
-    } catch {
-      // Ignore config errors, will check for API keys in env
-    }
 
-    // Check if AI is configured
-    const provider = aiConfig?.provider || resolveProvider();
+      // Helper to resolve paths using the project path
+      const resolvePath = (type: string, filename: string): string =>
+        getImagePath(project.path, type as ImageType, filename);
 
-    if (!provider) {
-      reply.code(400);
-      return {
-        error:
-          'AI not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or configure AI in project settings.',
-      };
-    }
+      const results: AnalyzeResultItem[] = [];
 
-    // Helper to resolve paths using the project path
-    const resolvePath = (type: string, filename: string): string =>
-      getImagePath(project.path, type as ImageType, filename);
+      // Single item analysis
+      if (items.length === 1) {
+        const item = items[0];
+        try {
+          const baselinePath = resolvePath(item.baseline.type, item.baseline.filename);
+          const testPath = resolvePath(item.test.type, item.test.filename);
+          const diffPath = item.diff ? resolvePath(item.diff.type, item.diff.filename) : undefined;
 
-    const results: AnalyzeResultItem[] = [];
+          if (!existsSync(baselinePath)) {
+            throw new Error(`Baseline image not found: ${item.baseline.filename}`);
+          }
+          if (!existsSync(testPath)) {
+            throw new Error(`Test image not found: ${item.test.filename}`);
+          }
 
-    // Single item analysis
-    if (items.length === 1) {
-      const item = items[0];
+          const analysis = await analyzeWithAI(baselinePath, testPath, diffPath, {
+            provider: provider as AIProvider,
+            apiKey: aiConfig?.apiKey,
+            model: aiConfig?.model,
+            scenarioName: item.name || item.test.filename,
+          });
+
+          results.push({
+            filename: item.test.filename,
+            analysis,
+          });
+        } catch (err) {
+          results.push({
+            filename: item.test.filename,
+            error: getErrorMessage(err),
+          });
+        }
+
+        return { results };
+      }
+
+      // Batch analysis with concurrency
+      const comparisons = items.map((item) => ({
+        baseline: resolvePath(item.baseline.type, item.baseline.filename),
+        test: resolvePath(item.test.type, item.test.filename),
+        diff: item.diff ? resolvePath(item.diff.type, item.diff.filename) : undefined,
+        name: item.name || item.test.filename,
+      }));
+
       try {
-        const baselinePath = resolvePath(item.baseline.type, item.baseline.filename);
-        const testPath = resolvePath(item.test.type, item.test.filename);
-        const diffPath = item.diff ? resolvePath(item.diff.type, item.diff.filename) : undefined;
+        const batchResults = await analyzeMultiple(
+          comparisons,
+          {
+            provider: provider as AIProvider,
+            apiKey: aiConfig?.apiKey,
+            model: aiConfig?.model,
+          },
+          3 // concurrency
+        );
 
-        if (!existsSync(baselinePath)) {
-          throw new Error(`Baseline image not found: ${item.baseline.filename}`);
+        for (const [name, result] of batchResults) {
+          if (result instanceof Error) {
+            results.push({
+              filename: name,
+              error: result.message,
+            });
+          } else {
+            results.push({
+              filename: name,
+              analysis: result,
+            });
+          }
         }
-        if (!existsSync(testPath)) {
-          throw new Error(`Test image not found: ${item.test.filename}`);
-        }
-
-        const analysis = await analyzeWithAI(baselinePath, testPath, diffPath, {
-          provider: provider as AIProvider,
-          apiKey: aiConfig?.apiKey,
-          model: aiConfig?.model,
-          scenarioName: item.name || item.test.filename,
-        });
-
-        results.push({
-          filename: item.test.filename,
-          analysis,
-        });
       } catch (err) {
-        results.push({
-          filename: item.test.filename,
-          error: getErrorMessage(err),
-        });
+        reply.code(500);
+        return { error: 'Batch analysis failed', details: getErrorMessage(err) };
       }
 
       return { results };
     }
-
-    // Batch analysis with concurrency
-    const comparisons = items.map((item) => ({
-      baseline: resolvePath(item.baseline.type, item.baseline.filename),
-      test: resolvePath(item.test.type, item.test.filename),
-      diff: item.diff ? resolvePath(item.diff.type, item.diff.filename) : undefined,
-      name: item.name || item.test.filename,
-    }));
-
-    try {
-      const batchResults = await analyzeMultiple(
-        comparisons,
-        {
-          provider: provider as AIProvider,
-          apiKey: aiConfig?.apiKey,
-          model: aiConfig?.model,
-        },
-        3 // concurrency
-      );
-
-      for (const [name, result] of batchResults) {
-        if (result instanceof Error) {
-          results.push({
-            filename: name,
-            error: result.message,
-          });
-        } else {
-          results.push({
-            filename: name,
-            analysis: result,
-          });
-        }
-      }
-    } catch (err) {
-      reply.code(500);
-      return { error: 'Batch analysis failed', details: getErrorMessage(err) };
-    }
-
-    return { results };
-  });
+  );
 };

@@ -1,10 +1,5 @@
 <script lang="ts">
-  type ImageStatus = 'passed' | 'failed' | 'new';
-
-  interface GalleryImage {
-    filename: string;
-    status: ImageStatus;
-  }
+  import type { GalleryImage } from './gallery-types.js';
 
   interface Props {
     isCompareMode: boolean;
@@ -38,10 +33,14 @@
     onAcceptForBrowser,
   }: Props = $props();
 
-  const queueCounts = $derived({
-    failed: queue.filter((i) => i.status === 'failed').length,
-    new: queue.filter((i) => i.status === 'new').length,
-    passed: queue.filter((i) => i.status === 'passed').length,
+  const queueCounts = $derived.by(() => {
+    let failed = 0, newCount = 0, passed = 0;
+    for (const i of queue) {
+      if (i.status === 'failed') failed++;
+      else if (i.status === 'new') newCount++;
+      else if (i.status === 'passed') passed++;
+    }
+    return { failed, new: newCount, passed };
   });
 
   function handleApprove() {

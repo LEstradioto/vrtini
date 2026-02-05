@@ -90,6 +90,9 @@ export function pixelDiffToScore(diffPercent: number, decayFactor: number): numb
   return Math.exp(-diffPercent / decayFactor);
 }
 
+const AI_APPROVE_BOOST = 0.1;
+const AI_REJECT_PENALTY = 0.2;
+
 /**
  * Calculate AI score adjusted by recommendation.
  */
@@ -99,9 +102,9 @@ export function calculateAIScore(
 ): number {
   let score = confidence;
   if (recommendation === 'approve') {
-    score = score + 0.1;
+    score = score + AI_APPROVE_BOOST;
   } else if (recommendation === 'reject') {
-    score = score - 0.2;
+    score = score - AI_REJECT_PENALTY;
   }
   return clamp01(score);
 }

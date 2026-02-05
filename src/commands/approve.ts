@@ -5,6 +5,7 @@ import { loadConfig } from '../config.js';
 import { approveResult } from '../report.js';
 import { getProjectDirs } from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
 
 export function registerApproveCommand(program: Command): void {
   program
@@ -20,7 +21,7 @@ export function registerApproveCommand(program: Command): void {
         const { outputDir, baselineDir } = getProjectDirs(cwd, config);
 
         if (!options.all && !name) {
-          console.error('Specify a scenario name or use --all');
+          log.error('Specify a scenario name or use --all');
           process.exit(1);
         }
 
@@ -33,18 +34,18 @@ export function registerApproveCommand(program: Command): void {
           if (options.all || file.startsWith(prefix)) {
             const testPath = resolve(outputDir, file);
             await approveResult(testPath, baselineDir);
-            console.log(`✓ Approved: ${file}`);
+            log.info(`✓ Approved: ${file}`);
             approved++;
           }
         }
 
         if (approved === 0) {
-          console.log('No screenshots found to approve');
+          log.info('No screenshots found to approve');
           return;
         }
-        console.log(`\nApproved ${approved} screenshot(s)`);
+        log.info(`\nApproved ${approved} screenshot(s)`);
       } catch (err) {
-        console.error('Error:', getErrorMessage(err));
+        log.error('Error:', getErrorMessage(err));
         process.exit(1);
       }
     });

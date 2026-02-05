@@ -7,6 +7,15 @@ import type { AIAnalysisResult } from '../domain/ai-prompt.js';
 import type { Verdict, ScoringFactors } from '../domain/scoring.js';
 import type { UnifiedConfidence, EngineResult } from '../engines/index.js';
 
+export interface BrowserRef {
+  name: 'chromium' | 'webkit';
+  version?: string;
+}
+
+export function formatBrowser(ref: BrowserRef): string {
+  return ref.version ? `${ref.name}-v${ref.version}` : ref.name;
+}
+
 export interface ConfidenceResult {
   score: number;
   verdict: Verdict;

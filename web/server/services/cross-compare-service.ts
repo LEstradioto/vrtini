@@ -5,54 +5,49 @@ import type { VRTConfig } from '../../../src/core/config.js';
 import { normalizeBrowserConfig } from '../../../src/core/browser-versions.js';
 import { getProjectDirs, getScreenshotFilename } from '../../../src/core/paths.js';
 import { compareImages } from '../../../src/core/compare.js';
-import type { ComparisonResult } from '../../../src/core/types.js';
+import { formatBrowser, type BrowserRef, type ComparisonResult } from '../../../src/core/types.js';
 import { getDiffPath } from '../../../src/core/types.js';
 import { buildEnginesConfig } from '../../../src/core/compare-runner.js';
 import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';
 
-interface BrowserRef {
-  name: 'chromium' | 'webkit';
-  version?: string;
-}
+function buildCrossComparePairs(
+  browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[]
+): { key: string; title: string; baseline: BrowserRef; test: BrowserRef }[] {
+  const all = browsers.map(normalizeBrowserConfig);
+  const pairs: { key: string; title: string; baseline: BrowserRef; test: BrowserRef }[] = [];
+  const seen = new Set<string>();
 
-function formatBrowser(ref: BrowserRef): string {
-  return ref.version ? `${ref.name}-v${ref.version}` : ref.name;
-}
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const a = all[i];
+      const b = all[j];
 
-function findLatestAndOld(
-  browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[],
-  name: 'chromium' | 'webkit'
-): { latest: BrowserRef; old: BrowserRef } {
-  let latest: BrowserRef | null = null;
-  let old: BrowserRef | null = null;
+      // Skip identical entries (same name and version)
+      if (a.name === b.name && a.version === b.version) continue;
 
-  for (const browser of browsers) {
-    const normalized = normalizeBrowserConfig(browser);
-    if (normalized.name !== name) continue;
-    if (normalized.version) {
-      if (!old) old = normalized;
-    } else {
-      latest = normalized;
+      // Baseline preference: unversioned (latest) over versioned (old)
+      let baseline = a;
+      let test = b;
+      if (a.version && !b.version) {
+        baseline = b;
+        test = a;
+      }
+
+      const key = `${formatBrowser(baseline)}_vs_${formatBrowser(test)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      pairs.push({
+        key,
+        title: `Cross Compare: ${formatBrowser(baseline)} vs ${formatBrowser(test)}`,
+        baseline,
+        test,
+      });
     }
   }
 
-  if (!latest || !old) {
-    throw new Error(`Missing latest and/or old ${name} in config browsers`);
-  }
-
-  return { latest, old };
-}
-
-function tryFindLatestAndOld(
-  browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[],
-  name: 'chromium' | 'webkit'
-): { latest: BrowserRef; old: BrowserRef } | null {
-  try {
-    return findLatestAndOld(browsers, name);
-  } catch {
-    return null;
-  }
+  return pairs;
 }
 
 export interface CrossReport {
@@ -358,54 +353,12 @@ export async function runCrossCompare(
   options: CrossCompareRunOptions = {}
 ): Promise<CrossReport[]> {
   const { outputDir } = getProjectDirs(projectPath, config);
-  const chromiumPair = tryFindLatestAndOld(config.browsers, 'chromium');
-  const webkitPair = tryFindLatestAndOld(config.browsers, 'webkit');
-
-  const pairs = [];
-
-  if (chromiumPair) {
-    pairs.push({
-      key: `${formatBrowser(chromiumPair.latest)}_vs_${formatBrowser(chromiumPair.old)}`,
-      title: `Cross Compare: ${formatBrowser(chromiumPair.latest)} vs ${formatBrowser(
-        chromiumPair.old
-      )}`,
-      baseline: chromiumPair.latest,
-      test: chromiumPair.old,
-    });
-  }
-
-  if (chromiumPair && webkitPair) {
-    pairs.push({
-      key: `${formatBrowser(chromiumPair.latest)}_vs_${formatBrowser(webkitPair.latest)}`,
-      title: `Cross Compare: ${formatBrowser(chromiumPair.latest)} vs ${formatBrowser(
-        webkitPair.latest
-      )}`,
-      baseline: chromiumPair.latest,
-      test: webkitPair.latest,
-    });
-    pairs.push({
-      key: `${formatBrowser(chromiumPair.latest)}_vs_${formatBrowser(webkitPair.old)}`,
-      title: `Cross Compare: ${formatBrowser(chromiumPair.latest)} vs ${formatBrowser(
-        webkitPair.old
-      )}`,
-      baseline: chromiumPair.latest,
-      test: webkitPair.old,
-    });
-  }
-
-  if (webkitPair) {
-    pairs.push({
-      key: `${formatBrowser(webkitPair.latest)}_vs_${formatBrowser(webkitPair.old)}`,
-      title: `Cross Compare: ${formatBrowser(webkitPair.latest)} vs ${formatBrowser(
-        webkitPair.old
-      )}`,
-      baseline: webkitPair.latest,
-      test: webkitPair.old,
-    });
-  }
+  const pairs = buildCrossComparePairs(config.browsers);
 
   if (pairs.length === 0) {
-    throw new Error('Cross compare requires at least one latest+old browser pair');
+    throw new Error(
+      'Cross compare requires at least two distinct browsers in config (e.g. "chromium" and { "name": "webkit", "version": "14.1" })'
+    );
   }
 
   const availableKeys = pairs.map((pair) => pair.key);
@@ -675,7 +628,12 @@ export async function loadCrossResults(
     throw new Error(`Cross results not found: ${resultsPath}`);
   }
   const data = await readFile(resultsPath, 'utf-8');
-  const results = JSON.parse(data) as CrossResults;
+  let results: CrossResults;
+  try {
+    results = JSON.parse(data) as CrossResults;
+  } catch {
+    throw new Error(`Invalid JSON in cross results: ${resultsPath}`);
+  }
   const acceptances = await loadCrossAcceptances(projectPath);
   const pairAcceptances = acceptances[key] || {};
   const deletions = await loadCrossDeletions(projectPath);
@@ -790,7 +748,11 @@ async function loadCrossResultsRaw(
     throw new Error(`Cross results not found: ${resultsPath}`);
   }
   const data = await readFile(resultsPath, 'utf-8');
-  return JSON.parse(data) as CrossResults;
+  try {
+    return JSON.parse(data) as CrossResults;
+  } catch {
+    throw new Error(`Invalid JSON in cross results: ${resultsPath}`);
+  }
 }
 
 async function updateCrossResultsAcceptance(

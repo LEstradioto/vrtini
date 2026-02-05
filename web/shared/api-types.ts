@@ -6,6 +6,10 @@ export interface ImageMetadata {
   viewport: string;
 }
 
+export function formatBrowserLabel(browser: string, version?: string): string {
+  return `${browser.charAt(0).toUpperCase() + browser.slice(1)} ${version ? 'v' + version : '(latest)'}`;
+}
+
 export interface AcceptanceMetrics {
   diffPercentage: number;
   pixelDiff?: number;

@@ -16,6 +16,7 @@ import {
 } from './domain/task-planner.js';
 import { checkDockerConnection, checkDockerImage } from './lib/docker-image.js';
 import { runBatchContainer, type ScreenshotResult } from './lib/docker-container.js';
+import { log } from './core/logger.js';
 
 // Re-export for backward compatibility
 export { getScreenshotFilename } from './core/paths.js';
@@ -96,7 +97,7 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
 
   const tasksByBrowserVersion = filterGroupsWithImages(allGroups, imageExists);
   const totalTasks = getTotalTaskCount(tasksByBrowserVersion);
-  console.log(`Running ${totalTasks} screenshot tasks (batch mode)...`);
+  log.info(`Running ${totalTasks} screenshot tasks (batch mode)...`);
 
   const disableAnimations = config.disableAnimations ?? true;
   const concurrency = config.concurrency ?? 5;
@@ -110,11 +111,11 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
   for (const [browserKey, group] of tasksByBrowserVersion) {
     // Check if aborted
     if (signal?.aborted) {
-      console.log(`\nAborted - skipping remaining tasks`);
+      log.info(`\nAborted - skipping remaining tasks`);
       break;
     }
 
-    console.log(
+    log.info(
       `\n[${browserKey}] Processing ${group.tasks.length} tasks (${group.dockerImage}, concurrency: ${concurrency})...`
     );
     let groupCompleted = 0;
@@ -144,7 +145,7 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
 
   const { successful, failed } = countResults(allResults);
 
-  console.log(`\nCompleted: ${successful} successful, ${failed} failed`);
+  log.info(`\nCompleted: ${successful} successful, ${failed} failed`);
 
   return allResults;
 }

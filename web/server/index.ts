@@ -3,7 +3,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import { resolve, dirname } from 'path';
 import { existsSync } from 'fs';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import { projectsRoutes } from './api/projects.js';
 import { configRoutes } from './api/config.js';
@@ -13,6 +13,8 @@ import { compareRoutes } from './api/compare.js';
 import { acceptanceRoutes } from './api/acceptance.js';
 import { analyzeRoutes } from './api/analyze.js';
 import { crossCompareRoutes } from './api/cross-compare.js';
+import { registerAuth } from './plugins/auth.js';
+import { log } from '../../src/core/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -50,6 +52,21 @@ export async function startServer(options: ServerOptions): Promise<void> {
     origin: isDev,
   });
 
+  // Optional bearer-token auth (enabled when VRT_AUTH_TOKEN is set)
+  registerAuth(fastify);
+
+  // Security headers
+  fastify.addHook('onSend', async (_request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('X-XSS-Protection', '1; mode=block');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'"
+    );
+  });
+
   // API routes
   await fastify.register(projectsRoutes, { prefix: '/api' });
   await fastify.register(configRoutes, { prefix: '/api' });
@@ -80,18 +97,18 @@ export async function startServer(options: ServerOptions): Promise<void> {
     });
   } else if (isDev) {
     // In dev, proxy to Vite dev server
-    console.log('Client dist not found. Run `npm run build:client` or use Vite dev server.');
+    log.info('Client dist not found. Run `npm run build:client` or use Vite dev server.');
   }
 
   try {
     await fastify.listen({ port, host });
 
     const url = `http://localhost:${port}`;
-    console.log(`\n  vrtini Web UI running at: ${url}\n`);
+    log.info(`\n  vrtini Web UI running at: ${url}\n`);
 
     if (open) {
       const cmd = getOpenCommand(process.platform);
-      exec(`${cmd} ${url}`);
+      execFile(cmd, [url]);
     }
   } catch (err) {
     fastify.log.error(err);

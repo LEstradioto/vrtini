@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import { buildDockerImage, checkDockerImage } from '../docker.js';
 import { getRequiredPlaywrightVersions, LATEST_PLAYWRIGHT_VERSION } from '../browser-versions.js';
 import { resolveConfigPath, loadConfigFromPath } from '../core/config-manager.js';
+import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,7 +14,7 @@ const __dirname = dirname(__filename);
 async function buildVersions(dockerDir: string, versions: string[]): Promise<void> {
   for (const version of versions) {
     await buildDockerImage(dockerDir, version);
-    console.log('');
+    log.info('');
   }
 }
 
@@ -31,7 +33,7 @@ export function registerBuildCommand(program: Command): void {
       const dockerDir = resolve(__dirname, '..', '..', '..', 'docker');
 
       if (!existsSync(dockerDir)) {
-        console.error(`Docker directory not found: ${dockerDir}`);
+        log.error(`Docker directory not found: ${dockerDir}`);
         process.exit(1);
       }
 
@@ -40,9 +42,9 @@ export function registerBuildCommand(program: Command): void {
           // Build all supported versions
           const { PLAYWRIGHT_VERSIONS } = await import('../browser-versions.js');
           const versions = Object.keys(PLAYWRIGHT_VERSIONS);
-          console.log(`Building ${versions.length} Docker images...\n`);
+          log.info(`Building ${versions.length} Docker images...\n`);
           await buildVersions(dockerDir, versions);
-          console.log(`\n✓ Built ${versions.length} images successfully`);
+          log.info(`\n✓ Built ${versions.length} images successfully`);
         } else if (options.playwright) {
           // Build specific version
           await buildDockerImage(dockerDir, options.playwright);
@@ -54,14 +56,14 @@ export function registerBuildCommand(program: Command): void {
           if (configPath) {
             const config = await loadConfigFromPath(configPath);
             requiredVersions = getRequiredPlaywrightVersions(config.browsers);
-            console.log(`Found config: ${configPath}`);
-            console.log(`Browsers configured: ${config.browsers.length}`);
+            log.info(`Found config: ${configPath}`);
+            log.info(`Browsers configured: ${config.browsers.length}`);
           } else {
             requiredVersions = [LATEST_PLAYWRIGHT_VERSION];
-            console.log(`No config found, building latest version`);
+            log.info(`No config found, building latest version`);
           }
 
-          console.log(`Required Playwright versions: ${requiredVersions.join(', ')}\n`);
+          log.info(`Required Playwright versions: ${requiredVersions.join(', ')}\n`);
 
           // Check which images already exist
           const toBuild: string[] = [];
@@ -69,24 +71,24 @@ export function registerBuildCommand(program: Command): void {
             const imageTag = `vrt-playwright:v${version}`;
             const exists = await checkDockerImage(imageTag);
             if (exists && !options.force) {
-              console.log(`✓ ${imageTag} already exists (skip)`);
+              log.info(`✓ ${imageTag} already exists (skip)`);
             } else {
               toBuild.push(version);
             }
           }
 
           if (toBuild.length === 0) {
-            console.log(`\nAll required Docker images are ready!`);
-            console.log(`Use --force to rebuild existing images.`);
+            log.info(`\nAll required Docker images are ready!`);
+            log.info(`Use --force to rebuild existing images.`);
             return;
           }
 
-          console.log(`\nBuilding ${toBuild.length} Docker image(s)...\n`);
+          log.info(`\nBuilding ${toBuild.length} Docker image(s)...\n`);
           await buildVersions(dockerDir, toBuild);
-          console.log(`\n✓ Built ${toBuild.length} image(s) successfully`);
+          log.info(`\n✓ Built ${toBuild.length} image(s) successfully`);
         }
       } catch (err) {
-        console.error('Failed to build Docker image:', err);
+        log.error('Failed to build Docker image:', getErrorMessage(err));
         process.exit(1);
       }
     });

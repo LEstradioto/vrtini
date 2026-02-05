@@ -5,6 +5,7 @@
 import Docker from 'dockerode';
 import { getBaseImage, LATEST_PLAYWRIGHT_VERSION } from '../browser-versions.js';
 import { getErrorMessage } from './errors.js';
+import { log } from './logger.js';
 
 const DEFAULT_DOCKER_IMAGE = 'vrt-playwright';
 
@@ -18,7 +19,7 @@ export async function buildDockerImage(
   const imageTag = `${DEFAULT_DOCKER_IMAGE}:v${playwrightVersion}`;
   const baseImage = getBaseImage(playwrightVersion);
 
-  console.log(`Building Docker image ${imageTag} (base: ${baseImage})...`);
+  log.info(`Building Docker image ${imageTag} (base: ${baseImage})...`);
 
   const stream = await docker.buildImage(
     {
@@ -50,10 +51,10 @@ export async function buildDockerImage(
   if (playwrightVersion === LATEST_PLAYWRIGHT_VERSION) {
     const image = docker.getImage(imageTag);
     await image.tag({ repo: DEFAULT_DOCKER_IMAGE, tag: 'latest' });
-    console.log(`Also tagged as ${DEFAULT_DOCKER_IMAGE}:latest`);
+    log.info(`Also tagged as ${DEFAULT_DOCKER_IMAGE}:latest`);
   }
 
-  console.log(`Docker image ${imageTag} built successfully`);
+  log.info(`Docker image ${imageTag} built successfully`);
 }
 
 /**
@@ -93,7 +94,7 @@ export async function checkDockerImage(imageTag?: string): Promise<boolean> {
     // Connection errors are caught separately by checkDockerConnection() which
     // should be called first. This catch handles edge cases like invalid image
     // tag format or transient API failures.
-    console.warn(`Failed to check Docker image "${tag}": ${getErrorMessage(err)}`);
+    log.warn(`Failed to check Docker image "${tag}": ${getErrorMessage(err)}`);
     return false;
   }
 }

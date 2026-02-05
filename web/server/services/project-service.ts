@@ -3,6 +3,8 @@ import { existsSync } from 'fs';
 import { resolve, basename, dirname } from 'path';
 import { ConfigSchema } from '../../../src/core/config.js';
 import { IMAGE_METADATA_SCHEMA_VERSION } from '../../../src/core/image-metadata.js';
+import { getErrorMessage } from '../../../src/core/errors.js';
+import { log } from '../../../src/core/logger.js';
 import {
   getProjectDirs,
   getBaselineDir,
@@ -68,7 +70,17 @@ export async function loadConfig(
   }
 
   const content = await readFile(configPath, 'utf-8');
-  const raw = JSON.parse(content);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(content);
+  } catch {
+    return {
+      config: null,
+      raw: null,
+      valid: false,
+      errors: [{ path: '', message: `Invalid JSON in config file: ${configPath}` }],
+    };
+  }
   const result = ConfigSchema.safeParse(raw);
 
   return {
@@ -183,10 +195,7 @@ export async function loadAcceptances(projectPath: string): Promise<Acceptance[]
   } catch (err) {
     // Log parsing errors but return empty array to allow graceful degradation.
     // File corruption is recoverable by re-accepting images.
-    console.warn(
-      `Failed to load acceptances from ${filePath}:`,
-      err instanceof Error ? err.message : err
-    );
+    log.warn(`Failed to load acceptances from ${filePath}:`, getErrorMessage(err));
     return [];
   }
 }
@@ -446,9 +455,7 @@ async function loadImageMetadataIndex(dir: string): Promise<Record<string, Image
       rawObject && typeof rawObject.schemaVersion === 'number' ? rawObject.schemaVersion : 0;
 
     if (schemaVersion > IMAGE_METADATA_SCHEMA_VERSION) {
-      console.warn(
-        `Unsupported image metadata schema version ${schemaVersion} in ${metadataPath}.`
-      );
+      log.warn(`Unsupported image metadata schema version ${schemaVersion} in ${metadataPath}.`);
       return null;
     }
 
@@ -465,10 +472,7 @@ async function loadImageMetadataIndex(dir: string): Promise<Record<string, Image
     }
     return index;
   } catch (err) {
-    console.warn(
-      `Failed to load image metadata from ${metadataPath}:`,
-      err instanceof Error ? err.message : err
-    );
+    log.warn(`Failed to load image metadata from ${metadataPath}:`, getErrorMessage(err));
     return null;
   }
 }
@@ -600,7 +604,7 @@ export async function bulkApproveImages(
     } catch (err) {
       failed.push({
         filename,
-        error: err instanceof Error ? err.message : 'Unknown error',
+        error: getErrorMessage(err, 'Unknown error'),
       });
     }
   }

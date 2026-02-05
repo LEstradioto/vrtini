@@ -1,29 +1,9 @@
 <script lang="ts">
   import { projects, info, images, type Project } from '../lib/api';
+  import { getErrorMessage } from '../lib/errors';
+  import { getAppContext } from '../lib/app-context';
 
-  interface TestState {
-    jobId: string;
-    progress: number;
-    total: number;
-    aborting?: boolean;
-    phase?: string;
-  }
-
-  let {
-    navigate,
-    runningTests,
-    startTest,
-    abortTest,
-    testErrors,
-    clearTestError
-  } = $props<{
-    navigate: (path: string) => void;
-    runningTests: Map<string, TestState>;
-    startTest: (project: Project, onComplete?: () => void) => Promise<void>;
-    abortTest: (projectId: string) => Promise<void>;
-    testErrors: Map<string, string>;
-    clearTestError: (projectId: string) => void;
-  }>();
+  const { navigate, runningTests, startTest, abortTest, testErrors, clearTestError } = getAppContext();
 
   let projectList = $state<Project[]>([]);
   let loading = $state(true);
@@ -48,7 +28,7 @@
       // Load image counts for all projects
       await loadAllImageCounts(projectsRes.projects);
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load projects';
+      error = getErrorMessage(err, 'Failed to load projects');
     } finally {
       loading = false;
     }
@@ -102,7 +82,7 @@
       });
       await loadProjects();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to import project';
+      error = getErrorMessage(err, 'Failed to import project');
     }
   }
 
@@ -119,7 +99,7 @@
       showModal = false;
       await loadProjects();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to create project';
+      error = getErrorMessage(err, 'Failed to create project');
     }
   }
 
@@ -129,7 +109,7 @@
     try {
       await startTest(project, () => loadProjects());
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to run tests';
+      error = getErrorMessage(err, 'Failed to run tests');
     }
   }
 
@@ -140,7 +120,7 @@
       await abortTest(project.id);
       await loadProjects();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to abort tests';
+      error = getErrorMessage(err, 'Failed to abort tests');
     }
   }
 

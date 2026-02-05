@@ -10,6 +10,7 @@ import { loadProjectConfig } from '../../../src/core/config-manager.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
 import { parseScreenshotFilename } from '../../../src/core/paths.js';
 import { requireProject } from '../plugins/project.js';
+import { rateLimit } from '../plugins/rate-limit.js';
 
 function getJobForProject(jobId: string, projectId: string) {
   const job = getJob(jobId);
@@ -24,115 +25,123 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
     Body: { scenarios?: string[] };
-  }>('/projects/:id/test', { preHandler: requireProject }, async (request, reply) => {
-    const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
+  }>(
+    '/projects/:id/test',
+    { preHandler: [rateLimit({ max: 3, windowMs: 60_000 }), requireProject] },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
+      }
+
+      let config;
+      try {
+        config = await loadProjectConfig(project.path, project.configFile);
+      } catch (err) {
+        reply.code(400);
+        return { error: 'Failed to load config', details: getErrorMessage(err) };
+      }
+
+      const scenarioFilter = request.body.scenarios;
+      const scenarios = scenarioFilter
+        ? config.scenarios.filter((s) => scenarioFilter.includes(s.name))
+        : config.scenarios;
+
+      const totalTests = scenarios.length * config.browsers.length * config.viewports.length;
+      const job = createJob(project.id, totalTests);
+
+      // Run tests in background
+      startTestRun(job, project.path, config, scenarios);
+
+      reply.code(202);
+      return { jobId: job.id, status: 'running', total: totalTests };
     }
-
-    let config;
-    try {
-      config = await loadProjectConfig(project.path, project.configFile);
-    } catch (err) {
-      reply.code(400);
-      return { error: 'Failed to load config', details: getErrorMessage(err) };
-    }
-
-    const scenarioFilter = request.body.scenarios;
-    const scenarios = scenarioFilter
-      ? config.scenarios.filter((s) => scenarioFilter.includes(s.name))
-      : config.scenarios;
-
-    const totalTests = scenarios.length * config.browsers.length * config.viewports.length;
-    const job = createJob(project.id, totalTests);
-
-    // Run tests in background
-    startTestRun(job, project.path, config, scenarios);
-
-    reply.code(202);
-    return { jobId: job.id, status: 'running', total: totalTests };
-  });
+  );
 
   // Rerun specific images (single or bulk)
   fastify.post<{
     Params: { id: string };
     Body: { filename?: string; filenames?: string[] };
-  }>('/projects/:id/test/rerun', { preHandler: requireProject }, async (request, reply) => {
-    const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
-    const fileList =
-      request.body.filenames || (request.body.filename ? [request.body.filename] : []);
-    if (fileList.length === 0) {
-      reply.code(400);
-      return { error: 'filename or filenames is required' };
-    }
-
-    let config;
-    try {
-      config = await loadProjectConfig(project.path, project.configFile);
-    } catch (err) {
-      reply.code(400);
-      return { error: 'Failed to load config', details: getErrorMessage(err) };
-    }
-
-    // Parse all filenames and collect unique scenarios/browsers/viewports
-    const scenarioNames = new Set<string>();
-    const browserKeys = new Set<string>();
-    const viewportNames = new Set<string>();
-    const failed: string[] = [];
-
-    type BrowserEntry = 'chromium' | 'webkit' | { name: 'chromium' | 'webkit'; version: string };
-
-    const browserMap = new Map<string, BrowserEntry>();
-
-    for (const fname of fileList) {
-      const parsed = parseScreenshotFilename(
-        fname,
-        config.scenarios,
-        config.browsers,
-        config.viewports
-      );
-      if (!parsed) {
-        failed.push(fname);
-        continue;
+  }>(
+    '/projects/:id/test/rerun',
+    { preHandler: [rateLimit({ max: 5, windowMs: 60_000 }), requireProject] },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
       }
-      scenarioNames.add(parsed.scenario);
-      viewportNames.add(parsed.viewport);
-      const bKey = parsed.version ? `${parsed.browser}-v${parsed.version}` : parsed.browser;
-      browserKeys.add(bKey);
-      if (!browserMap.has(bKey)) {
-        browserMap.set(
-          bKey,
-          parsed.version
-            ? { name: parsed.browser as 'chromium' | 'webkit', version: parsed.version }
-            : (parsed.browser as BrowserEntry)
+
+      const fileList =
+        request.body.filenames || (request.body.filename ? [request.body.filename] : []);
+      if (fileList.length === 0) {
+        reply.code(400);
+        return { error: 'filename or filenames is required' };
+      }
+
+      let config;
+      try {
+        config = await loadProjectConfig(project.path, project.configFile);
+      } catch (err) {
+        reply.code(400);
+        return { error: 'Failed to load config', details: getErrorMessage(err) };
+      }
+
+      // Parse all filenames and collect unique scenarios/browsers/viewports
+      const scenarioNames = new Set<string>();
+      const browserKeys = new Set<string>();
+      const viewportNames = new Set<string>();
+      const failed: string[] = [];
+
+      type BrowserEntry = 'chromium' | 'webkit' | { name: 'chromium' | 'webkit'; version: string };
+
+      const browserMap = new Map<string, BrowserEntry>();
+
+      for (const fname of fileList) {
+        const parsed = parseScreenshotFilename(
+          fname,
+          config.scenarios,
+          config.browsers,
+          config.viewports
         );
+        if (!parsed) {
+          failed.push(fname);
+          continue;
+        }
+        scenarioNames.add(parsed.scenario);
+        viewportNames.add(parsed.viewport);
+        const bKey = parsed.version ? `${parsed.browser}-v${parsed.version}` : parsed.browser;
+        browserKeys.add(bKey);
+        if (!browserMap.has(bKey)) {
+          browserMap.set(
+            bKey,
+            parsed.version
+              ? { name: parsed.browser as 'chromium' | 'webkit', version: parsed.version }
+              : (parsed.browser as BrowserEntry)
+          );
+        }
       }
+
+      if (scenarioNames.size === 0) {
+        reply.code(400);
+        return { error: 'No filenames matched config', failed };
+      }
+
+      const scenarios = config.scenarios.filter((s) => scenarioNames.has(s.name));
+      const viewports = config.viewports.filter((v) => viewportNames.has(v.name));
+      const browsers = [...browserMap.values()];
+
+      const totalTests = scenarios.length * browsers.length * viewports.length;
+      const filteredConfig = { ...config, browsers, viewports };
+
+      const job = createJob(project.id, totalTests);
+      startTestRun(job, project.path, filteredConfig, scenarios);
+
+      reply.code(202);
+      return { jobId: job.id, status: 'running', total: totalTests, failed };
     }
-
-    if (scenarioNames.size === 0) {
-      reply.code(400);
-      return { error: 'No filenames matched config', failed };
-    }
-
-    const scenarios = config.scenarios.filter((s) => scenarioNames.has(s.name));
-    const viewports = config.viewports.filter((v) => viewportNames.has(v.name));
-    const browsers = [...browserMap.values()];
-
-    const totalTests = scenarios.length * browsers.length * viewports.length;
-    const filteredConfig = { ...config, browsers, viewports };
-
-    const job = createJob(project.id, totalTests);
-    startTestRun(job, project.path, filteredConfig, scenarios);
-
-    reply.code(202);
-    return { jobId: job.id, status: 'running', total: totalTests, failed };
-  });
+  );
 
   // Abort a running test
   fastify.post<{ Params: { id: string; jobId: string } }>(

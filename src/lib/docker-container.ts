@@ -9,6 +9,7 @@ import { join } from 'path';
 import type { Scenario, Viewport } from '../config.js';
 import { getBatchResultsPath, sanitizeForFilename } from './paths.js';
 import { getErrorMessage } from './errors.js';
+import { log } from './logger.js';
 import type { ScreenshotTask } from '../domain/task-planner.js';
 
 /**
@@ -137,7 +138,7 @@ export async function runSingleContainer(
       logStream.on('error', (err: Error) => {
         // Log stream errors but still resolve with partial output.
         // The container result will indicate overall success/failure.
-        console.warn(`Log stream error: ${err.message}`);
+        log.warn(`Log stream error: ${err.message}`);
         resolve(output);
       });
     });
@@ -253,7 +254,7 @@ export async function runBatchContainer(
         // Only log unexpected errors for debugging.
         const msg = getErrorMessage(err);
         if (!msg.includes('is not running') && !msg.includes('No such container')) {
-          console.warn(`Failed to stop container on abort: ${msg}`);
+          log.warn(`Failed to stop container on abort: ${msg}`);
         }
       }
     };
@@ -293,7 +294,7 @@ export async function runBatchContainer(
       logStream.on('error', (err: Error) => {
         // Log stream errors but still resolve with partial output.
         // The container result will indicate overall success/failure.
-        console.warn(`Log stream error: ${err.message}`);
+        log.warn(`Log stream error: ${err.message}`);
         resolve(output);
       });
     });

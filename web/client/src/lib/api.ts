@@ -1,3 +1,4 @@
+import type { ZodType } from 'zod';
 import type {
   ImageMetadata,
   AcceptanceMetrics,
@@ -10,11 +11,44 @@ import type {
   ProjectTiming,
   Project,
   CrossReport,
+  CrossResultItem,
   CrossResults,
   CrossResultsSummary,
   CrossAcceptance,
   VRTConfig,
+  Scenario,
+  ScenarioOptions,
+  BrowserConfig,
 } from '../../../shared/api-types.js';
+import {
+  InfoResponseSchema,
+  ProjectListResponseSchema,
+  ProjectResponseSchema,
+  SuccessResponseSchema,
+  ConfigGetResponseSchema,
+  ConfigSaveResponseSchema,
+  SchemaResponseSchema,
+  ImagesListResponseSchema,
+  ApproveResponseSchema,
+  RejectResponseSchema,
+  BulkApproveResponseSchema,
+  RevertResponseSchema,
+  ImageResultsResponseSchema,
+  CompareResultSchema,
+  CrossCompareRunResponseSchema,
+  CrossResultsResponseSchema,
+  CrossResultsListResponseSchema,
+  CrossDeleteResponseSchema,
+  CrossAcceptResponseSchema,
+  AcceptanceListResponseSchema,
+  AcceptanceCreateResponseSchema,
+  RevokeResponseSchema,
+  AnalyzeResponseSchema,
+  TestRunResponseSchema,
+  TestStatusResponseSchema,
+  TestAbortResponseSchema,
+  TestRerunResponseSchema,
+} from '../../../shared/api-schemas.js';
 
 const API_BASE = '/api';
 
@@ -32,13 +66,21 @@ export type {
   ProjectTiming,
   Project,
   CrossReport,
+  CrossResultItem,
   CrossResults,
   CrossResultsSummary,
   CrossAcceptance,
   VRTConfig,
+  Scenario,
+  ScenarioOptions,
+  BrowserConfig,
 };
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  schema?: ZodType<T>
+): Promise<T> {
   // Only set Content-Type for requests with a body
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
@@ -58,78 +100,70 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     throw new Error(data.error || 'Request failed');
   }
 
+  if (schema) {
+    const result = schema.safeParse(data);
+    if (!result.success) {
+      console.warn(`[api] Response validation failed for ${endpoint}:`, result.error.issues);
+      // Return raw data as fallback so the app doesn't break on minor schema drift
+      return data as T;
+    }
+    return result.data;
+  }
+
   return data as T;
 }
 
 // Server info
 export const info = {
-  get: () =>
-    request<{
-      cwd: string;
-      projectName: string;
-      existingConfig: string | null;
-      hasConfig: boolean;
-    }>('/info'),
+  get: () => request('/info', {}, InfoResponseSchema),
 };
 
 // Projects API
 export const projects = {
-  list: () => request<{ projects: Project[] }>('/projects'),
-  get: (id: string) => request<{ project: Project }>(`/projects/${id}`),
+  list: () => request('/projects', {}, ProjectListResponseSchema),
+  get: (id: string) => request(`/projects/${id}`, {}, ProjectResponseSchema),
   create: (data: { name: string; path: string; configFile?: string }) =>
-    request<{ project: Project }>('/projects', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    request(
+      '/projects',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      ProjectResponseSchema
+    ),
   update: (id: string, data: Partial<Project>) =>
-    request<{ project: Project }>(`${projectPath(id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  delete: (id: string) => request<{ success: boolean }>(`${projectPath(id)}`, { method: 'DELETE' }),
+    request(
+      `${projectPath(id)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+      ProjectResponseSchema
+    ),
+  delete: (id: string) =>
+    request(`${projectPath(id)}`, { method: 'DELETE' }, SuccessResponseSchema),
 };
 
 // Config API
 export const config = {
   get: (projectId: string) =>
-    request<{
-      config: VRTConfig;
-      raw: unknown;
-      valid: boolean;
-      errors: unknown[] | null;
-    }>(`${projectPath(projectId)}/config`),
+    request(`${projectPath(projectId)}/config`, {}, ConfigGetResponseSchema),
   save: (projectId: string, config: VRTConfig) =>
-    request<{ success: boolean; config: VRTConfig }>(`${projectPath(projectId)}/config`, {
-      method: 'PUT',
-      body: JSON.stringify({ config }),
-    }),
-  schema: () =>
-    request<{
-      browsers: string[];
-      waitForOptions: string[];
-      aiProviders: string[];
-      severityLevels: string[];
-      changeCategories: string[];
-      ruleActions: string[];
-    }>('/schema'),
+    request(
+      `${projectPath(projectId)}/config`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ config }),
+      },
+      ConfigSaveResponseSchema
+    ),
+  schema: () => request('/schema', {}, SchemaResponseSchema),
 };
 
 // Images API
 export const images = {
   list: (projectId: string) =>
-    request<{
-      baselines: string[];
-      tests: string[];
-      diffs: string[];
-      paths: { baselineDir: string; outputDir: string; diffDir: string };
-      metadata: {
-        baselines: ImageMetadata[];
-        tests: ImageMetadata[];
-        diffs: ImageMetadata[];
-      };
-      acceptances: Record<string, Acceptance>;
-      autoThresholdCaps: AutoThresholdCaps;
-    }>(`${projectPath(projectId)}/images`),
+    request(`${projectPath(projectId)}/images`, {}, ImagesListResponseSchema),
   getUrl: (
     projectId: string,
     type: 'baseline' | 'test' | 'diff' | 'custom-diff',
@@ -138,31 +172,40 @@ export const images = {
   getFileUrl: (projectId: string, relativePath: string) =>
     `${API_BASE}/projects/${projectId}/files?path=${encodeURIComponent(relativePath)}`,
   approve: (projectId: string, filename: string) =>
-    request<{ success: boolean; approved: string }>(`${projectPath(projectId)}/approve`, {
-      method: 'POST',
-      body: JSON.stringify({ filename }),
-    }),
+    request(
+      `${projectPath(projectId)}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ filename }),
+      },
+      ApproveResponseSchema
+    ),
   reject: (projectId: string, filename: string) =>
-    request<{ success: boolean; rejected: string }>(`${projectPath(projectId)}/reject`, {
-      method: 'POST',
-      body: JSON.stringify({ filename }),
-    }),
+    request(
+      `${projectPath(projectId)}/reject`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ filename }),
+      },
+      RejectResponseSchema
+    ),
   bulkApprove: (projectId: string, filenames: string[]) =>
-    request<{
-      success: boolean;
-      approved: string[];
-      failed: Array<{ filename: string; error: string }>;
-    }>(`${projectPath(projectId)}/bulk-approve`, {
-      method: 'POST',
-      body: JSON.stringify({ filenames }),
-    }),
+    request(
+      `${projectPath(projectId)}/bulk-approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ filenames }),
+      },
+      BulkApproveResponseSchema
+    ),
   revert: (projectId: string, filename: string) =>
-    request<{ success: boolean; reverted: string }>(
+    request(
       `${projectPath(projectId)}/revert/${encodeURIComponent(filename)}`,
-      { method: 'POST' }
+      { method: 'POST' },
+      RevertResponseSchema
     ),
   getResults: (projectId: string) =>
-    request<{ results: Record<string, ImageResult> }>(`${projectPath(projectId)}/results`),
+    request(`${projectPath(projectId)}/results`, {}, ImageResultsResponseSchema),
 };
 
 // Compare API
@@ -173,10 +216,14 @@ export const compare = {
     right: { type: string; filename: string },
     threshold?: number
   ) =>
-    request<CompareResult>(`${projectPath(projectId)}/compare`, {
-      method: 'POST',
-      body: JSON.stringify({ left, right, threshold }),
-    }),
+    request(
+      `${projectPath(projectId)}/compare`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ left, right, threshold }),
+      },
+      CompareResultSchema
+    ),
 };
 
 // Cross-compare API
@@ -191,50 +238,58 @@ export const crossCompare = {
       resetAcceptances?: boolean;
     }
   ) =>
-    request<{ reports: CrossReport[] }>(`${projectPath(projectId)}/cross-compare`, {
-      method: 'POST',
-      body: options ? JSON.stringify(options) : undefined,
-    }),
+    request(
+      `${projectPath(projectId)}/cross-compare`,
+      {
+        method: 'POST',
+        body: options ? JSON.stringify(options) : undefined,
+      },
+      CrossCompareRunResponseSchema
+    ),
   getResults: (projectId: string, key: string) =>
-    request<{ results: CrossResults }>(`${projectPath(projectId)}/cross-results/${key}`),
+    request(`${projectPath(projectId)}/cross-results/${key}`, {}, CrossResultsResponseSchema),
   list: (projectId: string) =>
-    request<{ results: CrossResultsSummary[] }>(`${projectPath(projectId)}/cross-results`),
+    request(`${projectPath(projectId)}/cross-results`, {}, CrossResultsListResponseSchema),
   clear: (projectId: string, key: string) =>
-    request<{ success: boolean }>(`${projectPath(projectId)}/cross-results/${key}`, {
-      method: 'DELETE',
-    }),
+    request(
+      `${projectPath(projectId)}/cross-results/${key}`,
+      {
+        method: 'DELETE',
+      },
+      SuccessResponseSchema
+    ),
   deleteItems: (projectId: string, key: string, itemKeys: string[]) =>
-    request<{ success: boolean; deleted: string[]; missing: string[] }>(
+    request(
       `${projectPath(projectId)}/cross-delete`,
       {
         method: 'POST',
         body: JSON.stringify({ key, itemKeys }),
-      }
+      },
+      CrossDeleteResponseSchema
     ),
   accept: (projectId: string, key: string, itemKey: string, reason?: string) =>
-    request<{ success: boolean; acceptance: CrossAcceptance }>(
+    request(
       `${projectPath(projectId)}/cross-accept`,
       {
         method: 'POST',
         body: JSON.stringify({ key, itemKey, reason }),
-      }
+      },
+      CrossAcceptResponseSchema
     ),
   revoke: (projectId: string, key: string, itemKey: string) =>
-    request<{ success: boolean }>(
+    request(
       `${projectPath(projectId)}/cross-accept/${key}/${encodeURIComponent(itemKey)}`,
       {
         method: 'DELETE',
-      }
+      },
+      SuccessResponseSchema
     ),
 };
 
 // Acceptance API
 export const acceptance = {
   list: (projectId: string) =>
-    request<{
-      acceptances: Acceptance[];
-      acceptanceMap: Record<string, Acceptance>;
-    }>(`${projectPath(projectId)}/acceptances`),
+    request(`${projectPath(projectId)}/acceptances`, {}, AcceptanceListResponseSchema),
   create: (
     projectId: string,
     data: {
@@ -245,14 +300,19 @@ export const acceptance = {
       signals?: AcceptanceSignals;
     }
   ) =>
-    request<{ success: boolean; acceptance: Acceptance }>(`${projectPath(projectId)}/accept`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    request(
+      `${projectPath(projectId)}/accept`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      AcceptanceCreateResponseSchema
+    ),
   revoke: (projectId: string, filename: string) =>
-    request<{ success: boolean; revoked: string }>(
+    request(
       `${projectPath(projectId)}/accept/${encodeURIComponent(filename)}`,
-      { method: 'DELETE' }
+      { method: 'DELETE' },
+      RevokeResponseSchema
     ),
 };
 
@@ -267,52 +327,45 @@ export const analyze = {
       name?: string;
     }>
   ) =>
-    request<{
-      results: Array<{
-        filename: string;
-        analysis?: AIAnalysisResult;
-        error?: string;
-      }>;
-    }>(`/projects/${projectId}/analyze`, {
-      method: 'POST',
-      body: JSON.stringify({ items }),
-    }),
+    request(
+      `/projects/${projectId}/analyze`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      },
+      AnalyzeResponseSchema
+    ),
 };
 
 // Test API
 export const test = {
   run: (projectId: string, scenarios?: string[]) =>
-    request<{ jobId: string; status: string; total: number }>(`${projectPath(projectId)}/test`, {
-      method: 'POST',
-      body: JSON.stringify({ scenarios }),
-    }),
+    request(
+      `${projectPath(projectId)}/test`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ scenarios }),
+      },
+      TestRunResponseSchema
+    ),
   status: (projectId: string, jobId: string) =>
-    request<{
-      id: string;
-      status: 'running' | 'completed' | 'failed' | 'aborted';
-      progress: number;
-      total: number;
-      phase: 'capturing' | 'comparing' | 'done';
-      results: unknown[];
-      error?: string;
-      timing?: ProjectTiming;
-    }>(`${projectPath(projectId)}/test/${jobId}`),
+    request(`${projectPath(projectId)}/test/${jobId}`, {}, TestStatusResponseSchema),
   abort: (projectId: string, jobId: string) =>
-    request<{
-      status: 'aborted';
-      progress: number;
-      total: number;
-      results: unknown[];
-    }>(`${projectPath(projectId)}/test/${jobId}/abort`, {
-      method: 'POST',
-    }),
+    request(
+      `${projectPath(projectId)}/test/${jobId}/abort`,
+      {
+        method: 'POST',
+      },
+      TestAbortResponseSchema
+    ),
   rerun: (projectId: string, filenames: string | string[]) =>
-    request<{ jobId: string; status: string; total: number; failed?: string[] }>(
+    request(
       `${projectPath(projectId)}/test/rerun`,
       {
         method: 'POST',
         body: JSON.stringify(Array.isArray(filenames) ? { filenames } : { filename: filenames }),
-      }
+      },
+      TestRerunResponseSchema
     ),
   stream: (projectId: string, jobId: string) =>
     new EventSource(`${projectPath(projectId)}/test/${jobId}/stream`),

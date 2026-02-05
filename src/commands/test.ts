@@ -10,14 +10,20 @@ import { analyzeWithAI, type AIProvider } from '../ai-analysis.js';
 import { calculateConfidence } from '../confidence.js';
 import { getProjectDirs, getReportPath, getImageMetadataPath } from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
 import { openInBrowser } from './utils.js';
-import { buildEnginesConfig, buildComparisonMatrix } from '../core/compare-runner.js';
+import {
+  buildEnginesConfig,
+  buildComparisonMatrix,
+  type ComparisonTask,
+} from '../core/compare-runner.js';
 import { runWithConcurrency } from '../core/async.js';
 import {
   buildImageMetadataIndex,
   IMAGE_METADATA_SCHEMA_VERSION,
   type ImageMetadata,
 } from '../core/image-metadata.js';
+import type { VRTConfig } from '../core/config.js';
 
 function buildStatusInfo(result: ComparisonResult): { status: string; info: string } {
   switch (result.reason) {
@@ -75,8 +81,8 @@ async function writeImageMetadataFile(
 }
 
 async function persistImageMetadata(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  scenarios: Awaited<ReturnType<typeof loadConfig>>['scenarios'],
+  config: VRTConfig,
+  scenarios: VRTConfig['scenarios'],
   dirs: { outputDir: string; baselineDir: string; diffDir: string }
 ): Promise<void> {
   const metadataIndex = buildImageMetadataIndex(config, scenarios);
@@ -85,6 +91,138 @@ async function persistImageMetadata(
     writeImageMetadataFile(dirs.diffDir, metadataIndex),
     writeImageMetadataFile(dirs.baselineDir, metadataIndex),
   ]);
+}
+
+interface AISettings {
+  enabled: boolean;
+  analyzeAll: boolean;
+  threshold: { maxPHashSimilarity: number; maxSSIM: number; minPixelDiff: number };
+  config: VRTConfig['ai'];
+}
+
+function resolveAISettings(
+  options: { ai?: boolean; aiAll?: boolean },
+  config: VRTConfig
+): AISettings {
+  const enabled =
+    options.ai === true || options.aiAll === true
+      ? true
+      : options.ai === false
+        ? false
+        : (config.ai?.enabled ?? false);
+
+  return {
+    enabled,
+    analyzeAll: options.aiAll === true,
+    threshold: config.ai?.analyzeThreshold ?? {
+      maxPHashSimilarity: 0.95,
+      maxSSIM: 0.98,
+      minPixelDiff: 0.1,
+    },
+    config: config.ai,
+  };
+}
+
+async function captureScreenshots(config: VRTConfig, scenarioFilter?: string[]): Promise<void> {
+  log.info('\n📸 Capturing screenshots...\n');
+  const results = await runScreenshotTasks({ config, scenarios: scenarioFilter });
+
+  const failed = results.filter((r) => !r.success);
+  if (failed.length > 0) {
+    log.error('\nSome screenshots failed:');
+    failed.forEach((f) => {
+      log.error(`  - ${f.task.scenario.name}: ${f.error}`);
+    });
+  }
+}
+
+async function compareTask(
+  task: ComparisonTask,
+  config: VRTConfig,
+  quickMode: boolean,
+  ai: AISettings
+): Promise<ComparisonResult> {
+  const { scenario, browser, viewport, testPath, baselinePath, diffPath } = task;
+  const enginesConfig = buildEnginesConfig(quickMode, config.engines);
+
+  let result: ComparisonResult = await compareImages(baselinePath, testPath, diffPath, {
+    threshold: config.threshold,
+    diffColor: config.diffColor,
+    computePHash: !quickMode,
+    engines: enginesConfig,
+    antialiasing: config.engines?.pixelmatch?.antialiasing,
+    keepDiffOnMatch: config.keepDiffOnMatch,
+    maxDiffPercentage:
+      scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
+    maxDiffPixels: scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
+  });
+
+  if (isDiff(result)) {
+    result = await enrichDiffResult(result, task, ai);
+  }
+
+  const { status, info } = buildStatusInfo(result);
+  log.info(`  ${status} ${scenario.name} / ${browser} / ${viewport.name}: ${info}`);
+  return result;
+}
+
+async function enrichDiffResult(
+  result: ComparisonResult & { reason: 'diff' },
+  task: ComparisonTask,
+  ai: AISettings
+): Promise<ComparisonResult> {
+  let enriched = result;
+  const { scenario, browser, viewport } = task;
+
+  const needsAI =
+    ai.enabled &&
+    (ai.analyzeAll ||
+      ((result.phash?.similarity ?? 0) < ai.threshold.maxPHashSimilarity &&
+        (result.ssimScore ?? 0) < ai.threshold.maxSSIM &&
+        result.diffPercentage >= ai.threshold.minPixelDiff));
+
+  if (needsAI) {
+    try {
+      log.info(`  🤖 Analyzing ${scenario.name} / ${browser} / ${viewport.name}...`);
+      const aiResult = await analyzeWithAI(task.baselinePath, task.testPath, result.diffPath, {
+        provider: (ai.config?.provider ?? 'anthropic') as AIProvider,
+        apiKey: ai.config?.apiKey,
+        model: ai.config?.model,
+        scenarioName: scenario.name,
+        url: scenario.url,
+        pixelDiff: result.pixelDiff,
+        diffPercentage: result.diffPercentage,
+        ssimScore: result.ssimScore,
+      });
+      enriched = { ...enriched, aiAnalysis: aiResult };
+    } catch (err) {
+      log.warn(`  ⚠ AI analysis failed: ${getErrorMessage(err)}`);
+    }
+  }
+
+  const confidence = calculateConfidence({
+    ssimScore: enriched.ssimScore,
+    phashSimilarity: enriched.phash?.similarity,
+    pixelDiffPercent: enriched.diffPercentage,
+    aiAnalysis: isDiff(enriched) ? enriched.aiAnalysis : undefined,
+  });
+  return { ...enriched, confidence };
+}
+
+function printSummary(comparisons: ComparisonResult[]): void {
+  const passed = comparisons.filter((r) => r.match).length;
+  const failed = comparisons.filter((r) => r.reason === 'diff').length;
+  const newCount = comparisons.filter((r) => r.reason === 'no-baseline').length;
+  const aiAnalyzed = comparisons.filter((r) => isDiff(r) && r.aiAnalysis).length;
+
+  log.info('\n📋 Summary:');
+  log.info(`  ✓ ${passed} passed`);
+  log.info(`  ✗ ${failed} failed`);
+  log.info(`  ○ ${newCount} new`);
+
+  if (aiAnalyzed > 0) {
+    log.info(`  🤖 ${aiAnalyzed} AI analyzed`);
+  }
 }
 
 export function registerTestCommand(program: Command): void {
@@ -110,45 +248,17 @@ export function registerTestCommand(program: Command): void {
         await mkdir(diffDir, { recursive: true });
 
         if (!options.skipScreenshots) {
-          console.log('\n📸 Capturing screenshots...\n');
-          const results = await runScreenshotTasks({
-            config,
-            scenarios: options.scenario,
-          });
-
-          const failed = results.filter((r) => !r.success);
-          if (failed.length > 0) {
-            console.error('\nSome screenshots failed:');
-            failed.forEach((f) => {
-              console.error(`  - ${f.task.scenario.name}: ${f.error}`);
-            });
-          }
+          await captureScreenshots(config, options.scenario);
         }
 
-        console.log('\n🔍 Comparing screenshots...\n');
+        log.info('\n🔍 Comparing screenshots...\n');
 
         const scenarios = options.scenario
-          ? config.scenarios.filter((s) => options.scenario.includes(s.name))
+          ? config.scenarios.filter((s: { name: string }) => options.scenario.includes(s.name))
           : config.scenarios;
 
-        const compareConcurrency = config.concurrency ?? 5;
         const quickMode = options.quick || config.quickMode;
-
-        const aiEnabled =
-          options.ai === true || options.aiAll === true
-            ? true
-            : options.ai === false
-              ? false
-              : (config.ai?.enabled ?? false);
-
-        const aiAnalyzeAll = options.aiAll === true;
-
-        const aiConfig = config.ai;
-        const aiThreshold = aiConfig?.analyzeThreshold ?? {
-          maxPHashSimilarity: 0.95,
-          maxSSIM: 0.98,
-          minPixelDiff: 0.1,
-        };
+        const ai = resolveAISettings(options, config);
 
         const comparisonTasks = buildComparisonMatrix(
           outputDir,
@@ -157,73 +267,13 @@ export function registerTestCommand(program: Command): void {
           scenarios,
           config
         );
-
         const comparisons = await runWithConcurrency(
           comparisonTasks,
-          compareConcurrency,
-          async (task): Promise<ComparisonResult> => {
-            const { scenario, browser, viewport, testPath, baselinePath, diffPath } = task;
-            const enginesConfig = buildEnginesConfig(quickMode, config.engines);
-
-            let result: ComparisonResult = await compareImages(baselinePath, testPath, diffPath, {
-              threshold: config.threshold,
-              diffColor: config.diffColor,
-              computePHash: !quickMode,
-              engines: enginesConfig,
-              antialiasing: config.engines?.pixelmatch?.antialiasing,
-              keepDiffOnMatch: config.keepDiffOnMatch,
-              maxDiffPercentage:
-                scenario.diffThreshold?.maxDiffPercentage ??
-                config.diffThreshold?.maxDiffPercentage,
-              maxDiffPixels:
-                scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
-            });
-
-            // Only process diff results for AI analysis and confidence scoring
-            if (isDiff(result)) {
-              const needsAIAnalysis =
-                aiEnabled &&
-                (aiAnalyzeAll ||
-                  ((result.phash?.similarity ?? 0) < aiThreshold.maxPHashSimilarity &&
-                    (result.ssimScore ?? 0) < aiThreshold.maxSSIM &&
-                    result.diffPercentage >= aiThreshold.minPixelDiff));
-
-              if (needsAIAnalysis) {
-                try {
-                  console.log(`  🤖 Analyzing ${scenario.name} / ${browser} / ${viewport.name}...`);
-                  const aiResult = await analyzeWithAI(baselinePath, testPath, result.diffPath, {
-                    provider: (aiConfig?.provider ?? 'anthropic') as AIProvider,
-                    apiKey: aiConfig?.apiKey,
-                    model: aiConfig?.model,
-                    scenarioName: scenario.name,
-                    url: scenario.url,
-                    pixelDiff: result.pixelDiff,
-                    diffPercentage: result.diffPercentage,
-                    ssimScore: result.ssimScore,
-                  });
-                  result = { ...result, aiAnalysis: aiResult };
-                } catch (err) {
-                  console.log(`  ⚠ AI analysis failed: ${getErrorMessage(err)}`);
-                }
-              }
-
-              const confidence = calculateConfidence({
-                ssimScore: result.ssimScore,
-                phashSimilarity: result.phash?.similarity,
-                pixelDiffPercent: result.diffPercentage,
-                aiAnalysis: result.aiAnalysis,
-              });
-              result = { ...result, confidence };
-            }
-
-            const { status, info } = buildStatusInfo(result);
-
-            console.log(`  ${status} ${scenario.name} / ${browser} / ${viewport.name}: ${info}`);
-            return result;
-          }
+          config.concurrency ?? 5,
+          (task) => compareTask(task, config, quickMode, ai)
         );
 
-        console.log('\n📊 Generating report...\n');
+        log.info('\n📊 Generating report...\n');
 
         await persistImageMetadata(config, scenarios, { outputDir, baselineDir, diffDir });
 
@@ -235,36 +285,24 @@ export function registerTestCommand(program: Command): void {
             results: comparisons,
             baselineDir,
             outputDir,
-            aiEnabled,
+            aiEnabled: ai.enabled,
           },
           { outputPath: reportPath, embedImages: config.report?.embedImages }
         );
 
-        console.log(`Report saved: ${reportPath}`);
+        log.info(`Report saved: ${reportPath}`);
 
         if (options.open) {
           openInBrowser(reportPath);
         }
 
-        const passed = comparisons.filter((r) => r.match).length;
-        const failed = comparisons.filter((r) => r.reason === 'diff').length;
-        const newCount = comparisons.filter((r) => r.reason === 'no-baseline').length;
-        const aiAnalyzed = comparisons.filter((r) => isDiff(r) && r.aiAnalysis).length;
+        printSummary(comparisons);
 
-        console.log('\n📋 Summary:');
-        console.log(`  ✓ ${passed} passed`);
-        console.log(`  ✗ ${failed} failed`);
-        console.log(`  ○ ${newCount} new`);
-
-        if (aiAnalyzed > 0) {
-          console.log(`  🤖 ${aiAnalyzed} AI analyzed`);
-        }
-
-        if (failed > 0) {
+        if (comparisons.some((r) => r.reason === 'diff')) {
           process.exit(1);
         }
       } catch (err) {
-        console.error('Error:', getErrorMessage(err));
+        log.error('Error:', getErrorMessage(err));
         process.exit(1);
       }
     });

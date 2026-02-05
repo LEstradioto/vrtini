@@ -1328,6 +1328,16 @@
     };
   });
 
+  const CROSS_THUMB_MAX = 240;
+  let getFileThumbUrl = $derived.by(() => {
+    const key = imageCacheKey;
+    return (relativePath: string) => {
+      const url = images.getFileUrl(projectId, relativePath);
+      const thumbUrl = `${url}&thumb=1&max=${CROSS_THUMB_MAX}`;
+      return key ? `${thumbUrl}&v=${key}` : thumbUrl;
+    };
+  });
+
   // Gallery functions
   function openGallery(filename: string) {
     const index = filteredGalleryQueue.findIndex((item) => item.filename === filename);
@@ -2174,7 +2184,7 @@
                     <div class="cross-images">
                       <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
                         <img
-                          src={getFileUrl(item.baseline)}
+                          src={getFileThumbUrl(item.baseline)}
                           alt="Baseline"
                           loading="lazy"
                           decoding="async"
@@ -2184,7 +2194,7 @@
                       {#if item.diff}
                         <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
                           <img
-                            src={getFileUrl(item.diff)}
+                            src={getFileThumbUrl(item.diff)}
                             alt="Diff"
                             loading="lazy"
                             decoding="async"
@@ -2194,7 +2204,7 @@
                       {/if}
                       <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
                         <img
-                          src={getFileUrl(item.test)}
+                          src={getFileThumbUrl(item.test)}
                           alt="Test"
                           loading="lazy"
                           decoding="async"

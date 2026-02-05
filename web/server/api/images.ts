@@ -1,7 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { createReadStream, existsSync } from 'fs';
-import { readFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
+import { createHash } from 'crypto';
 import { isAbsolute, resolve, sep } from 'path';
+import { PNG } from 'pngjs';
 import {
   getProjectImages,
   getImageDirectory,
@@ -12,6 +14,7 @@ import {
   loadConfig,
 } from '../services/project-service.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
+import { resizeImageData } from '../../../src/domain/image-diff.js';
 import { requireProject } from '../plugins/project.js';
 
 export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
@@ -33,7 +36,7 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   // Serve a file from output/baseline dirs (used by HTML reports)
   fastify.get<{
     Params: { id: string };
-    Querystring: { path?: string };
+    Querystring: { path?: string; thumb?: string; max?: string };
   }>('/projects/:id/files', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
     if (!project) {
@@ -69,9 +72,55 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
       return { error: 'File not found' };
     }
 
-    reply.header('Cache-Control', 'no-cache, must-revalidate');
-    reply.type('image/png');
-    return reply.send(createReadStream(resolved));
+    const thumb = request.query.thumb === '1' || request.query.thumb === 'true';
+    const maxDimension = request.query.max ? Number(request.query.max) : 0;
+
+    if (!thumb || !Number.isFinite(maxDimension) || maxDimension <= 0) {
+      reply.header('Cache-Control', 'no-cache, must-revalidate');
+      reply.type('image/png');
+      return reply.send(createReadStream(resolved));
+    }
+
+    try {
+      const thumbDir = resolve(project.path, '.vrt', 'thumbs');
+      const key = createHash('sha1').update(`${resolved}:${maxDimension}`).digest('hex');
+      const thumbPath = resolve(thumbDir, `${key}.png`);
+
+      if (existsSync(thumbPath)) {
+        reply.header('Cache-Control', 'no-cache, must-revalidate');
+        reply.type('image/png');
+        return reply.send(createReadStream(thumbPath));
+      }
+
+      const buffer = await readFile(resolved);
+      const png = PNG.sync.read(buffer);
+      const { width, height } = png;
+      const scale = Math.min(maxDimension / width, maxDimension / height, 1);
+      const targetWidth = Math.max(1, Math.round(width * scale));
+      const targetHeight = Math.max(1, Math.round(height * scale));
+
+      if (scale >= 1) {
+        reply.header('Cache-Control', 'no-cache, must-revalidate');
+        reply.type('image/png');
+        return reply.send(buffer);
+      }
+
+      const resizedData = resizeImageData(png.data, width, height, targetWidth, targetHeight);
+      const resized = new PNG({ width: targetWidth, height: targetHeight });
+      resized.data = resizedData;
+      const outBuffer = PNG.sync.write(resized);
+
+      await mkdir(thumbDir, { recursive: true });
+      await writeFile(thumbPath, outBuffer);
+
+      reply.header('Cache-Control', 'no-cache, must-revalidate');
+      reply.type('image/png');
+      return reply.send(outBuffer);
+    } catch {
+      reply.header('Cache-Control', 'no-cache, must-revalidate');
+      reply.type('image/png');
+      return reply.send(createReadStream(resolved));
+    }
   });
 
   // Serve an image file

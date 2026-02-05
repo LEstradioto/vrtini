@@ -277,6 +277,8 @@
   // Pagination and filtering
   let currentPage = $state(0);
   let searchQuery = $state('');
+  let debouncedSearchQuery = $state('');
+  const SEARCH_DEBOUNCE_MS = 200;
 
   // Custom compare state
   type ImageType = 'baseline' | 'test' | 'diff';
@@ -486,11 +488,14 @@
   }
 
   // Derived counts
+  let baselinesSet = $derived.by(() => new Set(baselines));
+  let testsSet = $derived.by(() => new Set(tests));
+  let diffsSet = $derived.by(() => new Set(diffs));
   let totalCount = $derived(Math.max(tests.length, baselines.length));
   let totalTab = $derived(tests.length >= baselines.length ? 'tests' : 'baselines');
   let failedCount = $derived(diffs.length);
-  let newCount = $derived(tests.filter(t => !baselines.includes(t)).length);
-  let passedCount = $derived(tests.filter(t => baselines.includes(t) && !diffs.includes(t)).length);
+  let newCount = $derived(tests.filter(t => !baselinesSet.has(t)).length);
+  let passedCount = $derived(tests.filter(t => baselinesSet.has(t) && !diffsSet.has(t)).length);
   let testState = $derived(runningTests.get(projectId));
   let testError = $derived(testErrors.get(projectId));
 
@@ -510,8 +515,8 @@
 
   // Filter list by search query
   let fullList = $derived.by(() => {
-    if (!searchQuery.trim()) return rawList;
-    const q = searchQuery.toLowerCase();
+    if (!debouncedSearchQuery.trim()) return rawList;
+    const q = debouncedSearchQuery.toLowerCase();
     return rawList.filter(filename => filename.toLowerCase().includes(q));
   });
 
@@ -700,9 +705,9 @@
 
   // Get status for an individual image
   function getImageStatus(filename: string): ImageStatus | null {
-    const hasDiffImg = diffs.includes(filename);
-    const hasBaselineImg = baselines.includes(filename);
-    const hasTest = tests.includes(filename);
+    const hasDiffImg = diffsSet.has(filename);
+    const hasBaselineImg = baselinesSet.has(filename);
+    const hasTest = testsSet.has(filename);
 
     if (hasDiffImg) return 'failed';
     if (hasTest && !hasBaselineImg) return 'new';
@@ -712,7 +717,7 @@
 
   // Check if selected images are approvable (must have test images)
   let selectedApprovable = $derived.by(() => {
-    return [...selectedImages].filter(f => tests.includes(f));
+    return [...selectedImages].filter(f => testsSet.has(f));
   });
 
   // Check if selected images are rejectable (must be tests, not passed)
@@ -1041,8 +1046,9 @@
     const originalTests = [...tests];
     const originalDiffs = [...diffs];
 
-    tests = tests.filter(t => !filenames.includes(t));
-    diffs = diffs.filter(d => !filenames.includes(d));
+    const filenameSet = new Set(filenames);
+    tests = tests.filter(t => !filenameSet.has(t));
+    diffs = diffs.filter(d => !filenameSet.has(d));
 
     try {
       const rejected: string[] = [];
@@ -1093,11 +1099,12 @@
     const originalTests = [...tests];
     const originalDiffs = [...diffs];
 
+    const filenameSet = new Set(filenames);
     if (activeTab === 'baselines') {
-      baselines = baselines.filter((b) => !filenames.includes(b));
+      baselines = baselines.filter((b) => !filenameSet.has(b));
     } else {
-      tests = tests.filter((t) => !filenames.includes(t));
-      diffs = diffs.filter((d) => !filenames.includes(d));
+      tests = tests.filter((t) => !filenameSet.has(t));
+      diffs = diffs.filter((d) => !filenameSet.has(d));
     }
 
     try {
@@ -1451,8 +1458,21 @@
 
   // Reset page when search changes
   $effect(() => {
-    searchQuery;
+    debouncedSearchQuery;
     currentPage = 0;
+  });
+
+  // Debounce search input to keep filtering responsive on large lists
+  $effect(() => {
+    const query = searchQuery;
+    if (!query.trim()) {
+      debouncedSearchQuery = '';
+      return;
+    }
+    const handle = setTimeout(() => {
+      debouncedSearchQuery = query;
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
   });
 </script>
 
@@ -1957,8 +1977,8 @@
 
           {#if fullList.length === 0}
             <div class="empty">
-              {#if searchQuery}
-                No images match "{searchQuery}"
+              {#if debouncedSearchQuery}
+                No images match "{debouncedSearchQuery}"
               {:else}
                 No images in this folder
               {/if}

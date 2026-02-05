@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { mkdir, unlink } from 'fs/promises';
+import { createWriteStream, existsSync } from 'fs';
+import { mkdir, readFile } from 'fs/promises';
 import { dirname } from 'path';
+import { pipeline } from 'stream/promises';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import { comparePerceptualHash, type PerceptualHashResult } from './phash.js';
@@ -49,9 +50,26 @@ import type {
   ComparisonError,
 } from './types/index.js';
 
-function loadPNG(path: string): PNG {
-  const data = readFileSync(path);
-  return PNG.sync.read(data);
+async function loadPNG(path: string): Promise<PNG> {
+  const data = await readFile(path);
+  return await new Promise<PNG>((resolve, reject) => {
+    const png = new PNG();
+    png.parse(data, (err, parsed) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      if (!parsed) {
+        reject(new Error('Failed to parse PNG.'));
+        return;
+      }
+      resolve(parsed);
+    });
+  });
+}
+
+async function writePNG(path: string, png: PNG): Promise<void> {
+  await pipeline(png.pack(), createWriteStream(path));
 }
 
 export interface CompareOptions {
@@ -106,11 +124,8 @@ export async function compareImages(
     return buildMissingResult('no-test', baselinePath, testPath);
   }
 
-  await mkdir(dirname(diffPath), { recursive: true });
-
   try {
-    const img1 = loadPNG(baselinePath);
-    const img2 = loadPNG(testPath);
+    const [img1, img2] = await Promise.all([loadPNG(baselinePath), loadPNG(testPath)]);
     const maxOriginalHeight = Math.max(img1.height, img2.height);
     const tallPage = maxOriginalHeight >= 4000;
 
@@ -152,11 +167,6 @@ export async function compareImages(
       includeAA: options.antialiasing === undefined ? true : !options.antialiasing,
     });
 
-    // Save diff image
-    const diff = new PNG({ width, height });
-    diff.data = diffData;
-    writeFileSync(diffPath, PNG.sync.write(diff));
-
     const totalPixels = width * height;
     const diffPct = calculateDiffPercentage(numDiffPixels, totalPixels);
     const withinPct =
@@ -182,12 +192,13 @@ export async function compareImages(
 
       const matchReason = numDiffPixels === 0 ? 'exact' : 'tolerance';
       const ssimScore = matchReason === 'exact' ? 1 : undefined;
-      const diffPathValue = keepDiffOnMatch ? diffPath : undefined;
-      if (!keepDiffOnMatch) {
-        await unlink(diffPath).catch((err) => {
-          if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') return;
-          console.warn('Failed to remove diff image:', err);
-        });
+      let diffPathValue: string | undefined;
+      if (keepDiffOnMatch) {
+        await mkdir(dirname(diffPath), { recursive: true });
+        const diff = new PNG({ width, height });
+        diff.data = diffData;
+        await writePNG(diffPath, diff);
+        diffPathValue = diffPath;
       }
 
       return {
@@ -206,6 +217,11 @@ export async function compareImages(
 
     // For diffs: run enabled engines ONCE for all metrics (no duplication)
     // Disable pixelmatch in engines since we already ran it above
+    await mkdir(dirname(diffPath), { recursive: true });
+    const diff = new PNG({ width, height });
+    diff.data = diffData;
+    await writePNG(diffPath, diff);
+
     const engineConfig = {
       ...options.engines,
       pixelmatch: { enabled: false }, // Already ran above

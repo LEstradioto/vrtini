@@ -117,6 +117,7 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
     console.log(
       `\n[${browserKey}] Processing ${group.tasks.length} tasks (${group.dockerImage}, concurrency: ${concurrency})...`
     );
+    let groupCompleted = 0;
     const results = await runBatchContainer(
       group.browser,
       group.tasks,
@@ -126,7 +127,11 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
       group.dockerImage,
       concurrency,
       signal,
-      onContainerStart
+      onContainerStart,
+      (completed) => {
+        groupCompleted = completed;
+        onProgress?.(completedTasks + groupCompleted, totalTasks, 'capturing');
+      }
     );
     allResults.push(...results);
 

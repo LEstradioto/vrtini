@@ -20,6 +20,15 @@ Make vrtini fast on large suites, keep UI responsive under heavy data, and harde
 5. Optimize UI list membership checks with Sets (`web/client/src/pages/Project.svelte`).
 6. Add debounce to text filter (`web/client/src/pages/Project.svelte`).
 
+## Progress
+
+- 2026-02-04: Replaced sync PNG decode/write in `src/compare.ts` with async parse and streamed diff writes.
+- 2026-02-04: Added bounded concurrency for compare loops in `src/commands/test.ts` and `src/commands/cross-compare.ts`.
+- 2026-02-04: Defaulted Playwright UI server binding to loopback for restricted environments.
+- 2026-02-04: Skipped diff image writes for matches unless `keepDiffOnMatch` is enabled.
+- 2026-02-04: Optimized Project list membership checks with derived Sets in `web/client/src/pages/Project.svelte`.
+- 2026-02-04: Added debounced image search filtering in `web/client/src/pages/Project.svelte`.
+
 ## Non‑Goals
 
 - New comparison engines.

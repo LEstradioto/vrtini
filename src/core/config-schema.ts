@@ -137,7 +137,7 @@ export const ConfigSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .default('#ff00ff'),
-  // Parallel page concurrency within batch runner (default: 5)
+  // Parallel concurrency for screenshot batching and comparisons (default: 5)
   concurrency: z.number().int().min(1).max(20).default(5),
   // Quick mode: fast comparison using only pixelmatch (skips SSIM, pHash, odiff)
   // ~5x faster but less detailed analysis

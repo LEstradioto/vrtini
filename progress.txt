@@ -87,3 +87,16 @@
 - Hardened report HTML output (safe data attributes, delegated handlers).
 - Persisted metrics for matches so UI shows 0% diffs and SSIM on passes.
 - Standardized loop scripts on Codex; removed Claude loop helpers.
+2026-02-04
+- Replaced sync PNG decode/write in src/compare.ts with async parse and streamed diff writes.
+- Added bounded compare-loop concurrency for test and cross-compare commands using config concurrency.
+- Added runWithConcurrency helper for ordered pooled execution.
+- Ran \
+> vrtini@0.1.0 typecheck
+> tsc --noEmit.
+- Defaulted Playwright UI server binding to loopback for restricted environments.
+- Avoided writing diff images on matches unless keepDiffOnMatch is enabled.
+- Ran `npm run test:unit -- src/compare.test.ts`.
+- Optimized Project list membership checks with derived Sets in web/client/src/pages/Project.svelte.
+- Ran `npm run typecheck`.
+- Added debounced image search filtering in web/client/src/pages/Project.svelte.

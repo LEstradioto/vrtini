@@ -9,6 +9,7 @@ import { generateReport } from '../report.js';
 import type { ComparisonResult } from '../types/index.js';
 import { buildEnginesConfig } from '../core/compare-runner.js';
 import { getErrorMessage } from '../core/errors.js';
+import { runWithConcurrency } from '../core/async.js';
 
 interface BrowserRef {
   name: 'chromium' | 'webkit';
@@ -155,6 +156,7 @@ export function registerCrossCompareCommand(program: Command): void {
 
         const quickMode = config.quickMode ?? false;
         const enginesConfig = buildEnginesConfig(quickMode, config.engines);
+        const compareConcurrency = config.concurrency ?? 5;
 
         if (allowedPairs.size > 0 && selectedPairs.length === 0) {
           throw new Error(`No cross-compare pairs matched. Available: ${availableKeys.join(', ')}`);
@@ -178,6 +180,14 @@ export function registerCrossCompareCommand(program: Command): void {
 
           await mkdir(diffDir, { recursive: true });
           await mkdir(resolve(outputDir, 'cross-reports', pair.key), { recursive: true });
+
+          const comparisonTasks: {
+            scenario: (typeof config.scenarios)[number];
+            viewport: (typeof config.viewports)[number];
+            baselinePath: string;
+            testPath: string;
+            diffPath: string;
+          }[] = [];
 
           for (const scenario of config.scenarios) {
             for (const viewport of config.viewports) {
@@ -207,6 +217,14 @@ export function registerCrossCompareCommand(program: Command): void {
               );
               const diffPath = join(diffDir, diffName);
 
+              comparisonTasks.push({ scenario, viewport, baselinePath, testPath, diffPath });
+            }
+          }
+
+          const comparisonResults = await runWithConcurrency(
+            comparisonTasks,
+            compareConcurrency,
+            async ({ scenario, viewport, baselinePath, testPath, diffPath }) => {
               const result = await compareImages(baselinePath, testPath, diffPath, {
                 threshold: config.threshold,
                 diffColor: config.diffColor,
@@ -222,10 +240,9 @@ export function registerCrossCompareCommand(program: Command): void {
                 maxDiffPixels:
                   scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
               });
-              results.push(result);
 
               const diffPathValue = getDiffPath(result);
-              items.push({
+              const item: CrossResultItem = {
                 itemKey: buildItemKey(scenario.name, viewport.name),
                 name: scenario.name,
                 scenario: scenario.name,
@@ -240,8 +257,15 @@ export function registerCrossCompareCommand(program: Command): void {
                 ssimScore: 'ssimScore' in result ? result.ssimScore : undefined,
                 phash: 'phash' in result ? result.phash : undefined,
                 error: result.reason === 'error' ? result.error : undefined,
-              });
+              };
+
+              return { result, item };
             }
+          );
+
+          for (const entry of comparisonResults) {
+            results.push(entry.result);
+            items.push(entry.item);
           }
 
           await generateReport(

@@ -188,7 +188,8 @@ export async function runBatchContainer(
   dockerImage: string,
   concurrency = 5,
   signal?: AbortSignal,
-  onContainerStart?: (containerId: string) => void
+  onContainerStart?: (containerId: string) => void,
+  onTaskProgress?: (completed: number) => void
 ): Promise<ScreenshotResult[]> {
   if (tasks.length === 0) {
     return [];
@@ -266,10 +267,27 @@ export async function runBatchContainer(
 
     logs = await new Promise<string>((resolve) => {
       let output = '';
+      let buffer = '';
+      let completed = 0;
+      const seenTasks = new Set<string>();
       logStream.on('data', (chunk: Buffer) => {
         const text = chunk.toString('utf-8').replace(DOCKER_STREAM_HEADER_REGEX, '');
         output += text;
         process.stdout.write(text);
+        buffer += text;
+
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const match = line.match(/^\[(OK|FAIL)\]\s+(.+?)(?:\s->|:)/);
+          if (!match) continue;
+          const taskId = match[2].trim();
+          if (seenTasks.has(taskId)) continue;
+          seenTasks.add(taskId);
+          completed += 1;
+          onTaskProgress?.(completed);
+        }
       });
       logStream.on('end', () => resolve(output));
       logStream.on('error', (err: Error) => {

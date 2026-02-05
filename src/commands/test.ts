@@ -12,6 +12,7 @@ import { getProjectDirs, getReportPath, getImageMetadataPath } from '../core/pat
 import { getErrorMessage } from '../core/errors.js';
 import { openInBrowser } from './utils.js';
 import { buildEnginesConfig, buildComparisonMatrix } from '../core/compare-runner.js';
+import { runWithConcurrency } from '../core/async.js';
 import {
   buildImageMetadataIndex,
   IMAGE_METADATA_SCHEMA_VERSION,
@@ -130,7 +131,7 @@ export function registerTestCommand(program: Command): void {
           ? config.scenarios.filter((s) => options.scenario.includes(s.name))
           : config.scenarios;
 
-        const comparisons: ComparisonResult[] = [];
+        const compareConcurrency = config.concurrency ?? 5;
         const quickMode = options.quick || config.quickMode;
 
         const aiEnabled =
@@ -157,66 +158,70 @@ export function registerTestCommand(program: Command): void {
           config
         );
 
-        for (const task of comparisonTasks) {
-          const { scenario, browser, viewport, testPath, baselinePath, diffPath } = task;
-          const enginesConfig = buildEnginesConfig(quickMode, config.engines);
+        const comparisons = await runWithConcurrency(
+          comparisonTasks,
+          compareConcurrency,
+          async (task): Promise<ComparisonResult> => {
+            const { scenario, browser, viewport, testPath, baselinePath, diffPath } = task;
+            const enginesConfig = buildEnginesConfig(quickMode, config.engines);
 
-          let result: ComparisonResult = await compareImages(baselinePath, testPath, diffPath, {
-            threshold: config.threshold,
-            diffColor: config.diffColor,
-            computePHash: !quickMode,
-            engines: enginesConfig,
-            antialiasing: config.engines?.pixelmatch?.antialiasing,
-            keepDiffOnMatch: config.keepDiffOnMatch,
-            maxDiffPercentage:
-              scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
-            maxDiffPixels:
-              scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
-          });
+            let result: ComparisonResult = await compareImages(baselinePath, testPath, diffPath, {
+              threshold: config.threshold,
+              diffColor: config.diffColor,
+              computePHash: !quickMode,
+              engines: enginesConfig,
+              antialiasing: config.engines?.pixelmatch?.antialiasing,
+              keepDiffOnMatch: config.keepDiffOnMatch,
+              maxDiffPercentage:
+                scenario.diffThreshold?.maxDiffPercentage ??
+                config.diffThreshold?.maxDiffPercentage,
+              maxDiffPixels:
+                scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
+            });
 
-          // Only process diff results for AI analysis and confidence scoring
-          if (isDiff(result)) {
-            const needsAIAnalysis =
-              aiEnabled &&
-              (aiAnalyzeAll ||
-                ((result.phash?.similarity ?? 0) < aiThreshold.maxPHashSimilarity &&
-                  (result.ssimScore ?? 0) < aiThreshold.maxSSIM &&
-                  result.diffPercentage >= aiThreshold.minPixelDiff));
+            // Only process diff results for AI analysis and confidence scoring
+            if (isDiff(result)) {
+              const needsAIAnalysis =
+                aiEnabled &&
+                (aiAnalyzeAll ||
+                  ((result.phash?.similarity ?? 0) < aiThreshold.maxPHashSimilarity &&
+                    (result.ssimScore ?? 0) < aiThreshold.maxSSIM &&
+                    result.diffPercentage >= aiThreshold.minPixelDiff));
 
-            if (needsAIAnalysis) {
-              try {
-                console.log(`  🤖 Analyzing ${scenario.name} / ${browser} / ${viewport.name}...`);
-                const aiResult = await analyzeWithAI(baselinePath, testPath, result.diffPath, {
-                  provider: (aiConfig?.provider ?? 'anthropic') as AIProvider,
-                  apiKey: aiConfig?.apiKey,
-                  model: aiConfig?.model,
-                  scenarioName: scenario.name,
-                  url: scenario.url,
-                  pixelDiff: result.pixelDiff,
-                  diffPercentage: result.diffPercentage,
-                  ssimScore: result.ssimScore,
-                });
-                result = { ...result, aiAnalysis: aiResult };
-              } catch (err) {
-                console.log(`  ⚠ AI analysis failed: ${getErrorMessage(err)}`);
+              if (needsAIAnalysis) {
+                try {
+                  console.log(`  🤖 Analyzing ${scenario.name} / ${browser} / ${viewport.name}...`);
+                  const aiResult = await analyzeWithAI(baselinePath, testPath, result.diffPath, {
+                    provider: (aiConfig?.provider ?? 'anthropic') as AIProvider,
+                    apiKey: aiConfig?.apiKey,
+                    model: aiConfig?.model,
+                    scenarioName: scenario.name,
+                    url: scenario.url,
+                    pixelDiff: result.pixelDiff,
+                    diffPercentage: result.diffPercentage,
+                    ssimScore: result.ssimScore,
+                  });
+                  result = { ...result, aiAnalysis: aiResult };
+                } catch (err) {
+                  console.log(`  ⚠ AI analysis failed: ${getErrorMessage(err)}`);
+                }
               }
+
+              const confidence = calculateConfidence({
+                ssimScore: result.ssimScore,
+                phashSimilarity: result.phash?.similarity,
+                pixelDiffPercent: result.diffPercentage,
+                aiAnalysis: result.aiAnalysis,
+              });
+              result = { ...result, confidence };
             }
 
-            const confidence = calculateConfidence({
-              ssimScore: result.ssimScore,
-              phashSimilarity: result.phash?.similarity,
-              pixelDiffPercent: result.diffPercentage,
-              aiAnalysis: result.aiAnalysis,
-            });
-            result = { ...result, confidence };
+            const { status, info } = buildStatusInfo(result);
+
+            console.log(`  ${status} ${scenario.name} / ${browser} / ${viewport.name}: ${info}`);
+            return result;
           }
-
-          const { status, info } = buildStatusInfo(result);
-
-          console.log(`  ${status} ${scenario.name} / ${browser} / ${viewport.name}: ${info}`);
-
-          comparisons.push(result);
-        }
+        );
 
         console.log('\n📊 Generating report...\n');
 

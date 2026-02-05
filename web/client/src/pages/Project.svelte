@@ -298,6 +298,7 @@
   type CrossStatusFilter = 'all' | 'diffs' | 'matches' | 'smart' | 'approved' | 'unapproved';
   let crossStatusFilter = $state<Set<CrossStatusFilter>>(new Set(['all']));
   let crossPairFilter = $state<'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches'>('all');
+  let crossHideApproved = $state(false);
   let crossCurrentPage = $state(0);
 
   // Cache-busting key for images (incremented after rerun)
@@ -697,6 +698,7 @@
     if (!crossResults) return [];
     const q = crossSearchQuery.trim().toLowerCase();
     return crossResults.items.filter((item) => {
+      if (crossHideApproved && item.accepted) return false;
       if (!matchesCrossStatusSet(item, crossStatusFilter)) return false;
       if (!q) return true;
       return `${item.scenario} ${item.viewport}`.toLowerCase().includes(q);
@@ -1682,19 +1684,40 @@
         </div>
 
         <div class="status-grid">
-          <button class="status-card total clickable" class:active={activeTab === totalTab && tagFilter.has('all')} onclick={() => { activeTab = totalTab; setTagFilter('all'); }}>
+          <button
+            class="status-card total clickable"
+            class:active={activeTab === totalTab && tagFilter.has('all')}
+            onclick={() => { activeTab = totalTab; setTagFilter('all'); }}
+            title="All images in the current tab"
+          >
             <div class="status-value">{totalCount}</div>
             <div class="status-label">Total</div>
           </button>
-          <button class="status-card passed clickable" class:active={isTagActive('passed')} onclick={() => { activeTab = 'tests'; setTagFilter('passed'); }}>
+          <button
+            class="status-card passed clickable"
+            class:active={isTagActive('passed')}
+            onclick={() => { activeTab = 'tests'; setTagFilter('passed'); }}
+            title="Baseline matches test (no diff)"
+          >
             <div class="status-value">{passedCount}</div>
             <div class="status-label">Passed</div>
           </button>
-          <button class="status-card failed clickable" class:highlight={failedCount > 0} class:active={activeTab === 'diffs'} onclick={() => { activeTab = 'diffs'; setTagFilter('diff'); }}>
+          <button
+            class="status-card failed clickable"
+            class:highlight={failedCount > 0}
+            class:active={activeTab === 'diffs'}
+            onclick={() => { activeTab = 'diffs'; setTagFilter('diff'); }}
+            title="Diffs detected between baseline and test"
+          >
             <div class="status-value">{failedCount}</div>
             <div class="status-label">Failed</div>
           </button>
-          <button class="status-card new clickable" class:active={isTagActive('new')} onclick={() => { activeTab = 'tests'; setTagFilter('new'); }}>
+          <button
+            class="status-card new clickable"
+            class:active={isTagActive('new')}
+            onclick={() => { activeTab = 'tests'; setTagFilter('new'); }}
+            title="Test exists but no baseline"
+          >
             <div class="status-value">{newCount}</div>
             <div class="status-label">New</div>
           </button>
@@ -1912,25 +1935,55 @@
             <div class="cross-pair-filters">
               <span class="pair-filter-label">Pair Filters</span>
               <div class="tag-filters">
-                <button class="tag-filter tag-all" class:active={crossPairFilter === 'all'} onclick={() => crossPairFilter = 'all'}>
-                  All ({crossPairCounts.all})
-                </button>
-                <button class="tag-filter tag-diff" class:active={crossPairFilter === 'diffs'} onclick={() => crossPairFilter = 'diffs'}>
-                  Diffs ({crossPairCounts.diffs})
-                </button>
-                <button class="tag-filter tag-unapproved" class:active={crossPairFilter === 'issues'} onclick={() => crossPairFilter = 'issues'}>
-                  Issues ({crossPairCounts.issues})
-                </button>
-                <button class="tag-filter tag-smart" class:active={crossPairFilter === 'smart'} onclick={() => crossPairFilter = 'smart'}>
-                  Smart Pass ({crossPairCounts.smart})
-                </button>
-                <button class="tag-filter tag-approved" class:active={crossPairFilter === 'approved'} onclick={() => crossPairFilter = 'approved'}>
-                  Approved ({crossPairCounts.approved})
-                </button>
-                <button class="tag-filter tag-passed" class:active={crossPairFilter === 'matches'} onclick={() => crossPairFilter = 'matches'}>
-                  Matches ({crossPairCounts.matches})
-                </button>
-              </div>
+              <button
+                class="tag-filter tag-all"
+                class:active={crossPairFilter === 'all'}
+                onclick={() => crossPairFilter = 'all'}
+                title="Show all cross-compare pairs"
+              >
+                All ({crossPairCounts.all})
+              </button>
+              <button
+                class="tag-filter tag-diff"
+                class:active={crossPairFilter === 'diffs'}
+                onclick={() => crossPairFilter = 'diffs'}
+                title="Pairs with at least one diff"
+              >
+                Diffs ({crossPairCounts.diffs})
+              </button>
+              <button
+                class="tag-filter tag-unapproved"
+                class:active={crossPairFilter === 'issues'}
+                onclick={() => crossPairFilter = 'issues'}
+                title="Pairs with issues (errors, missing images)"
+              >
+                Issues ({crossPairCounts.issues})
+              </button>
+              <button
+                class="tag-filter tag-smart"
+                class:active={crossPairFilter === 'smart'}
+                onclick={() => crossPairFilter = 'smart'}
+                title="Pairs with smart-pass items"
+              >
+                Smart Pass ({crossPairCounts.smart})
+              </button>
+              <button
+                class="tag-filter tag-approved"
+                class:active={crossPairFilter === 'approved'}
+                onclick={() => crossPairFilter = 'approved'}
+                title="Pairs with approved items"
+              >
+                Approved ({crossPairCounts.approved})
+              </button>
+              <button
+                class="tag-filter tag-passed"
+                class:active={crossPairFilter === 'matches'}
+                onclick={() => crossPairFilter = 'matches'}
+                title="Pairs with matches (including smart pass)"
+              >
+                Matches ({crossPairCounts.matches})
+              </button>
+            </div>
             </div>
           {/if}
 
@@ -1948,23 +2001,61 @@
               {crossFilteredItems.length} of {crossResults?.items.length || 0} items
             </span>
             <div class="tag-filters" title="Cmd/Ctrl-click to multi-select">
-              <button class="tag-filter tag-all" class:active={isCrossStatusActive('all')} onclick={(event) => toggleCrossStatusFilter('all', event)}>
+              <button
+                class="tag-filter tag-all"
+                class:active={isCrossStatusActive('all')}
+                onclick={(event) => toggleCrossStatusFilter('all', event)}
+                title="Show all items regardless of status"
+              >
                 All
               </button>
-              <button class="tag-filter tag-diff" class:active={isCrossStatusActive('diffs')} onclick={(event) => toggleCrossStatusFilter('diffs', event)}>
+              <button
+                class="tag-filter tag-diff"
+                class:active={isCrossStatusActive('diffs')}
+                onclick={(event) => toggleCrossStatusFilter('diffs', event)}
+                title="Items with visual diffs"
+              >
                 Diffs
               </button>
-              <button class="tag-filter tag-passed" class:active={isCrossStatusActive('matches')} onclick={(event) => toggleCrossStatusFilter('matches', event)}>
+              <button
+                class="tag-filter tag-passed"
+                class:active={isCrossStatusActive('matches')}
+                onclick={(event) => toggleCrossStatusFilter('matches', event)}
+                title="Items that match"
+              >
                 Matches
               </button>
-              <button class="tag-filter tag-smart" class:active={isCrossStatusActive('smart')} onclick={(event) => toggleCrossStatusFilter('smart', event)}>
+              <button
+                class="tag-filter tag-smart"
+                class:active={isCrossStatusActive('smart')}
+                onclick={(event) => toggleCrossStatusFilter('smart', event)}
+                title="Matches with non-zero diffs (smart pass)"
+              >
                 Smart Pass
               </button>
-              <button class="tag-filter tag-approved" class:active={isCrossStatusActive('approved')} onclick={(event) => toggleCrossStatusFilter('approved', event)}>
+              <button
+                class="tag-filter tag-approved"
+                class:active={isCrossStatusActive('approved')}
+                onclick={(event) => toggleCrossStatusFilter('approved', event)}
+                title="Items you have approved"
+              >
                 Approved
               </button>
-              <button class="tag-filter tag-unapproved" class:active={isCrossStatusActive('unapproved')} onclick={(event) => toggleCrossStatusFilter('unapproved', event)}>
+              <button
+                class="tag-filter tag-unapproved"
+                class:active={isCrossStatusActive('unapproved')}
+                onclick={(event) => toggleCrossStatusFilter('unapproved', event)}
+                title="Items not yet approved"
+              >
                 Unapproved
+              </button>
+              <button
+                class="tag-filter"
+                class:active={crossHideApproved}
+                onclick={() => crossHideApproved = !crossHideApproved}
+                title="Hide approved items from results"
+              >
+                Hide Approved
               </button>
             </div>
             <div class="cross-selection-controls">
@@ -2134,22 +2225,52 @@
               {fullList.length} of {rawList.length} images
             </span>
             <div class="tag-filters" title="Cmd/Ctrl-click to multi-select">
-              <button class="tag-filter tag-all" class:active={isTagActive('all')} onclick={(event) => toggleTagFilter('all', event)}>
+              <button
+                class="tag-filter tag-all"
+                class:active={isTagActive('all')}
+                onclick={(event) => toggleTagFilter('all', event)}
+                title="Show all images"
+              >
                 All
               </button>
-              <button class="tag-filter tag-passed" class:active={isTagActive('passed')} onclick={(event) => toggleTagFilter('passed', event)}>
+              <button
+                class="tag-filter tag-passed"
+                class:active={isTagActive('passed')}
+                onclick={(event) => toggleTagFilter('passed', event)}
+                title="Baseline matches test"
+              >
                 Passed
               </button>
-              <button class="tag-filter tag-new" class:active={isTagActive('new')} onclick={(event) => toggleTagFilter('new', event)}>
+              <button
+                class="tag-filter tag-new"
+                class:active={isTagActive('new')}
+                onclick={(event) => toggleTagFilter('new', event)}
+                title="Test exists without baseline"
+              >
                 New
               </button>
-              <button class="tag-filter tag-unapproved" class:active={isTagActive('unapproved')} onclick={(event) => toggleTagFilter('unapproved', event)}>
+              <button
+                class="tag-filter tag-unapproved"
+                class:active={isTagActive('unapproved')}
+                onclick={(event) => toggleTagFilter('unapproved', event)}
+                title="Diffs or new items not approved"
+              >
                 Unapproved
               </button>
-              <button class="tag-filter tag-approved" class:active={isTagActive('approved')} onclick={(event) => toggleTagFilter('approved', event)}>
+              <button
+                class="tag-filter tag-approved"
+                class:active={isTagActive('approved')}
+                onclick={(event) => toggleTagFilter('approved', event)}
+                title="Items you have approved"
+              >
                 Approved
               </button>
-              <button class="tag-filter tag-diff" class:active={isTagActive('diff')} onclick={(event) => toggleTagFilter('diff', event)}>
+              <button
+                class="tag-filter tag-diff"
+                class:active={isTagActive('diff')}
+                onclick={(event) => toggleTagFilter('diff', event)}
+                title="Images with visual diffs"
+              >
                 Diff
               </button>
               {#if activeTab === 'diffs' && autoThresholdReviewCount > 0}
@@ -2157,6 +2278,7 @@
                   class="tag-filter tag-auto-review"
                   class:active={isTagActive('auto-review')}
                   onclick={(event) => toggleTagFilter('auto-review', event)}
+                  title="Diffs requiring auto-threshold review"
                 >
                   Auto Review ({autoThresholdReviewCount})
                 </button>

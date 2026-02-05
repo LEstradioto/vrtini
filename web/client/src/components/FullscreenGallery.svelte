@@ -801,8 +801,8 @@
         panicShowingDiff = false;
         currentView = panicNextView;
         panicNextView = panicNextView === 'baseline' ? 'test' : 'baseline';
-      }, 500);
-    }, 3000);
+      }, 700);
+    }, 7000);
   }
 
   $effect(() => {
@@ -1105,7 +1105,7 @@
           class="panic-btn"
           class:active={panicActive}
           onclick={togglePanic}
-          title="Panic check: alternates baseline/test every 250ms and flashes diff every 3s (P)"
+          title="Panic check: alternates baseline/test every 250ms and flashes diff every 7s (P)"
         >
           Panic
         </button>

@@ -254,14 +254,34 @@
 
   async function approveCrossFromModal() {
     if (!currentCrossItem) return;
+    const prevKey = currentCrossItem.itemKey;
+    const prevIndex = crossQueueIndex;
     await approveCrossItem(currentCrossItem);
-    currentCrossItem = crossResults?.items.find((item) => item.itemKey === currentCrossItem?.itemKey) || currentCrossItem;
+    syncCrossModalSelection(prevKey, prevIndex);
   }
 
   async function revokeCrossFromModal() {
     if (!currentCrossItem) return;
+    const prevKey = currentCrossItem.itemKey;
+    const prevIndex = crossQueueIndex;
     await revokeCrossItem(currentCrossItem);
-    currentCrossItem = crossResults?.items.find((item) => item.itemKey === currentCrossItem?.itemKey) || currentCrossItem;
+    syncCrossModalSelection(prevKey, prevIndex);
+  }
+
+  function syncCrossModalSelection(preferredKey?: string, fallbackIndex = crossQueueIndex) {
+    if (!showCompareFullscreen || compareMode !== 'cross') return;
+    if (crossFilteredItems.length === 0) {
+      closeCompareFullscreen();
+      return;
+    }
+    let nextIndex = -1;
+    if (preferredKey) {
+      nextIndex = crossFilteredItems.findIndex((item) => item.itemKey === preferredKey);
+    }
+    if (nextIndex === -1) {
+      nextIndex = Math.min(fallbackIndex, crossFilteredItems.length - 1);
+    }
+    setCrossCompareIndex(nextIndex);
   }
 
   // Core state

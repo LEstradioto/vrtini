@@ -16,6 +16,15 @@ Docker-based visual regression testing with Playwright, a web UI, and optional A
 - Review diffs in a fast UI built for triage.
 - Automate approvals and cross-browser comparisons.
 
+# AI-engineered
+
+- Built with AI assistance (Claude Opus 4.5 and Codex 5.2), reviewed and tested manually.
+- Currently tested on macOS with Docker Desktop, should work elsewhere but feedback is welcome. Open issues or PRs.
+
+### Inspiration
+
+- Thanks [BackstopJS](https://github.com/garris/BackstopJS) for the real project and inspiration!
+
 ## Install
 
 ### From source

@@ -371,6 +371,7 @@
   let lastZoom = zoom;
   let lastImageKey = '';
   let lastView = currentView;
+  let lastAutoFitKey = '';
 
   $effect(() => {
     if (!imageContainer) return;
@@ -404,6 +405,17 @@
     } else if (zoomChanged) {
       scheduleScrollRestore('ratio');
     }
+  });
+
+  $effect(() => {
+    if (!isCompareMode) return;
+    if (!effectiveCompareImages) return;
+    const key = activeCompareItem
+      ? `compare:${compareIndexValue}`
+      : `compare:${effectiveCompareTitle ?? effectiveCompareImages.left.src ?? ''}`;
+    if (!key || key === lastAutoFitKey) return;
+    lastAutoFitKey = key;
+    fitColumnsToScreen();
   });
 
   function zoomIn() {
@@ -834,8 +846,7 @@
   }
 
   function fitColumnsToScreen() {
-    const columns = computeAutoColumns();
-    columnMode = String(columns) as ColumnMode;
+    columnMode = 'auto';
     zoom = 1;
     columnScrollTop = 0;
     imageContainer?.scrollTo(0, 0);
@@ -1020,8 +1031,13 @@
           <button class="fit-columns-btn" onclick={toggleColumnMode} title="Toggle single/multi column (C)">
             {columnMode === '1' ? 'Multi' : 'Single'}
           </button>
-          <button class="fit-columns-btn" onclick={fitColumnsToScreen} title="Fit columns (F)">
-            Fit Columns
+          <button
+            class="fit-columns-btn"
+            class:active={columnMode === 'auto'}
+            onclick={fitColumnsToScreen}
+            title="Auto-fit columns (F)"
+          >
+            Auto Fit
           </button>
         </div>
       {/if}
@@ -1507,6 +1523,12 @@
   .fit-columns-btn:hover {
     border-color: var(--accent);
     color: var(--accent);
+  }
+
+  .fit-columns-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(120, 200, 255, 0.35);
   }
 
   .zoom-btn {

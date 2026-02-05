@@ -320,6 +320,89 @@
   let crossPairFilter = $state<'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches'>('all');
   let crossHideApproved = $state(false);
   let crossCurrentPage = $state(0);
+  let crossPrefsLoaded = $state(false);
+  let crossPrefsApplying = $state(false);
+
+  type CrossPrefs = {
+    searchQuery?: string;
+    statusFilter?: CrossStatusFilter[];
+    pairFilter?: 'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches';
+    hideApproved?: boolean;
+    selectedKey?: string | null;
+  };
+
+  const CROSS_STATUS_VALUES: CrossStatusFilter[] = [
+    'all',
+    'diffs',
+    'matches',
+    'smart',
+    'approved',
+    'unapproved',
+  ];
+  const CROSS_PAIR_VALUES = new Set([
+    'all',
+    'diffs',
+    'issues',
+    'smart',
+    'approved',
+    'matches',
+  ]);
+
+  function getCrossPrefsKey(): string {
+    return `vrt:cross-prefs:${projectId}`;
+  }
+
+  function loadCrossPrefs(): CrossPrefs | null {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(getCrossPrefsKey());
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as CrossPrefs;
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveCrossPrefs(): void {
+    if (typeof localStorage === 'undefined') return;
+    const payload: CrossPrefs = {
+      searchQuery: crossSearchQuery,
+      statusFilter: [...crossStatusFilter],
+      pairFilter: crossPairFilter,
+      hideApproved: crossHideApproved,
+      selectedKey: selectedCrossKey ?? null,
+    };
+    localStorage.setItem(getCrossPrefsKey(), JSON.stringify(payload));
+  }
+
+  function applyCrossPrefs(reports: CrossResultsSummary[]): void {
+    const prefs = loadCrossPrefs();
+    if (!prefs) {
+      crossPrefsLoaded = true;
+      return;
+    }
+
+    crossPrefsApplying = true;
+    crossSearchQuery = typeof prefs.searchQuery === 'string' ? prefs.searchQuery : '';
+    crossHideApproved = !!prefs.hideApproved;
+    if (prefs.pairFilter && CROSS_PAIR_VALUES.has(prefs.pairFilter)) {
+      crossPairFilter = prefs.pairFilter;
+    }
+
+    if (Array.isArray(prefs.statusFilter)) {
+      const allowed = new Set(CROSS_STATUS_VALUES);
+      const filtered = prefs.statusFilter.filter((value) => allowed.has(value));
+      crossStatusFilter = new Set(filtered.length ? filtered : ['all']);
+    }
+
+    if (prefs.selectedKey && reports.some((report) => report.key === prefs.selectedKey)) {
+      selectedCrossKey = prefs.selectedKey;
+    }
+
+    crossPrefsApplying = false;
+    crossPrefsLoaded = true;
+  }
 
   // Cache-busting key for images (incremented after rerun)
   let imageCacheKey = $state(0);
@@ -408,8 +491,19 @@
       imageResults = resultsRes.results;
       crossReports = crossRes.results;
 
+      if (!crossPrefsLoaded) {
+        applyCrossPrefs(crossRes.results);
+      }
+
+      if (selectedCrossKey && !crossRes.results.some((report) => report.key === selectedCrossKey)) {
+        selectedCrossKey = null;
+      }
+
       if (!selectedCrossKey && crossRes.results.length > 0) {
         selectedCrossKey = crossRes.results[0].key;
+      }
+
+      if (selectedCrossKey) {
         await loadCrossResults(selectedCrossKey);
       }
 
@@ -455,6 +549,12 @@
 
   $effect(() => {
     loadProject();
+  });
+
+  $effect(() => {
+    projectId;
+    crossPrefsLoaded = false;
+    crossPrefsApplying = false;
   });
 
   type ImageStatus = 'passed' | 'failed' | 'new';
@@ -740,6 +840,16 @@
     crossStatusFilter;
     selectedCrossKey;
     crossCurrentPage = 0;
+  });
+
+  $effect(() => {
+    if (!crossPrefsLoaded || crossPrefsApplying) return;
+    crossSearchQuery;
+    crossStatusFilter;
+    crossPairFilter;
+    crossHideApproved;
+    selectedCrossKey;
+    saveCrossPrefs();
   });
 
   $effect(() => {

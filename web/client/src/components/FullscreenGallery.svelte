@@ -787,7 +787,7 @@
       if (!panicActive || panicShowingDiff) return;
       currentView = panicNextView;
       panicNextView = panicNextView === 'baseline' ? 'test' : 'baseline';
-    }, 100);
+    }, 250);
 
     panicDiffHandle = window.setInterval(() => {
       if (!panicActive || !hasDiff) return;
@@ -1102,7 +1102,7 @@
           class="panic-btn"
           class:active={panicActive}
           onclick={togglePanic}
-          title="Panic check: alternates baseline/test every 100ms and flashes diff every 3s (P)"
+          title="Panic check: alternates baseline/test every 250ms and flashes diff every 3s (P)"
         >
           Panic
         </button>

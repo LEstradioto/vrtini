@@ -125,6 +125,22 @@ vrtini build --all-versions       # All supported versions
 
 Use `host.docker.internal` instead of `localhost` in URLs.
 
+## VNC (legacy browser debug)
+
+Use the helper container to run an older Playwright/Chromium build with a VNC UI.
+Tested on macOS with Docker Desktop.
+
+```bash
+docker build --platform=linux/amd64 -f docker/vnc/Dockerfile -t vrt-pw110-vnc docker/vnc
+docker run --rm --platform=linux/amd64 \
+  -p 6080:6080 \
+  -e TARGET_URL=http://host.docker.internal:3000 \
+  vrt-pw110-vnc
+```
+
+Then open `http://localhost:6080/vnc.html` in your browser.
+Optional: set `BROWSER=webkit` to launch WebKit instead of Chromium.
+
 ## Development
 
 ```bash

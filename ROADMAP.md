@@ -1,28 +1,51 @@
-# Roadmap — Performance, UI Testing, Design
+# Roadmap — Visual Diff Intelligence
 
-## Performance
+## Vision
 
-- [ ] Profile compare pipeline (CPU + disk I/O) on large suites
-- [ ] Avoid sync PNG decode/write on hot paths
-- [ ] Add bounded concurrency for compare tasks
-- [ ] Skip diff image writes when not needed (optional)
-- [ ] Add basic telemetry (time per scenario + totals)
+Build a best‑in‑class visual regression platform that explains _what changed_ and _why_, not just where pixels differ. The system should classify changes (text, layout, spacing, style, background) and produce a natural‑language report that is useful for humans and AI‑assisted fixes.
 
-## UI Testing
+## Now (Near‑Term)
 
-- [ ] Make UI tests runnable without privileged bind (configurable host/port)
-- [ ] Run UI smoke suite in CI with retries on infra errors only
-- [ ] Add coverage for project filtering, batch approve, cross-compare viewer
-- [ ] Add a stress fixture set to catch UI performance regressions
+- [ ] Define a first‑class “analysis report” format for each comparison (JSON + human‑readable summary).
+- [ ] Add DOM snapshot capture to comparisons (layout boxes + computed styles + text boxes).
+- [ ] Add text diff (content and position) and layout drift diff (box movement + size changes).
+- [ ] Add a lightweight classification layer: text change, layout shift, spacing change, style change, background change.
+- [ ] Ship a report view that shows per‑item insights alongside the visual diff.
 
-## Design
+## Analysis Pipeline (Spec v1)
 
-- [ ] Card hierarchy cleanup (status, tags, primary actions)
-- [ ] Stronger contrast defaults for light/dark themes
-- [ ] Compact filters + batch actions row
-- [ ] Multi-column viewer controls clarity (labels + tooltips)
+- Inputs: baseline image, test image, DOM snapshot (layout + styles + text boxes).
+- Visual metrics: pixel diff map + perceptual score (LPIPS/DISTS/FLIP to be chosen).
+- Text diff: normalized text content comparison + text box movement detection.
+- Layout diff: element bounding box deltas (x/y/width/height) and parent‑child spacing deltas.
+- Style diff: computed style changes (background, border, color, font metrics).
+- Classification rules: map changes to “content”, “layout”, “spacing”, “style”, “background”.
+- Output: per‑item findings with severity and a short explanation.
 
-## Tooling
+## Diff Studio (Front‑End Tool)
 
-- [ ] Update docs for performance + UI testing workflow
-- [ ] Add perf troubleshooting section (CPU, memory, I/O)
+- [ ] A UI where users provide a URL or image and compare against another URL or image.
+- [ ] One‑click snapshot capture (local dev targets like `localhost` supported).
+- [ ] Visual diff + structured analysis + natural‑language report.
+- [ ] “Comment” workflow: generate a shareable report link with insights and suggested fixes.
+- [ ] AI summary that explains changes in human terms, grounded in deterministic metrics.
+
+## Component Atlas (Design System Extraction)
+
+- [ ] Crawl the app and extract reusable UI components as images.
+- [ ] If Storybook exists, capture and index all stories automatically.
+- [ ] Cluster and label components into a “component atlas” (storybook‑like catalog).
+- [ ] Store reference renders to enable component‑level diffs.
+- [ ] When a Figma design is provided, map components to known references for faster implementation guidance.
+
+## AI‑Assisted Fix Suggestions
+
+- [ ] Use analysis report + component atlas to generate targeted suggestions (“card padding increased by 6px”).
+- [ ] Provide fix hints as structured diffs (CSS/spacing changes) alongside natural language.
+- [ ] Keep pass/fail gating deterministic; AI only summarizes and proposes fixes.
+
+## Later / Stretch
+
+- [ ] Multi‑browser normalization heuristics (font metrics, subpixel rounding, rendering differences).
+- [ ] Per‑component tolerance thresholds (e.g., “button label kerning acceptable”).
+- [ ] Explainability heatmaps for layout vs style vs content changes.

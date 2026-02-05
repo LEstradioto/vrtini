@@ -183,11 +183,22 @@ export function registerCrossCompareCommand(program: Command): void {
           }
         }
 
-        const scenarioFilter = new Set(
-          (options.scenario ?? []).map((name: string) => name.trim()).filter(Boolean)
+        const scenarioArgs: string[] = Array.isArray(options.scenario)
+          ? options.scenario.map((value: unknown) => String(value))
+          : typeof options.scenario === 'string'
+            ? [options.scenario]
+            : [];
+        const viewportArgs: string[] = Array.isArray(options.viewport)
+          ? options.viewport.map((value: unknown) => String(value))
+          : typeof options.viewport === 'string'
+            ? [options.viewport]
+            : [];
+
+        const scenarioFilter = new Set<string>(
+          scenarioArgs.map((name) => name.trim()).filter(Boolean)
         );
-        const viewportFilter = new Set(
-          (options.viewport ?? []).map((name: string) => name.trim()).filter(Boolean)
+        const viewportFilter = new Set<string>(
+          viewportArgs.map((name) => name.trim()).filter(Boolean)
         );
 
         if (scenarioFilter.size > 0) {

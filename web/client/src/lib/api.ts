@@ -183,7 +183,13 @@ export const compare = {
 export const crossCompare = {
   run: (
     projectId: string,
-    options?: { key?: string; itemKeys?: string[]; scenarios?: string[]; viewports?: string[] }
+    options?: {
+      key?: string;
+      itemKeys?: string[];
+      scenarios?: string[];
+      viewports?: string[];
+      resetAcceptances?: boolean;
+    }
   ) =>
     request<{ reports: CrossReport[] }>(`${projectPath(projectId)}/cross-compare`, {
       method: 'POST',

@@ -87,7 +87,11 @@
     return err instanceof Error ? err.message : fallback;
   }
 
-  async function runCrossCompare(options?: { key?: string; itemKeys?: string[] }) {
+  async function runCrossCompare(options?: {
+    key?: string;
+    itemKeys?: string[];
+    resetAcceptances?: boolean;
+  }) {
     if (!project) return;
     crossCompareRunning = true;
     crossCompareError = null;
@@ -115,7 +119,23 @@
 
   async function rerunSelectedCrossItems() {
     if (!selectedCrossKey || selectedCrossItems.size === 0) return;
-    await runCrossCompare({ key: selectedCrossKey, itemKeys: [...selectedCrossItems] });
+    await runCrossCompare({
+      key: selectedCrossKey,
+      itemKeys: [...selectedCrossItems],
+      resetAcceptances: true,
+    });
+  }
+
+  async function rerunFilteredCrossItems() {
+    if (!selectedCrossKey || crossFilteredItems.length === 0) return;
+    const itemKeys = crossFilteredItems.map(
+      (item) => item.itemKey ?? `${item.scenario}__${item.viewport}`
+    );
+    await runCrossCompare({
+      key: selectedCrossKey,
+      itemKeys,
+      resetAcceptances: true,
+    });
   }
 
   async function clearCrossPair() {
@@ -275,7 +295,8 @@
   let crossResultsError = $state<string | null>(null);
   let selectedCrossKey = $state<string | null>(null);
   let crossSearchQuery = $state('');
-  let crossStatusFilter = $state<'all' | 'diffs' | 'matches' | 'smart' | 'approved' | 'unapproved'>('all');
+  type CrossStatusFilter = 'all' | 'diffs' | 'matches' | 'smart' | 'approved' | 'unapproved';
+  let crossStatusFilter = $state<Set<CrossStatusFilter>>(new Set(['all']));
   let crossPairFilter = $state<'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches'>('all');
   let crossCurrentPage = $state(0);
 
@@ -284,7 +305,7 @@
 
   // Tab and view state
   let activeTab = $state<'baselines' | 'tests' | 'diffs' | 'compare' | 'cross'>(initialTab || 'tests');
-  let tagFilter = $state<ImageTag>('all');
+  let tagFilter = $state<Set<ImageTag>>(new Set(['all']));
 
   // Pagination and filtering
   let currentPage = $state(0);
@@ -471,6 +492,102 @@
     return fileTag === tag;
   }
 
+  function matchesTagSet(filename: string, tags: Set<ImageTag>): boolean {
+    if (tags.has('all')) return true;
+    for (const tag of tags) {
+      if (matchesTag(filename, tag)) return true;
+    }
+    return false;
+  }
+
+  function setTagFilter(tag: ImageTag) {
+    tagFilter = new Set([tag]);
+  }
+
+  function toggleTagFilter(tag: ImageTag, event?: MouseEvent) {
+    const multi = !!event?.metaKey || !!event?.ctrlKey;
+    if (!multi) {
+      setTagFilter(tag);
+      return;
+    }
+    if (tag === 'all') {
+      setTagFilter('all');
+      return;
+    }
+    const next = new Set(tagFilter);
+    if (next.has('all')) next.delete('all');
+    if (next.has(tag)) {
+      next.delete(tag);
+    } else {
+      next.add(tag);
+    }
+    if (next.size === 0) next.add('all');
+    tagFilter = next;
+  }
+
+  function isTagActive(tag: ImageTag): boolean {
+    if (tagFilter.has('all')) return tag === 'all';
+    return tagFilter.has(tag);
+  }
+
+  function matchesCrossStatus(item: CrossResultItem, status: CrossStatusFilter): boolean {
+    switch (status) {
+      case 'diffs':
+        return !item.match;
+      case 'matches':
+        return item.match;
+      case 'smart':
+        return item.match && item.diffPercentage > 0;
+      case 'approved':
+        return !!item.accepted;
+      case 'unapproved':
+        return !item.accepted;
+      default:
+        return true;
+    }
+  }
+
+  function matchesCrossStatusSet(
+    item: CrossResultItem,
+    statuses: Set<CrossStatusFilter>
+  ): boolean {
+    if (statuses.has('all')) return true;
+    for (const status of statuses) {
+      if (matchesCrossStatus(item, status)) return true;
+    }
+    return false;
+  }
+
+  function setCrossStatusFilter(status: CrossStatusFilter) {
+    crossStatusFilter = new Set([status]);
+  }
+
+  function toggleCrossStatusFilter(status: CrossStatusFilter, event?: MouseEvent) {
+    const multi = !!event?.metaKey || !!event?.ctrlKey;
+    if (!multi) {
+      setCrossStatusFilter(status);
+      return;
+    }
+    if (status === 'all') {
+      setCrossStatusFilter('all');
+      return;
+    }
+    const next = new Set(crossStatusFilter);
+    if (next.has('all')) next.delete('all');
+    if (next.has(status)) {
+      next.delete(status);
+    } else {
+      next.add(status);
+    }
+    if (next.size === 0) next.add('all');
+    crossStatusFilter = next;
+  }
+
+  function isCrossStatusActive(status: CrossStatusFilter): boolean {
+    if (crossStatusFilter.has('all')) return status === 'all';
+    return crossStatusFilter.has(status);
+  }
+
   function getTagLabel(tag: ImageTag): string {
     switch (tag) {
       case 'approved':
@@ -521,8 +638,8 @@
       case 'compare': return [];
       case 'cross': return [];
     }
-    if (tagFilter === 'all') return list;
-    return list.filter((f) => matchesTag(f, tagFilter));
+    if (tagFilter.has('all')) return list;
+    return list.filter((f) => matchesTagSet(f, tagFilter));
   });
 
   // Filter list by search query
@@ -580,11 +697,7 @@
     if (!crossResults) return [];
     const q = crossSearchQuery.trim().toLowerCase();
     return crossResults.items.filter((item) => {
-      if (crossStatusFilter === 'diffs' && item.match) return false;
-      if (crossStatusFilter === 'matches' && !item.match) return false;
-      if (crossStatusFilter === 'smart' && !(item.match && item.diffPercentage > 0)) return false;
-      if (crossStatusFilter === 'approved' && !item.accepted) return false;
-      if (crossStatusFilter === 'unapproved' && item.accepted) return false;
+      if (!matchesCrossStatusSet(item, crossStatusFilter)) return false;
       if (!q) return true;
       return `${item.scenario} ${item.viewport}`.toLowerCase().includes(q);
     });
@@ -978,16 +1091,8 @@
   // Filtered gallery queue respects tagFilter and activeTab
   let filteredGalleryQueue = $derived.by((): GalleryImage[] => {
     if (activeTab === 'diffs') return galleryQueue.filter(item => item.status === 'failed');
-    if (tagFilter !== 'all') {
-      if (tagFilter === 'diff') return galleryQueue.filter(item => item.status === 'failed');
-      if (tagFilter === 'new') return galleryQueue.filter(item => item.status === 'new');
-      if (tagFilter === 'passed') return galleryQueue.filter(item => item.status === 'passed');
-      if (tagFilter === 'approved') return galleryQueue.filter(item => !!acceptances[item.filename]);
-      if (tagFilter === 'unapproved') {
-        return galleryQueue.filter(item => item.status === 'failed' || item.status === 'new');
-      }
-    }
-    return galleryQueue;
+    if (tagFilter.has('all')) return galleryQueue;
+    return galleryQueue.filter(item => matchesTagSet(item.filename, tagFilter));
   });
 
   // Multi-select functions
@@ -1577,19 +1682,19 @@
         </div>
 
         <div class="status-grid">
-          <button class="status-card total clickable" class:active={activeTab === totalTab && tagFilter === 'all'} onclick={() => { activeTab = totalTab; tagFilter = 'all'; }}>
+          <button class="status-card total clickable" class:active={activeTab === totalTab && tagFilter.has('all')} onclick={() => { activeTab = totalTab; setTagFilter('all'); }}>
             <div class="status-value">{totalCount}</div>
             <div class="status-label">Total</div>
           </button>
-          <button class="status-card passed clickable" class:active={tagFilter === 'passed'} onclick={() => { activeTab = 'tests'; tagFilter = 'passed'; }}>
+          <button class="status-card passed clickable" class:active={isTagActive('passed')} onclick={() => { activeTab = 'tests'; setTagFilter('passed'); }}>
             <div class="status-value">{passedCount}</div>
             <div class="status-label">Passed</div>
           </button>
-          <button class="status-card failed clickable" class:highlight={failedCount > 0} class:active={activeTab === 'diffs'} onclick={() => { activeTab = 'diffs'; tagFilter = 'diff'; }}>
+          <button class="status-card failed clickable" class:highlight={failedCount > 0} class:active={activeTab === 'diffs'} onclick={() => { activeTab = 'diffs'; setTagFilter('diff'); }}>
             <div class="status-value">{failedCount}</div>
             <div class="status-label">Failed</div>
           </button>
-          <button class="status-card new clickable" class:active={tagFilter === 'new'} onclick={() => { activeTab = 'tests'; tagFilter = 'new'; }}>
+          <button class="status-card new clickable" class:active={isTagActive('new')} onclick={() => { activeTab = 'tests'; setTagFilter('new'); }}>
             <div class="status-value">{newCount}</div>
             <div class="status-label">New</div>
           </button>
@@ -1641,35 +1746,35 @@
       <button
         class="tab"
         class:active={activeTab === 'baselines'}
-        onclick={() => { activeTab = 'baselines'; tagFilter = 'all'; }}
+        onclick={() => { activeTab = 'baselines'; setTagFilter('all'); }}
       >
         Baselines ({baselines.length})
       </button>
       <button
         class="tab"
-        class:active={activeTab === 'tests' && tagFilter === 'all'}
-        onclick={() => { activeTab = 'tests'; tagFilter = 'all'; }}
+        class:active={activeTab === 'tests' && tagFilter.has('all')}
+        onclick={() => { activeTab = 'tests'; setTagFilter('all'); }}
       >
         Tests ({tests.length})
       </button>
       <button
         class="tab"
         class:active={activeTab === 'diffs'}
-        onclick={() => { activeTab = 'diffs'; tagFilter = 'diff'; }}
+        onclick={() => { activeTab = 'diffs'; setTagFilter('diff'); }}
       >
         Diffs ({diffs.length})
       </button>
       <button
         class="tab"
         class:active={activeTab === 'compare'}
-        onclick={() => { activeTab = 'compare'; tagFilter = 'all'; }}
+        onclick={() => { activeTab = 'compare'; setTagFilter('all'); }}
       >
         Compare Tool
       </button>
       <button
         class="tab"
         class:active={activeTab === 'cross'}
-        onclick={() => { activeTab = 'cross'; tagFilter = 'all'; }}
+        onclick={() => { activeTab = 'cross'; setTagFilter('all'); }}
       >
         Cross Compare
       </button>
@@ -1842,23 +1947,23 @@
             <span class="result-count">
               {crossFilteredItems.length} of {crossResults?.items.length || 0} items
             </span>
-            <div class="tag-filters">
-              <button class="tag-filter tag-all" class:active={crossStatusFilter === 'all'} onclick={() => crossStatusFilter = 'all'}>
+            <div class="tag-filters" title="Cmd/Ctrl-click to multi-select">
+              <button class="tag-filter tag-all" class:active={isCrossStatusActive('all')} onclick={(event) => toggleCrossStatusFilter('all', event)}>
                 All
               </button>
-              <button class="tag-filter tag-diff" class:active={crossStatusFilter === 'diffs'} onclick={() => crossStatusFilter = 'diffs'}>
+              <button class="tag-filter tag-diff" class:active={isCrossStatusActive('diffs')} onclick={(event) => toggleCrossStatusFilter('diffs', event)}>
                 Diffs
               </button>
-              <button class="tag-filter tag-passed" class:active={crossStatusFilter === 'matches'} onclick={() => crossStatusFilter = 'matches'}>
+              <button class="tag-filter tag-passed" class:active={isCrossStatusActive('matches')} onclick={(event) => toggleCrossStatusFilter('matches', event)}>
                 Matches
               </button>
-              <button class="tag-filter tag-smart" class:active={crossStatusFilter === 'smart'} onclick={() => crossStatusFilter = 'smart'}>
+              <button class="tag-filter tag-smart" class:active={isCrossStatusActive('smart')} onclick={(event) => toggleCrossStatusFilter('smart', event)}>
                 Smart Pass
               </button>
-              <button class="tag-filter tag-approved" class:active={crossStatusFilter === 'approved'} onclick={() => crossStatusFilter = 'approved'}>
+              <button class="tag-filter tag-approved" class:active={isCrossStatusActive('approved')} onclick={(event) => toggleCrossStatusFilter('approved', event)}>
                 Approved
               </button>
-              <button class="tag-filter tag-unapproved" class:active={crossStatusFilter === 'unapproved'} onclick={() => crossStatusFilter = 'unapproved'}>
+              <button class="tag-filter tag-unapproved" class:active={isCrossStatusActive('unapproved')} onclick={(event) => toggleCrossStatusFilter('unapproved', event)}>
                 Unapproved
               </button>
             </div>
@@ -1883,6 +1988,13 @@
               </button>
               <button class="btn small danger" onclick={deleteCrossItems} disabled={selectedCrossCount === 0}>
                 Delete Selected
+              </button>
+              <button
+                class="btn small rerun"
+                onclick={rerunFilteredCrossItems}
+                disabled={crossFilteredItems.length === 0 || crossCompareRunning}
+              >
+                {crossCompareRunning ? 'Running...' : `Rerun Filtered (${crossFilteredItems.length})`}
               </button>
             </div>
           </div>
@@ -2021,30 +2133,30 @@
             <span class="result-count">
               {fullList.length} of {rawList.length} images
             </span>
-            <div class="tag-filters">
-              <button class="tag-filter tag-all" class:active={tagFilter === 'all'} onclick={() => tagFilter = 'all'}>
+            <div class="tag-filters" title="Cmd/Ctrl-click to multi-select">
+              <button class="tag-filter tag-all" class:active={isTagActive('all')} onclick={(event) => toggleTagFilter('all', event)}>
                 All
               </button>
-              <button class="tag-filter tag-passed" class:active={tagFilter === 'passed'} onclick={() => tagFilter = 'passed'}>
+              <button class="tag-filter tag-passed" class:active={isTagActive('passed')} onclick={(event) => toggleTagFilter('passed', event)}>
                 Passed
               </button>
-              <button class="tag-filter tag-new" class:active={tagFilter === 'new'} onclick={() => tagFilter = 'new'}>
+              <button class="tag-filter tag-new" class:active={isTagActive('new')} onclick={(event) => toggleTagFilter('new', event)}>
                 New
               </button>
-              <button class="tag-filter tag-unapproved" class:active={tagFilter === 'unapproved'} onclick={() => tagFilter = 'unapproved'}>
+              <button class="tag-filter tag-unapproved" class:active={isTagActive('unapproved')} onclick={(event) => toggleTagFilter('unapproved', event)}>
                 Unapproved
               </button>
-              <button class="tag-filter tag-approved" class:active={tagFilter === 'approved'} onclick={() => tagFilter = 'approved'}>
+              <button class="tag-filter tag-approved" class:active={isTagActive('approved')} onclick={(event) => toggleTagFilter('approved', event)}>
                 Approved
               </button>
-              <button class="tag-filter tag-diff" class:active={tagFilter === 'diff'} onclick={() => tagFilter = 'diff'}>
+              <button class="tag-filter tag-diff" class:active={isTagActive('diff')} onclick={(event) => toggleTagFilter('diff', event)}>
                 Diff
               </button>
               {#if activeTab === 'diffs' && autoThresholdReviewCount > 0}
                 <button
                   class="tag-filter tag-auto-review"
-                  class:active={tagFilter === 'auto-review'}
-                  onclick={() => tagFilter = 'auto-review'}
+                  class:active={isTagActive('auto-review')}
+                  onclick={(event) => toggleTagFilter('auto-review', event)}
                 >
                   Auto Review ({autoThresholdReviewCount})
                 </button>

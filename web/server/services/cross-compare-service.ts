@@ -109,6 +109,7 @@ export interface CrossCompareRunOptions {
   itemKeys?: string[];
   scenarios?: string[];
   viewports?: string[];
+  resetAcceptances?: boolean;
 }
 
 interface CrossAcceptanceRecord {
@@ -198,6 +199,39 @@ async function clearCrossDeletionsForItems(
     ...deletions,
     [key]: Object.fromEntries(nextEntries),
   });
+}
+
+async function clearCrossAcceptancesForItems(
+  projectPath: string,
+  config: VRTConfig,
+  key: string,
+  itemKeys: string[]
+): Promise<void> {
+  if (itemKeys.length === 0) return;
+  const store = await loadCrossAcceptances(projectPath);
+  const pair = store[key];
+  if (!pair) return;
+
+  const itemKeySet = new Set(itemKeys);
+  const remainingEntries = Object.entries(pair).filter(([itemKey]) => !itemKeySet.has(itemKey));
+
+  if (remainingEntries.length === Object.keys(pair).length) {
+    return;
+  }
+
+  if (remainingEntries.length === 0) {
+    const { [key]: _removed, ...rest } = store;
+    await saveCrossAcceptances(projectPath, rest);
+  } else {
+    await saveCrossAcceptances(projectPath, {
+      ...store,
+      [key]: Object.fromEntries(remainingEntries),
+    });
+  }
+
+  for (const itemKey of itemKeys) {
+    await updateCrossResultsAcceptance(projectPath, config, key, itemKey);
+  }
 }
 
 function buildItemKey(scenario: string, viewport: string): string {
@@ -520,6 +554,18 @@ export async function runCrossCompare(
 
     if (isFilteredRun && items.length === 0) {
       throw new Error('No cross-compare items matched the provided filters.');
+    }
+
+    if (options.resetAcceptances && updatedItemKeys.length > 0) {
+      await clearCrossAcceptancesForItems(projectPath, config, pair.key, updatedItemKeys);
+      if (isFilteredRun) {
+        for (const itemKey of updatedItemKeys) {
+          const existing = existingItemsByKey.get(itemKey);
+          if (!existing) continue;
+          const { accepted: _accepted, acceptedAt: _acceptedAt, ...rest } = existing;
+          existingItemsByKey.set(itemKey, rest);
+        }
+      }
     }
 
     if (isFilteredRun && updatedItemKeys.length > 0) {

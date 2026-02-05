@@ -45,7 +45,13 @@ function rewriteReportImageSources(
 export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
-    Body?: { key?: string; itemKeys?: string[]; scenarios?: string[]; viewports?: string[] };
+    Body?: {
+      key?: string;
+      itemKeys?: string[];
+      scenarios?: string[];
+      viewports?: string[];
+      resetAcceptances?: boolean;
+    };
   }>('/projects/:id/cross-compare', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
     if (!project) {
@@ -58,6 +64,7 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       itemKeys: request.body?.itemKeys,
       scenarios: request.body?.scenarios,
       viewports: request.body?.viewports,
+      resetAcceptances: request.body?.resetAcceptances,
     });
     return reply.send({ reports });
   });

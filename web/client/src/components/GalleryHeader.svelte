@@ -5,6 +5,7 @@
     isCompareMode: boolean;
     displayTitle: string;
     effectiveCompareBadge: { label: string; tone: string } | null;
+    effectiveCompareUpdatedAt?: { left?: string; right?: string; diff?: string } | null;
     hasCompareQueue: boolean;
     compareIndexValue: number;
     compareQueueLength: number;
@@ -49,6 +50,7 @@
     isCompareMode,
     displayTitle,
     effectiveCompareBadge,
+    effectiveCompareUpdatedAt = null,
     hasCompareQueue,
     compareIndexValue,
     compareQueueLength,
@@ -99,58 +101,94 @@
         return '#22c55e';
     }
   }
+
+  function formatUpdatedAt(iso?: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString();
+  }
 </script>
 
 <div class="gallery-header">
   <div class="header-left">
     {#if isCompareMode}
-      <span class="filename" title={displayTitle}>{displayTitle}</span>
-      {#if effectiveCompareBadge}
-        <span class="compare-badge {`tone-${effectiveCompareBadge.tone}`.trim()}">
-          {effectiveCompareBadge.label}
-        </span>
-      {/if}
-      {#if hasCompareQueue}
-        <span class="position-indicator compare-count">
-          {compareIndexValue + 1} / {compareQueueLength}
-        </span>
-      {/if}
-      {#if effectiveCompareMetrics}
-        <div class="metrics-display">
-          <span
-            class="metric"
-            title="Number of pixels that differ between baseline and test."
-          >
-            <span class="metric-label">Pixels</span>
-            <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
-          </span>
-          <span
-            class="metric"
-            title="Percentage of differing pixels (pixel diff ÷ total pixels)."
-          >
-            <span class="metric-label">Diff</span>
-            <span class="metric-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
-          </span>
-          {#if effectiveCompareMetrics.ssimScore !== undefined}
-            <span
-              class="metric"
-              title="SSIM (Structural Similarity Index). Higher is more similar."
-            >
-              <span class="metric-label">SSIM</span>
-              <span class="metric-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
+      <div class="compare-left">
+        <div class="compare-left-top">
+          <span class="filename" title={displayTitle}>{displayTitle}</span>
+          {#if effectiveCompareBadge}
+            <span class="compare-badge {`tone-${effectiveCompareBadge.tone}`.trim()}">
+              {effectiveCompareBadge.label}
             </span>
           {/if}
-          {#if effectiveCompareMetrics.phash}
-            <span
-              class="metric"
-              title="Perceptual hash similarity. Higher is more similar."
-            >
-              <span class="metric-label">pHash</span>
-              <span class="metric-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%</span>
+          {#if hasCompareQueue}
+            <span class="position-indicator compare-count">
+              {compareIndexValue + 1} / {compareQueueLength}
             </span>
           {/if}
         </div>
-      {/if}
+
+        {#if effectiveCompareMetrics || effectiveCompareUpdatedAt}
+          <div class="compare-left-bottom">
+            {#if effectiveCompareMetrics}
+              <div class="metrics-display">
+                <span
+                  class="metric"
+                  title="Number of pixels that differ between baseline and test."
+                >
+                  <span class="metric-label">Pixels</span>
+                  <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
+                </span>
+                <span
+                  class="metric"
+                  title="Percentage of differing pixels (pixel diff ÷ total pixels)."
+                >
+                  <span class="metric-label">Diff</span>
+                  <span class="metric-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
+                </span>
+                {#if effectiveCompareMetrics.ssimScore !== undefined}
+                  <span
+                    class="metric"
+                    title="SSIM (Structural Similarity Index). Higher is more similar."
+                  >
+                    <span class="metric-label">SSIM</span>
+                    <span class="metric-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
+                  </span>
+                {/if}
+                {#if effectiveCompareMetrics.phash}
+                  <span
+                    class="metric"
+                    title="Perceptual hash similarity. Higher is more similar."
+                  >
+                    <span class="metric-label">pHash</span>
+                    <span class="metric-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%</span>
+                  </span>
+                {/if}
+              </div>
+            {/if}
+
+            {#if effectiveCompareUpdatedAt && (effectiveCompareUpdatedAt.left || effectiveCompareUpdatedAt.right || effectiveCompareUpdatedAt.diff)}
+              <div class="updated-at">
+                {#if effectiveCompareUpdatedAt.left}
+                  <span class="updated-at-item" title={effectiveCompareUpdatedAt.left}>
+                    {leftLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.left)}
+                  </span>
+                {/if}
+                {#if effectiveCompareUpdatedAt.right}
+                  <span class="updated-at-item" title={effectiveCompareUpdatedAt.right}>
+                    {rightLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.right)}
+                  </span>
+                {/if}
+                {#if effectiveCompareUpdatedAt.diff}
+                  <span class="updated-at-item" title={effectiveCompareUpdatedAt.diff}>
+                    {diffLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.diff)}
+                  </span>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
     {:else}
       <span class="position-indicator">{currentIndex + 1} / {queueLength}</span>
       {#if currentImage}
@@ -351,7 +389,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 20px;
+    padding: 10px 16px;
     background: #1a1a2e;
     border-bottom: 1px solid var(--border);
   }
@@ -362,6 +400,46 @@
     gap: 12px;
     min-width: 0;
     flex: 1;
+  }
+
+  .compare-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .compare-left-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .compare-left-bottom {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .updated-at {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .updated-at-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 320px;
   }
 
   .position-indicator {

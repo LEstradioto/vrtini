@@ -145,9 +145,9 @@
   // Compare fullscreen modal state
   let showCompareFullscreen = $state(false);
   let compareImages = $state<{
-    left: { src: string; label: string };
-    right: { src: string; label: string };
-    diff?: { src: string; label: string };
+    left: { src: string; label: string; updatedAt?: string };
+    right: { src: string; label: string; updatedAt?: string };
+    diff?: { src: string; label: string; updatedAt?: string };
   } | null>(null);
   let compareFullscreenTitle = $state('');
   let compareMetrics = $state<{
@@ -329,9 +329,9 @@
     const testLabel = results.testLabel || 'Test';
     return filteredItems.map((item) => ({
       images: {
-        left: { src: getFileUrl(item.baseline), label: baselineLabel },
-        right: { src: getFileUrl(item.test), label: testLabel },
-        diff: item.diff ? { src: getFileUrl(item.diff), label: 'Diff' } : undefined,
+        left: { src: getFileUrl(item.baseline), label: baselineLabel, updatedAt: item.baselineUpdatedAt },
+        right: { src: getFileUrl(item.test), label: testLabel, updatedAt: item.testUpdatedAt },
+        diff: item.diff ? { src: getFileUrl(item.diff), label: 'Diff', updatedAt: item.diffUpdatedAt } : undefined,
       },
       title: `${item.scenario} · ${item.viewport}`,
       metrics: {
@@ -819,9 +819,9 @@
     const testLabel = results.testLabel || 'Test';
     return {
       images: {
-        left: { src: getFileUrl(item.baseline), label: baselineLabel },
-        right: { src: getFileUrl(item.test), label: testLabel },
-        diff: item.diff ? { src: getFileUrl(item.diff), label: 'Diff' } : undefined,
+        left: { src: getFileUrl(item.baseline), label: baselineLabel, updatedAt: item.baselineUpdatedAt },
+        right: { src: getFileUrl(item.test), label: testLabel, updatedAt: item.testUpdatedAt },
+        diff: item.diff ? { src: getFileUrl(item.diff), label: 'Diff', updatedAt: item.diffUpdatedAt } : undefined,
       },
       metrics: {
         pixelDiff: item.pixelDiff,

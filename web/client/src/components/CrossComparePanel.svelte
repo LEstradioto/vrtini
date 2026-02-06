@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     crossCompare,
+    test,
     type CrossResultItem,
     type CrossResults,
     type CrossResultsSummary,
@@ -47,6 +48,9 @@
   let crossResults = $state<CrossResults | null>(null);
   let crossResultsLoading = $state(false);
   let crossResultsError = $state<string | null>(null);
+  let crossTestRunning = $state(false);
+  let crossTestError = $state<string | null>(null);
+  let crossTestJob = $state<{ id: string; progress: number; total: number } | null>(null);
   let selectedCrossKey = $state<string | null>(null);
   let crossSearchQuery = $state('');
   let crossStatusFilter = $state<Set<CrossStatusFilter>>(new Set(['all']));
@@ -139,6 +143,89 @@
     }
   }
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function getItemKey(item: CrossResultItem): string {
+    return item.itemKey ?? `${item.scenario}__${item.viewport}`;
+  }
+
+  function getFilenameFromRelativePath(path: string): string {
+    const parts = path.split(/[/\\\\]/g);
+    return parts[parts.length - 1] || path;
+  }
+
+  function parseIsoDate(value?: string): number {
+    if (!value) return 0;
+    const t = Date.parse(value);
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  function getCrossItemLastUpdatedAt(item: CrossResultItem): string | null {
+    // Prefer underlying screenshot mtimes (baseline/test) rather than diff mtime.
+    const times = [parseIsoDate(item.baselineUpdatedAt), parseIsoDate(item.testUpdatedAt)].filter(
+      (t) => t > 0
+    );
+    if (times.length === 0) return null;
+    const max = Math.max(...times);
+    return new Date(max).toISOString();
+  }
+
+  function formatUpdatedAt(iso?: string | null): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString();
+  }
+
+  async function waitForTestJob(jobId: string) {
+    // Poll status (simple + reliable). Server also supports SSE, but polling keeps UI logic small.
+    for (;;) {
+      const status = await test.status(projectId, jobId);
+      crossTestJob = { id: status.id, progress: status.progress, total: status.total };
+      if (status.status !== 'running') return status;
+      await sleep(750);
+    }
+  }
+
+  async function rerunTestsForItems(items: CrossResultItem[]) {
+    if (items.length === 0) return;
+    crossTestRunning = true;
+    crossTestError = null;
+    crossTestJob = null;
+
+    const crossKey = selectedCrossKey;
+    const itemKeys = [...new Set(items.map(getItemKey))];
+    const filenames = [
+      ...new Set(
+        items.flatMap((item) => [
+          getFilenameFromRelativePath(item.baseline),
+          getFilenameFromRelativePath(item.test),
+        ])
+      ),
+    ];
+
+    try {
+      const started = await test.rerun(projectId, filenames);
+      await waitForTestJob(started.jobId);
+
+      // Refresh diffs for just the affected items.
+      if (crossKey) {
+        await runCrossCompare({
+          key: crossKey,
+          itemKeys,
+          resetAcceptances: true,
+        });
+      }
+    } catch (err) {
+      crossTestError = getErrorMessage(err, 'Failed to rerun tests');
+    } finally {
+      crossTestRunning = false;
+      crossTestJob = null;
+    }
+  }
+
   async function runSelectedCrossPair() {
     if (!selectedCrossKey) return;
     await runCrossCompare({ key: selectedCrossKey });
@@ -163,6 +250,18 @@
       itemKeys,
       resetAcceptances: true,
     });
+  }
+
+  async function rerunSelectedCrossItemTests() {
+    if (!crossResults || selectedCrossItems.size === 0) return;
+    const wanted = selectedCrossItems;
+    const items = crossResults.items.filter((item) => wanted.has(getItemKey(item)));
+    await rerunTestsForItems(items);
+  }
+
+  async function rerunFilteredCrossItemTests() {
+    if (crossFilteredItems.length === 0) return;
+    await rerunTestsForItems(crossFilteredItems);
   }
 
   async function clearCrossPair() {
@@ -386,15 +485,15 @@
   let selectedCrossCount = $derived(selectedCrossItems.size);
   let allCrossPageSelected = $derived(
     crossCurrentList.length > 0 &&
-    crossCurrentList.every((item) => selectedCrossItems.has(item.itemKey ?? `${item.scenario}__${item.viewport}`))
+    crossCurrentList.every((item) => selectedCrossItems.has(getItemKey(item)))
   );
   let allCrossFilteredSelected = $derived(
     crossFilteredItems.length > 0 &&
-    crossFilteredItems.every((item) => selectedCrossItems.has(item.itemKey ?? `${item.scenario}__${item.viewport}`))
+    crossFilteredItems.every((item) => selectedCrossItems.has(getItemKey(item)))
   );
 
   function toggleCrossSelected(item: CrossResultItem) {
-    const key = item.itemKey ?? `${item.scenario}__${item.viewport}`;
+    const key = getItemKey(item);
     const next = new Set(selectedCrossItems);
     if (next.has(key)) { next.delete(key); } else { next.add(key); }
     selectedCrossItems = next;
@@ -404,9 +503,9 @@
     if (crossFilteredItems.length === 0) return;
     if (allCrossFilteredSelected) return;
     if (allCrossPageSelected && crossTotalPages > 1) {
-      selectedCrossItems = new Set(crossFilteredItems.map((item) => item.itemKey ?? `${item.scenario}__${item.viewport}`));
+      selectedCrossItems = new Set(crossFilteredItems.map(getItemKey));
     } else {
-      selectedCrossItems = new Set(crossCurrentList.map((item) => item.itemKey ?? `${item.scenario}__${item.viewport}`));
+      selectedCrossItems = new Set(crossCurrentList.map(getItemKey));
     }
   }
 
@@ -552,8 +651,26 @@
     <div class="cross-selection-controls">
       {#if selectedCrossCount > 0}
         <span class="selected-count">{selectedCrossCount} selected</span>
-        <button class="btn small rerun" onclick={rerunSelectedCrossItems} disabled={crossCompareRunning}>
-          {crossCompareRunning ? 'Running...' : `Rerun (${selectedCrossCount})`}
+        <button class="btn small rerun" onclick={rerunSelectedCrossItems} disabled={crossCompareRunning || crossTestRunning}>
+          {crossCompareRunning ? 'Running...' : `Rerun Compare (${selectedCrossCount})`}
+        </button>
+        <button class="btn small rerun-tests" onclick={rerunSelectedCrossItemTests} disabled={crossCompareRunning || crossTestRunning}>
+          {crossTestRunning ? 'Rerunning...' : `Rerun Tests (${selectedCrossCount})`}
+        </button>
+      {:else}
+        <button
+          class="btn small rerun"
+          onclick={rerunFilteredCrossItems}
+          disabled={crossFilteredItems.length === 0 || crossCompareRunning || crossTestRunning}
+        >
+          {crossCompareRunning ? 'Running...' : `Rerun Compare Filtered (${crossFilteredItems.length})`}
+        </button>
+        <button
+          class="btn small rerun-tests"
+          onclick={rerunFilteredCrossItemTests}
+          disabled={crossFilteredItems.length === 0 || crossCompareRunning || crossTestRunning}
+        >
+          {crossTestRunning ? 'Rerunning...' : `Rerun Tests Filtered (${crossFilteredItems.length})`}
         </button>
       {/if}
       <button
@@ -567,18 +684,14 @@
       </button>
       <button class="btn small" onclick={deselectAllCross} disabled={selectedCrossCount === 0}>Deselect</button>
       <button class="btn small danger" onclick={deleteCrossItems} disabled={selectedCrossCount === 0}>Delete Selected</button>
-      <button
-        class="btn small rerun"
-        onclick={rerunFilteredCrossItems}
-        disabled={crossFilteredItems.length === 0 || crossCompareRunning}
-      >
-        {crossCompareRunning ? 'Running...' : `Rerun Filtered (${crossFilteredItems.length})`}
-      </button>
     </div>
   </div>
 
   {#if crossCompareError}
     <div class="error">{crossCompareError}</div>
+  {/if}
+  {#if crossTestError}
+    <div class="error">{crossTestError}</div>
   {/if}
   {#if crossResultsError}
     <div class="error">{crossResultsError}</div>
@@ -593,6 +706,9 @@
       {#if crossPairSummary}
         Pair: {crossResults.baselineLabel} vs {crossResults.testLabel}
         · Generated: {new Date(crossResults.generatedAt).toLocaleString()}
+        {#if crossTestRunning && crossTestJob}
+          · Rerunning tests: {crossTestJob.progress} / {crossTestJob.total}
+        {/if}
         · Items: {crossPairSummary.total}
         · Approved: {crossPairSummary.approved}
         · Smart Pass: {crossPairSummary.smart}
@@ -602,6 +718,9 @@
       {:else}
         Pair: {crossResults.baselineLabel} vs {crossResults.testLabel}
         · Generated: {new Date(crossResults.generatedAt).toLocaleString()}
+        {#if crossTestRunning && crossTestJob}
+          · Rerunning tests: {crossTestJob.progress} / {crossTestJob.total}
+        {/if}
         · Items: {crossFilteredItems.length}
       {/if}
     </div>
@@ -620,18 +739,24 @@
         {#each crossCurrentList as item}
           {@const smartPass = item.match && item.diffPercentage > 0}
           {@const crossTag = item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
+          {@const lastUpdated = getCrossItemLastUpdatedAt(item)}
           <div class="cross-card tag-{crossTag}">
             <div class="cross-card-header">
               <label class="cross-select-box">
                 <input
                   type="checkbox"
-                  checked={selectedCrossItems.has(item.itemKey ?? `${item.scenario}__${item.viewport}`)}
+                  checked={selectedCrossItems.has(getItemKey(item))}
                   onchange={() => toggleCrossSelected(item)}
                 />
               </label>
               <div>
                 <div class="cross-title">{item.scenario}</div>
                 <div class="cross-meta">{item.viewport}</div>
+                {#if lastUpdated}
+                  <div class="cross-updated" title={lastUpdated}>
+                    Last updated: {formatUpdatedAt(lastUpdated)}
+                  </div>
+                {/if}
               </div>
               <div class="cross-badge tag-{crossTag}">
                 {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
@@ -663,6 +788,14 @@
               {:else}
                 <button class="btn small" onclick={() => approveCrossItem(item)}>Approve Diff</button>
               {/if}
+              <button
+                class="btn small rerun-tests"
+                onclick={() => rerunTestsForItems([item])}
+                disabled={crossCompareRunning || crossTestRunning}
+                title="Rerun screenshots for both browsers in this card, then refresh cross-compare for this item"
+              >
+                {crossTestRunning ? 'Rerunning...' : 'Rerun Tests'}
+              </button>
               <button class="btn small danger" onclick={() => deleteCrossItem(item)}>Delete</button>
             </div>
           </div>
@@ -816,6 +949,13 @@
     color: var(--text-muted);
   }
 
+  .cross-updated {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+    opacity: 0.9;
+  }
+
   .cross-badge {
     font-size: 0.7rem;
     font-weight: 600;
@@ -898,6 +1038,8 @@
   .btn.small.all-selected { background: #22c55e; color: #fff; }
   .btn.small.rerun { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
   .btn.small.rerun:hover:not(:disabled) { background: var(--accent); color: #fff; }
+  .btn.small.rerun-tests { background: transparent; border: 1px solid #f59e0b; color: #f59e0b; }
+  .btn.small.rerun-tests:hover:not(:disabled) { background: #f59e0b; color: #111827; }
 
   .error {
     background: #7f1d1d;

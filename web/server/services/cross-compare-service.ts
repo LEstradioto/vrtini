@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir, rm } from 'fs/promises';
+import { mkdir, readFile, writeFile, readdir, rm, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve, relative, dirname } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
@@ -65,6 +65,9 @@ export interface CrossResultItem {
   baseline: string;
   test: string;
   diff?: string;
+  baselineUpdatedAt?: string;
+  testUpdatedAt?: string;
+  diffUpdatedAt?: string;
   match: boolean;
   reason: ComparisonResult['reason'];
   diffPercentage: number;
@@ -652,6 +655,25 @@ export async function loadCrossResults(
 
   results.items = results.items.filter(
     (item) => !pairDeletions[item.itemKey ?? buildItemKey(item.scenario, item.viewport)]
+  );
+
+  async function getMtimeIso(relativePath: string | undefined): Promise<string | undefined> {
+    if (!relativePath) return undefined;
+    try {
+      const s = await stat(resolve(projectPath, relativePath));
+      return s.mtime.toISOString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  results.items = await Promise.all(
+    results.items.map(async (item) => ({
+      ...item,
+      baselineUpdatedAt: await getMtimeIso(item.baseline),
+      testUpdatedAt: await getMtimeIso(item.test),
+      diffUpdatedAt: await getMtimeIso(item.diff),
+    }))
   );
 
   return results;

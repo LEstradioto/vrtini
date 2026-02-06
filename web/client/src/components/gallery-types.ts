@@ -10,6 +10,7 @@ export interface GalleryImage {
 export interface ImageInfo {
   src: string;
   label: string;
+  updatedAt?: string;
 }
 
 export interface CompareImages {

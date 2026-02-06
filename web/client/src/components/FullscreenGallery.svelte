@@ -82,6 +82,14 @@
   let effectiveIsAccepted = $derived(activeCompareItem?.accepted ?? isAccepted);
   let effectiveCompareBadge = $derived(activeCompareItem?.badge ?? null);
   let effectiveCompareViewport = $derived(activeCompareItem?.viewport ?? compareViewport ?? null);
+  let effectiveCompareUpdatedAt = $derived.by(() => {
+    if (!effectiveCompareImages) return null;
+    return {
+      left: effectiveCompareImages.left.updatedAt,
+      right: effectiveCompareImages.right.updatedAt,
+      diff: effectiveCompareImages.diff?.updatedAt,
+    };
+  });
   let hasCompareQueue = $derived(compareQueue.length > 1 && !!onCompareNavigate);
   let isCompareMode = $derived(!!effectiveCompareImages);
 
@@ -876,6 +884,7 @@
     {isCompareMode}
     {displayTitle}
     {effectiveCompareBadge}
+    effectiveCompareUpdatedAt={effectiveCompareUpdatedAt}
     {hasCompareQueue}
     {compareIndexValue}
     compareQueueLength={compareQueue.length}

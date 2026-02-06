@@ -4,6 +4,7 @@
 
 import type { ComparisonResult } from '../types/index.js';
 import { isDiff, getSsimScore, getResultError } from '../types/index.js';
+import { classifyFindings } from './classification.js';
 
 export interface ReportStats {
   passed: number;
@@ -271,6 +272,38 @@ export function buildAutoActionBadge(result: ComparisonResult): string {
   return `<span class="auto-action ${actionClass}">Auto: ${result.autoAction}</span>`;
 }
 
+export function buildDomInsightsSection(result: ComparisonResult): string {
+  if (!isDiff(result) || !result.domDiff || result.domDiff.findings.length === 0) return '';
+
+  const diff = result.domDiff;
+  const classification = classifyFindings(diff);
+
+  const badges = classification.classifications
+    .map((c) => {
+      const severityClass = getSeverityClass(c.maxSeverity);
+      return `<span class="dom-badge ${severityClass}">${escapeHtml(c.changeClass)} (${c.findings.length})</span>`;
+    })
+    .join(' ');
+
+  const topFindings = diff.findings
+    .slice(0, 8)
+    .map((f) => {
+      const severityClass = getSeverityClass(f.severity);
+      return `<li><span class="${severityClass}">[${f.severity}]</span> ${escapeHtml(f.description)}</li>`;
+    })
+    .join('');
+
+  return `
+    <details class="dom-insights">
+      <summary>DOM Insights (${diff.findings.length} findings) ${badges}</summary>
+      <ul class="dom-findings-list">
+        ${topFindings}
+      </ul>
+      ${diff.findings.length > 8 ? `<p class="dom-more">...and ${diff.findings.length - 8} more findings</p>` : ''}
+    </details>
+  `;
+}
+
 export function buildResultCardHtml(
   result: ComparisonResult,
   images: ResultImages,
@@ -281,6 +314,7 @@ export function buildResultCardHtml(
   const statusClass = getStatusClass(result);
   const statusText = getStatusText(result);
   const aiSection = buildAiSection(result);
+  const domInsightsSection = buildDomInsightsSection(result);
   const confidenceSection = buildConfidenceSection(result);
   const phashSection = buildPhashSection(result);
   const autoActionBadge = buildAutoActionBadge(result);
@@ -311,6 +345,7 @@ export function buildResultCardHtml(
         <button class="compare-btn" data-action="compare">Compare</button>
       </div>
       ${aiSection}
+      ${domInsightsSection}
       <div class="images">
         ${buildImageContainer({
           label: 'Baseline',

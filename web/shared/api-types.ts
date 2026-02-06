@@ -77,6 +77,13 @@ export interface AIAnalysisResult {
   tokensUsed?: number;
 }
 
+export interface DomDiffSummary {
+  findingCount: number;
+  similarity: number;
+  topFindings: { type: string; severity: string; description: string }[];
+  summary: Record<string, number>;
+}
+
 export interface CompareResult {
   diffUrl: string;
   diffFilename: string;
@@ -88,6 +95,7 @@ export interface CompareResult {
     baselineHash: string;
     testHash: string;
   };
+  domDiff?: DomDiffSummary;
 }
 
 export interface ImageResult {
@@ -128,6 +136,12 @@ export interface CrossResultItem {
   baseline: string;
   test: string;
   diff?: string;
+  /** mtime (ISO) of the underlying baseline screenshot file, if available */
+  baselineUpdatedAt?: string;
+  /** mtime (ISO) of the underlying test screenshot file, if available */
+  testUpdatedAt?: string;
+  /** mtime (ISO) of the generated diff image file, if available */
+  diffUpdatedAt?: string;
   match: boolean;
   reason: 'match' | 'diff' | 'no-baseline' | 'no-test' | 'error';
   diffPercentage: number;
@@ -239,5 +253,9 @@ export interface VRTConfig {
       enabled: boolean;
       rules: unknown[];
     };
+  };
+  domSnapshot?: {
+    enabled: boolean;
+    maxElements: number;
   };
 }

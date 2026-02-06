@@ -553,7 +553,11 @@ export async function approveImage(
   filename: string,
   config?: PathConfig
 ): Promise<void> {
-  const { testPath, baselinePath, diffPath } = getProjectImagePaths(projectPath, filename, config);
+  const { testPath, baselinePath, diffPath, outputDir, baselineDir } = getProjectImagePaths(
+    projectPath,
+    filename,
+    config
+  );
 
   if (!existsSync(testPath)) {
     throw new Error('Test image not found');
@@ -561,6 +565,14 @@ export async function approveImage(
 
   // Copy test to baseline
   await copyFile(testPath, baselinePath);
+
+  // Copy snapshot file if it exists alongside the test image
+  const snapshotFilename = filename.replace(/\.png$/, '.snapshot.json');
+  const testSnapshotPath = resolve(outputDir, snapshotFilename);
+  const baselineSnapshotPath = resolve(baselineDir, snapshotFilename);
+  if (existsSync(testSnapshotPath)) {
+    await copyFile(testSnapshotPath, baselineSnapshotPath);
+  }
 
   // Delete diff file so status updates from "failed" to "passed"
   if (existsSync(diffPath)) {

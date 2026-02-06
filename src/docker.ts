@@ -101,6 +101,9 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
 
   const disableAnimations = config.disableAnimations ?? true;
   const concurrency = config.concurrency ?? 5;
+  const captureSnapshot = config.domSnapshot?.enabled
+    ? { maxElements: config.domSnapshot.maxElements ?? 2000 }
+    : undefined;
   const allResults: ScreenshotResult[] = [];
   let completedTasks = 0;
 
@@ -132,7 +135,8 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
       (completed) => {
         groupCompleted = completed;
         onProgress?.(completedTasks + groupCompleted, totalTasks, 'capturing');
-      }
+      },
+      captureSnapshot
     );
     allResults.push(...results);
 

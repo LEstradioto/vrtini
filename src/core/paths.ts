@@ -99,6 +99,14 @@ export function getScreenshotFilename(
   return `${sanitizedName}_${browserPart}_${viewportName}.png`;
 }
 
+/**
+ * Derive snapshot filename from screenshot filename.
+ * e.g., "homepage_chromium_desktop.png" -> "homepage_chromium_desktop.snapshot.json"
+ */
+export function getSnapshotFilename(screenshotFilename: string): string {
+  return screenshotFilename.replace(/\.png$/, '.snapshot.json');
+}
+
 export function getAcceptancesPath(projectPath: string): string {
   return resolve(projectPath, '.vrt', 'acceptances.json');
 }

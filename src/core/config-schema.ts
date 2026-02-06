@@ -103,6 +103,13 @@ const AutoThresholdsSchema = z.object({
   minSampleSize: z.number().int().min(1).optional(),
 });
 
+const DomSnapshotSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    maxElements: z.number().int().min(100).max(10000).default(2000),
+  })
+  .default({});
+
 const AIAnalysisSchema = z.object({
   enabled: z.boolean().default(false),
   provider: z.enum(['anthropic', 'openai']).default('anthropic'),
@@ -155,6 +162,8 @@ export const ConfigSchema = z.object({
   autoThresholds: AutoThresholdsSchema.optional(),
   // Confidence thresholds
   confidence: ConfidenceThresholdsSchema.optional(),
+  // DOM snapshot capture (opt-in)
+  domSnapshot: DomSnapshotSchema.optional(),
   // Report options
   report: z
     .object({

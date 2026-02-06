@@ -25,6 +25,8 @@ const { chromium, webkit } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+const { captureDomSnapshot } = require('./dom-snapshot.js');
+
 const INPUT_DIR = '/input';
 const OUTPUT_DIR = '/output';
 const CONFIG_FILE = path.join(INPUT_DIR, 'batch.json');
@@ -191,8 +193,21 @@ async function runTask(browser, browserName, browserDisplayName, task) {
       });
     }
 
+    // Capture DOM snapshot if requested (non-fatal)
+    let snapshotName;
+    if (task.captureSnapshot) {
+      try {
+        const maxElements = task.captureSnapshot.maxElements || 2000;
+        const snapshot = await page.evaluate(captureDomSnapshot, maxElements);
+        snapshotName = screenshotName.replace(/\.png$/, '.snapshot.json');
+        fs.writeFileSync(path.join(OUTPUT_DIR, snapshotName), JSON.stringify(snapshot));
+      } catch (snapshotErr) {
+        console.warn(`[WARN] Snapshot failed for ${taskId}: ${snapshotErr.message}`);
+      }
+    }
+
     console.log(`[OK] ${taskId} -> ${screenshotName}`);
-    return { taskId, success: true, screenshot: screenshotName };
+    return { taskId, success: true, screenshot: screenshotName, snapshot: snapshotName };
   } catch (error) {
     console.error(`[FAIL] ${taskId}: ${error.message}`);
     // Still capture whatever the browser shows (error page, blank, etc.)

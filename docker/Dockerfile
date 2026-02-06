@@ -16,6 +16,7 @@ RUN npm init -y && npm install playwright@${PLAYWRIGHT_VERSION}
 # Copy runner scripts
 COPY playwright-runner.js .
 COPY batch-runner.js .
+COPY dom-snapshot.js .
 
 # Input/output directories will be mounted as volumes
 # /input - contains scenario config JSON (or batch.json for batch mode)

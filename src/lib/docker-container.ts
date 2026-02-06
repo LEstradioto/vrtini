@@ -32,6 +32,7 @@ export interface ScreenshotResult {
   task: ScreenshotTask;
   success: boolean;
   screenshotPath?: string;
+  snapshotPath?: string;
   error?: string;
   logs?: string;
 }
@@ -40,6 +41,7 @@ interface BatchTask {
   scenario: Scenario;
   viewport: Viewport;
   disableAnimations: boolean;
+  captureSnapshot?: { maxElements: number };
 }
 
 interface BatchConfig {
@@ -51,7 +53,7 @@ interface BatchConfig {
 
 /** Discriminated union for batch result entries */
 type BatchResultEntry =
-  | { taskId: string; success: true; screenshot: string; warning?: string }
+  | { taskId: string; success: true; screenshot: string; snapshot?: string; warning?: string }
   | { taskId: string; success: false; error: string };
 
 interface BatchResults {
@@ -190,7 +192,8 @@ export async function runBatchContainer(
   concurrency = 5,
   signal?: AbortSignal,
   onContainerStart?: (containerId: string) => void,
-  onTaskProgress?: (completed: number) => void
+  onTaskProgress?: (completed: number) => void,
+  captureSnapshot?: { maxElements: number }
 ): Promise<ScreenshotResult[]> {
   if (tasks.length === 0) {
     return [];
@@ -211,6 +214,7 @@ export async function runBatchContainer(
       scenario: t.scenario,
       viewport: t.viewport,
       disableAnimations,
+      ...(captureSnapshot ? { captureSnapshot } : {}),
     })),
   };
   const batchInputDir = join(inputDir, `batch-${browserDisplayName}`);
@@ -350,6 +354,7 @@ export async function runBatchContainer(
           task,
           success: true,
           screenshotPath: join(outputDir, batchResult.screenshot),
+          snapshotPath: batchResult.snapshot ? join(outputDir, batchResult.snapshot) : undefined,
           logs,
         };
       }

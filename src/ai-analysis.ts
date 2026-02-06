@@ -6,6 +6,7 @@ import {
   type ChangeCategory,
   type Severity,
   type Recommendation,
+  type DomDiffContext,
 } from './domain/ai-prompt.js';
 import {
   type AIProvider,
@@ -27,6 +28,7 @@ export interface AIAnalysisOptions {
   pixelDiff?: number;
   diffPercentage?: number;
   ssimScore?: number;
+  domDiff?: DomDiffContext;
 }
 
 const DEFAULT_MODELS: Record<AIProviderName, string> = {

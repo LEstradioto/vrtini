@@ -25,12 +25,18 @@ export interface AIAnalysisResult {
   tokensUsed?: number;
 }
 
+export interface DomDiffContext {
+  findingCounts: Record<string, number>;
+  topFindings: string[];
+}
+
 export interface PromptContext {
   url?: string;
   scenarioName?: string;
   pixelDiff?: number;
   diffPercentage?: number;
   ssimScore?: number;
+  domDiff?: DomDiffContext;
 }
 
 export function buildContextLines(ctx: PromptContext): string[] {
@@ -41,6 +47,16 @@ export function buildContextLines(ctx: PromptContext): string[] {
   if (ctx.diffPercentage !== undefined)
     lines.push(`Diff percentage: ${ctx.diffPercentage.toFixed(2)}%`);
   if (ctx.ssimScore !== undefined) lines.push(`SSIM score: ${(ctx.ssimScore * 100).toFixed(1)}%`);
+  if (ctx.domDiff) {
+    const counts = Object.entries(ctx.domDiff.findingCounts)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(', ');
+    if (counts) lines.push(`DOM diff findings: ${counts}`);
+    if (ctx.domDiff.topFindings.length > 0) {
+      lines.push(`Top DOM changes: ${ctx.domDiff.topFindings.join('; ')}`);
+    }
+  }
   return lines;
 }
 

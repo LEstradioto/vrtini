@@ -1,4 +1,5 @@
 import type { AIAnalysisResult } from './ai-analysis.js';
+import type { ChangeCategory } from './domain/ai-prompt.js';
 import {
   calculateWeightedScore,
   determineVerdict,
@@ -18,6 +19,7 @@ export interface ConfidenceInputs {
   phashSimilarity?: number;
   pixelDiffPercent: number;
   aiAnalysis?: AIAnalysisResult;
+  domCategory?: ChangeCategory;
 }
 
 function buildScoringInputs(inputs: ConfidenceInputs) {
@@ -28,6 +30,7 @@ function buildScoringInputs(inputs: ConfidenceInputs) {
     aiConfidence: inputs.aiAnalysis?.confidence,
     aiRecommendation: inputs.aiAnalysis?.recommendation,
     aiCategory: inputs.aiAnalysis?.category,
+    domCategory: inputs.domCategory,
   };
 }
 

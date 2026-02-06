@@ -64,6 +64,7 @@ export interface ScoringInputs {
   aiConfidence?: number;
   aiRecommendation?: 'approve' | 'review' | 'reject';
   aiCategory?: ChangeCategory;
+  domCategory?: ChangeCategory;
 }
 
 export interface ScoreFactor {
@@ -172,9 +173,10 @@ export function calculateWeightedScore(
   // Normalize
   let baseScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
 
-  // Apply category adjustment
-  if (inputs.aiCategory) {
-    const adjustment = config.categoryAdjustments[inputs.aiCategory] || 0;
+  // Apply category adjustment (AI category takes precedence, DOM classification as fallback)
+  const effectiveCategory = inputs.aiCategory ?? inputs.domCategory;
+  if (effectiveCategory) {
+    const adjustment = config.categoryAdjustments[effectiveCategory] || 0;
     baseScore = clamp01(baseScore + adjustment);
   }
 

@@ -8,7 +8,12 @@ import { isDiff } from '../types/index.js';
 import { generateReport } from '../report.js';
 import { analyzeWithAI, type AIProvider } from '../ai-analysis.js';
 import { calculateConfidence } from '../confidence.js';
-import { getProjectDirs, getReportPath, getImageMetadataPath } from '../core/paths.js';
+import {
+  getProjectDirs,
+  getReportPath,
+  getImageMetadataPath,
+  getSnapshotFilename,
+} from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';
 import { log } from '../core/logger.js';
 import { openInBrowser } from './utils.js';
@@ -24,6 +29,8 @@ import {
   type ImageMetadata,
 } from '../core/image-metadata.js';
 import type { VRTConfig } from '../core/config.js';
+import { classifyFindings, classificationToCategory } from '../domain/classification.js';
+import type { DomDiffContext } from '../domain/ai-prompt.js';
 
 function buildStatusInfo(result: ComparisonResult): { status: string; info: string } {
   switch (result.reason) {
@@ -145,6 +152,15 @@ async function compareTask(
   const { scenario, browser, viewport, testPath, baselinePath, diffPath } = task;
   const enginesConfig = buildEnginesConfig(quickMode, config.engines);
 
+  // Derive snapshot paths from image paths
+  const snapshotFilename = getSnapshotFilename(task.filename);
+  const baselineSnapshotPath = config.domSnapshot?.enabled
+    ? baselinePath.replace(task.filename, snapshotFilename)
+    : undefined;
+  const testSnapshotPath = config.domSnapshot?.enabled
+    ? testPath.replace(task.filename, snapshotFilename)
+    : undefined;
+
   let result: ComparisonResult = await compareImages(baselinePath, testPath, diffPath, {
     threshold: config.threshold,
     diffColor: config.diffColor,
@@ -155,6 +171,8 @@ async function compareTask(
     maxDiffPercentage:
       scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
     maxDiffPixels: scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
+    baselineSnapshot: baselineSnapshotPath,
+    testSnapshot: testSnapshotPath,
   });
 
   if (isDiff(result)) {
@@ -173,6 +191,19 @@ async function enrichDiffResult(
 ): Promise<ComparisonResult> {
   let enriched = result;
   const { scenario, browser, viewport } = task;
+
+  // Compute DOM classification if DOM diff is present
+  let domDiffContext: DomDiffContext | undefined;
+  let domCategory: ReturnType<typeof classificationToCategory> | undefined;
+  if (result.domDiff) {
+    const classification = classifyFindings(result.domDiff);
+    domCategory = classificationToCategory(classification);
+    const topFindings = result.domDiff.findings.slice(0, 5).map((f) => f.description);
+    domDiffContext = {
+      findingCounts: result.domDiff.summary,
+      topFindings,
+    };
+  }
 
   const needsAI =
     ai.enabled &&
@@ -193,6 +224,7 @@ async function enrichDiffResult(
         pixelDiff: result.pixelDiff,
         diffPercentage: result.diffPercentage,
         ssimScore: result.ssimScore,
+        domDiff: domDiffContext,
       });
       enriched = { ...enriched, aiAnalysis: aiResult };
     } catch (err) {
@@ -205,6 +237,7 @@ async function enrichDiffResult(
     phashSimilarity: enriched.phash?.similarity,
     pixelDiffPercent: enriched.diffPercentage,
     aiAnalysis: isDiff(enriched) ? enriched.aiAnalysis : undefined,
+    domCategory,
   });
   return { ...enriched, confidence };
 }

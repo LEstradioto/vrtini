@@ -22,6 +22,8 @@ import {
   type EnginesConfig,
   type ConfidenceThresholds,
 } from './engines/index.js';
+import { compareDomSnapshots } from './engines/dom-diff.js';
+import type { DomSnapshot } from './domain/dom-snapshot.js';
 
 export type {
   ComparisonResult,
@@ -84,6 +86,8 @@ export interface CompareOptions {
   sizeMismatchHandling?: 'strict' | 'ignore';
   maxDiffPercentage?: number;
   maxDiffPixels?: number;
+  baselineSnapshot?: string;
+  testSnapshot?: string;
 }
 
 function buildMissingResult(
@@ -253,6 +257,20 @@ export async function compareImages(
       options.confidenceThresholds
     );
 
+    // DOM diff: compare snapshots if both paths provided
+    let domDiff: ComparisonDiff['domDiff'];
+    if (options.baselineSnapshot && options.testSnapshot) {
+      try {
+        const [baseSnap, testSnap] = await Promise.all([
+          readFile(options.baselineSnapshot, 'utf-8').then((s) => JSON.parse(s) as DomSnapshot),
+          readFile(options.testSnapshot, 'utf-8').then((s) => JSON.parse(s) as DomSnapshot),
+        ]);
+        domDiff = compareDomSnapshots(baseSnap, testSnap);
+      } catch {
+        // Snapshot comparison failed, continue without it
+      }
+    }
+
     return {
       reason: 'diff',
       match: false,
@@ -269,6 +287,7 @@ export async function compareImages(
       phash,
       engineResults,
       unifiedConfidence,
+      domDiff,
     } satisfies ComparisonDiff;
   } catch (err: unknown) {
     return {

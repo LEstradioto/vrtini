@@ -6,6 +6,7 @@ import type { PerceptualHashResult } from '../phash.js';
 import type { AIAnalysisResult } from '../domain/ai-prompt.js';
 import type { Verdict, ScoringFactors } from '../domain/scoring.js';
 import type { UnifiedConfidence, EngineResult } from '../engines/index.js';
+import type { DomDiffResult } from '../engines/dom-diff.js';
 
 export interface BrowserRef {
   name: 'chromium' | 'webkit';
@@ -68,6 +69,7 @@ export interface ComparisonDiff extends ComparisonBase {
   autoAction?: 'approve' | 'flag' | 'reject' | null;
   unifiedConfidence?: UnifiedConfidence;
   engineResults?: EngineResult[];
+  domDiff?: DomDiffResult;
 }
 
 /** No baseline image exists (new test) */

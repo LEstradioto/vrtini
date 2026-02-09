@@ -175,4 +175,34 @@ describe('compareImages', () => {
       expect(engineResults.length).toBeGreaterThan(0);
     }
   });
+
+  it('trims uniform trailing bottom whitespace to avoid height-mismatch noise', async () => {
+    const a = getDiffPath('trim-uniform-a.png');
+    const b = getDiffPath('trim-uniform-b.png');
+    const diffPath = getDiffPath('diff-trim-uniform.png');
+
+    writeSolidPng(a, 10, 10, WHITE);
+    writeSolidPng(b, 10, 12, WHITE); // Extra uniform rows at the bottom
+
+    const result = await compareImages(a, b, diffPath);
+
+    expect(result.match).toBe(true);
+    expect(result.reason).toBe('match');
+    expect(result.pixelDiff).toBe(0);
+  });
+
+  it('does not trim when extra bottom region is not uniform', async () => {
+    const a = getDiffPath('trim-nonuniform-a.png');
+    const b = getDiffPath('trim-nonuniform-b.png');
+    const diffPath = getDiffPath('diff-trim-nonuniform.png');
+
+    writeSolidPng(a, 10, 10, WHITE);
+    writeSolidPng(b, 10, 12, WHITE, (png) => setPixel(png, 0, 11, BLACK)); // Extra region has content
+
+    const result = await compareImages(a, b, diffPath);
+
+    expect(result.match).toBe(false);
+    expect(result.reason).toBe('diff');
+    expect(result.pixelDiff).toBeGreaterThan(0);
+  });
 });

@@ -222,6 +222,7 @@ describe('listImagesWithMetadata', () => {
         browser: 'chromium',
         viewport: 'desktop',
       });
+      expect(result[0].updatedAt).toEqual(expect.any(String));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -256,6 +257,7 @@ describe('listImagesWithMetadata', () => {
         browser: 'chromium',
         viewport: 'desktop',
       });
+      expect(result[0].updatedAt).toEqual(expect.any(String));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

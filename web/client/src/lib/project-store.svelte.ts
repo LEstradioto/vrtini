@@ -282,6 +282,7 @@ export class ProjectStore {
   getMetadataForType(type: ImageType, filename: string): ImageMetadata | null {
     if (type === 'baseline') return this.baselineMetadataMap.get(filename) ?? null;
     if (type === 'test') return this.testMetadataMap.get(filename) ?? null;
+    if (type === 'diff') return this.diffsMetadataMap.get(filename) ?? null;
     return null;
   }
 

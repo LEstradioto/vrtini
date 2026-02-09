@@ -6,6 +6,7 @@
     displayTitle: string;
     effectiveCompareBadge: { label: string; tone: string } | null;
     effectiveCompareUpdatedAt?: { left?: string; right?: string; diff?: string } | null;
+    queueUpdatedAt?: { label: string; iso: string } | null;
     hasCompareQueue: boolean;
     compareIndexValue: number;
     compareQueueLength: number;
@@ -22,24 +23,19 @@
     leftLabel: string;
     rightLabel: string;
     diffLabel: string;
-    panicActive: boolean;
     zoom: number;
     columnMode: ColumnMode;
     baseImageSrc: string;
-    showThumbnails: boolean;
     localThreshold: number;
     recomparing: boolean;
     onViewChange: (view: 'baseline' | 'test' | 'diff') => void;
-    onTogglePanic: () => void;
     onZoomIn: () => void;
     onZoomOut: () => void;
     onResetZoom: () => void;
     onFitToHeight: () => void;
     onColumnModeChange: (mode: ColumnMode) => void;
     onToggleColumnMode: () => void;
-    onFitColumnsToScreen: () => void;
     onDiffOpacityChange: (value: number) => void;
-    onToggleThumbnails: () => void;
     onClose: () => void;
     onRecompare?: () => Promise<void>;
     onThresholdChange?: (threshold: number) => void;
@@ -51,6 +47,7 @@
     displayTitle,
     effectiveCompareBadge,
     effectiveCompareUpdatedAt = null,
+    queueUpdatedAt = null,
     hasCompareQueue,
     compareIndexValue,
     compareQueueLength,
@@ -67,24 +64,19 @@
     leftLabel,
     rightLabel,
     diffLabel,
-    panicActive,
     zoom,
     columnMode,
     baseImageSrc,
-    showThumbnails,
     localThreshold,
     recomparing,
     onViewChange,
-    onTogglePanic,
     onZoomIn,
     onZoomOut,
     onResetZoom,
     onFitToHeight,
     onColumnModeChange,
     onToggleColumnMode,
-    onFitColumnsToScreen,
     onDiffOpacityChange,
-    onToggleThumbnails,
     onClose,
     onRecompare,
     onThresholdChange,
@@ -115,132 +107,130 @@
     {#if isCompareMode}
       <div class="compare-left">
         <div class="compare-left-top">
-          <span class="filename" title={displayTitle}>{displayTitle}</span>
-          {#if effectiveCompareBadge}
-            <span class="compare-badge {`tone-${effectiveCompareBadge.tone}`.trim()}">
-              {effectiveCompareBadge.label}
-            </span>
-          {/if}
-          {#if hasCompareQueue}
-            <span class="position-indicator compare-count">
-              {compareIndexValue + 1} / {compareQueueLength}
-            </span>
+          <div class="compare-left-title">
+            <span class="filename" title={displayTitle}>{displayTitle}</span>
+            {#if effectiveCompareBadge}
+              <span class="compare-badge {`tone-${effectiveCompareBadge.tone}`.trim()}">
+                {effectiveCompareBadge.label}
+              </span>
+            {/if}
+            {#if hasCompareQueue}
+              <span class="position-indicator compare-count">
+                {compareIndexValue + 1} / {compareQueueLength}
+              </span>
+            {/if}
+          </div>
+
+          {#if effectiveCompareMetrics}
+            <div class="metrics-display compare-inline">
+              <span class="metric" title="Number of pixels that differ between baseline and test.">
+                <span class="metric-label">Px</span>
+                <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
+              </span>
+              <span class="metric" title="Percentage of differing pixels (pixel diff ÷ total pixels).">
+                <span class="metric-label">Diff</span>
+                <span class="metric-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
+              </span>
+              {#if effectiveCompareMetrics.ssimScore !== undefined}
+                <span class="metric" title="SSIM (Structural Similarity Index). Higher is more similar.">
+                  <span class="metric-label">SSIM</span>
+                  <span class="metric-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
+                </span>
+              {/if}
+              {#if effectiveCompareMetrics.phash}
+                <span class="metric" title="Perceptual hash similarity. Higher is more similar.">
+                  <span class="metric-label">pHash</span>
+                  <span class="metric-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%</span>
+                </span>
+              {/if}
+            </div>
           {/if}
         </div>
 
-        {#if effectiveCompareMetrics || effectiveCompareUpdatedAt}
-          <div class="compare-left-bottom">
-            {#if effectiveCompareMetrics}
-              <div class="metrics-display">
-                <span
-                  class="metric"
-                  title="Number of pixels that differ between baseline and test."
-                >
-                  <span class="metric-label">Pixels</span>
-                  <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
-                </span>
-                <span
-                  class="metric"
-                  title="Percentage of differing pixels (pixel diff ÷ total pixels)."
-                >
-                  <span class="metric-label">Diff</span>
-                  <span class="metric-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
-                </span>
-                {#if effectiveCompareMetrics.ssimScore !== undefined}
-                  <span
-                    class="metric"
-                    title="SSIM (Structural Similarity Index). Higher is more similar."
-                  >
-                    <span class="metric-label">SSIM</span>
-                    <span class="metric-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
-                  </span>
-                {/if}
-                {#if effectiveCompareMetrics.phash}
-                  <span
-                    class="metric"
-                    title="Perceptual hash similarity. Higher is more similar."
-                  >
-                    <span class="metric-label">pHash</span>
-                    <span class="metric-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%</span>
-                  </span>
-                {/if}
-              </div>
+        {#if effectiveCompareUpdatedAt && (effectiveCompareUpdatedAt.left || effectiveCompareUpdatedAt.right || effectiveCompareUpdatedAt.diff)}
+          <div class="updated-at updated-at--plain">
+            {#if effectiveCompareUpdatedAt.left}
+              <span class="updated-at-item" title={effectiveCompareUpdatedAt.left}>
+                {leftLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.left)}
+              </span>
             {/if}
-
-            {#if effectiveCompareUpdatedAt && (effectiveCompareUpdatedAt.left || effectiveCompareUpdatedAt.right || effectiveCompareUpdatedAt.diff)}
-              <div class="updated-at">
-                {#if effectiveCompareUpdatedAt.left}
-                  <span class="updated-at-item" title={effectiveCompareUpdatedAt.left}>
-                    {leftLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.left)}
-                  </span>
-                {/if}
-                {#if effectiveCompareUpdatedAt.right}
-                  <span class="updated-at-item" title={effectiveCompareUpdatedAt.right}>
-                    {rightLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.right)}
-                  </span>
-                {/if}
-                {#if effectiveCompareUpdatedAt.diff}
-                  <span class="updated-at-item" title={effectiveCompareUpdatedAt.diff}>
-                    {diffLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.diff)}
-                  </span>
-                {/if}
-              </div>
+            {#if effectiveCompareUpdatedAt.right}
+              <span class="updated-at-item" title={effectiveCompareUpdatedAt.right}>
+                {rightLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.right)}
+              </span>
+            {/if}
+            {#if effectiveCompareUpdatedAt.diff}
+              <span class="updated-at-item" title={effectiveCompareUpdatedAt.diff}>
+                {diffLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.diff)}
+              </span>
             {/if}
           </div>
         {/if}
       </div>
     {:else}
-      <span class="position-indicator">{currentIndex + 1} / {queueLength}</span>
-      {#if currentImage}
-        <span class="filename" title={currentImage.filename}>{currentImage.filename}</span>
-        <span class="status-badge" style="background: {getStatusColor(currentImage.status)}">
-          {currentImage.status}
-        </span>
-        {#if currentImage.confidence}
-          <span class="confidence-badge {currentImage.confidence.verdict}">
-            {currentImage.confidence.score}%
-          </span>
-        {/if}
-        {#if currentImage.metrics}
-          <div class="metrics-display compact">
-            <span
-              class="metric"
-              title="Percentage of differing pixels (pixel diff ÷ total pixels)."
-            >
-              <span class="metric-label">Diff</span>
-              <span class="metric-value">{currentImage.metrics.diffPercentage.toFixed(2)}%</span>
+      <div class="queue-left">
+        <div class="queue-left-top">
+          <span class="position-indicator">{currentIndex + 1} / {queueLength}</span>
+          {#if currentImage}
+            <span class="filename" title={currentImage.filename}>{currentImage.filename}</span>
+            <span class="status-badge" style="background: {getStatusColor(currentImage.status)}">
+              {currentImage.status}
             </span>
-            {#if currentImage.metrics.ssimScore !== undefined}
-              <span
-                class="metric"
-                title="SSIM (Structural Similarity Index). Higher is more similar."
-              >
-                <span class="metric-label">SSIM</span>
-                <span class="metric-value">{(currentImage.metrics.ssimScore * 100).toFixed(1)}%</span>
+            {#if currentImage.confidence}
+              <span class="confidence-badge {currentImage.confidence.verdict}">
+                {currentImage.confidence.score}%
               </span>
             {/if}
+            {#if currentImage.metrics}
+              <div class="metrics-display compact">
+                <span
+                  class="metric"
+                  title="Percentage of differing pixels (pixel diff ÷ total pixels)."
+                >
+                  <span class="metric-label">Diff</span>
+                  <span class="metric-value">{currentImage.metrics.diffPercentage.toFixed(2)}%</span>
+                </span>
+                {#if currentImage.metrics.ssimScore !== undefined}
+                  <span
+                    class="metric"
+                    title="SSIM (Structural Similarity Index). Higher is more similar."
+                  >
+                    <span class="metric-label">SSIM</span>
+                    <span class="metric-value">{(currentImage.metrics.ssimScore * 100).toFixed(1)}%</span>
+                  </span>
+                {/if}
+              </div>
+            {/if}
+            {#if baselineDims || testDims}
+              <div class="dims-display">
+                {#if baselineDims}
+                  <span class="dim-item">
+                    <span class="dim-label">B:</span>
+                    <span class="dim-value">{baselineDims.w}x{baselineDims.h}</span>
+                  </span>
+                {/if}
+                {#if testDims}
+                  <span class="dim-item">
+                    <span class="dim-label">T:</span>
+                    <span class="dim-value">{testDims.w}x{testDims.h}</span>
+                  </span>
+                {/if}
+                {#if baselineDims && testDims && (baselineDims.w !== testDims.w || baselineDims.h !== testDims.h)}
+                  <span class="dim-mismatch" title="Dimension mismatch">!</span>
+                {/if}
+              </div>
+            {/if}
+          {/if}
+        </div>
+
+        {#if queueUpdatedAt?.iso}
+          <div class="updated-at updated-at--plain">
+            <span class="updated-at-item" title={queueUpdatedAt.iso}>
+              Updated ({queueUpdatedAt.label}): {formatUpdatedAt(queueUpdatedAt.iso)}
+            </span>
           </div>
         {/if}
-        {#if baselineDims || testDims}
-          <div class="dims-display">
-            {#if baselineDims}
-              <span class="dim-item">
-                <span class="dim-label">B:</span>
-                <span class="dim-value">{baselineDims.w}x{baselineDims.h}</span>
-              </span>
-            {/if}
-            {#if testDims}
-              <span class="dim-item">
-                <span class="dim-label">T:</span>
-                <span class="dim-value">{testDims.w}x{testDims.h}</span>
-              </span>
-            {/if}
-            {#if baselineDims && testDims && (baselineDims.w !== testDims.w || baselineDims.h !== testDims.h)}
-              <span class="dim-mismatch" title="Dimension mismatch">!</span>
-            {/if}
-          </div>
-        {/if}
-      {/if}
+      </div>
     {/if}
     {#if currentView === 'diff' && hasDiff}
       <div class="opacity-control">
@@ -286,16 +276,6 @@
         {diffLabel} <kbd>3</kbd>
       </button>
     </div>
-    {#if isCompareMode}
-      <button
-        class="panic-btn"
-        class:active={panicActive}
-        onclick={onTogglePanic}
-        title="Panic check: alternates baseline/test every 250ms and flashes diff every 7s (P)"
-      >
-        Panic
-      </button>
-    {/if}
 
     <div class="zoom-controls">
       <button class="zoom-btn" onclick={onZoomOut}>-</button>
@@ -327,14 +307,6 @@
         </select>
         <button class="fit-columns-btn" onclick={onToggleColumnMode} title="Toggle single/multi column (C)">
           {columnMode === '1' ? 'Multi' : 'Single'}
-        </button>
-        <button
-          class="fit-columns-btn"
-          class:active={columnMode === 'auto'}
-          onclick={onFitColumnsToScreen}
-          title="Auto-fit columns (F)"
-        >
-          Auto Fit
         </button>
       </div>
     {/if}
@@ -373,11 +345,6 @@
         </button>
       </div>
     {/if}
-    {#if !isCompareMode}
-      <button class="thumbnail-toggle" class:active={showThumbnails} onclick={onToggleThumbnails}>
-        Thumbnails <kbd>T</kbd>
-      </button>
-    {/if}
     <button class="close-btn" onclick={onClose}>
       Close <kbd>Esc</kbd>
     </button>
@@ -402,6 +369,21 @@
     flex: 1;
   }
 
+  .queue-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .queue-left-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
   .compare-left {
     display: flex;
     flex-direction: column;
@@ -410,29 +392,33 @@
   }
 
   .compare-left-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .compare-left-title {
     display: flex;
     align-items: center;
     gap: 10px;
     min-width: 0;
   }
 
-  .compare-left-bottom {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-
   .updated-at {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 3px 8px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.04);
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 11px;
+  }
+
+  .updated-at.updated-at--plain {
+    padding: 0;
+    border: none;
+    background: transparent;
+    opacity: 0.85;
   }
 
   .updated-at-item {
@@ -692,26 +678,8 @@
     border-radius: 4px;
   }
 
-  .panic-btn {
-    background: var(--border);
-    border: 1px solid var(--border-soft);
-    color: var(--text-strong);
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .panic-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .panic-btn.active {
-    border-color: rgba(239, 68, 68, 0.8);
-    color: rgb(239, 68, 68);
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35);
+  .metrics-display.compare-inline {
+    justify-content: flex-end;
   }
 
   .column-controls {
@@ -782,36 +750,6 @@
     display: flex;
     align-items: center;
     gap: 10px;
-  }
-
-  .thumbnail-toggle {
-    padding: 8px 14px;
-    background: var(--border);
-    border: none;
-    color: var(--text-muted);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: all 0.15s;
-  }
-
-  .thumbnail-toggle:hover {
-    background: var(--border-soft);
-    color: var(--text-strong);
-  }
-
-  .thumbnail-toggle.active {
-    background: var(--accent);
-    color: var(--text-strong);
-  }
-
-  .thumbnail-toggle kbd {
-    display: inline-block;
-    padding: 2px 5px;
-    margin-left: 6px;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 3px;
-    font-size: 10px;
   }
 
   .close-btn {

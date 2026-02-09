@@ -1227,6 +1227,7 @@
     onRerun={handleRerun}
     testRunning={!!testState}
     {getImageUrl}
+    getImageMetadata={(type, filename) => store.getMetadataForType(type, filename)}
   />
 {/if}
 

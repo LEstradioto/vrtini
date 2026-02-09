@@ -4,6 +4,8 @@ export interface ImageMetadata {
   browser: string;
   version?: string;
   viewport: string;
+  /** Screenshot file mtime (ISO). Useful to spot stale baselines/tests. */
+  updatedAt?: string;
 }
 
 export function formatBrowserLabel(browser: string, version?: string): string {

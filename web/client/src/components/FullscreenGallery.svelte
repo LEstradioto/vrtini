@@ -3,6 +3,7 @@
   import GalleryHeader from './GalleryHeader.svelte';
   import GalleryImageViewer from './GalleryImageViewer.svelte';
   import GalleryThumbnailStrip from './GalleryThumbnailStrip.svelte';
+  import CompareThumbnailStrip from './CompareThumbnailStrip.svelte';
   import type {
     GalleryImage,
     CompareImages,
@@ -41,6 +42,11 @@
     recomparing?: boolean;
     // Common
     onClose: () => void;
+    // Optional metadata accessor (used for "Updated at" display in queue mode)
+    getImageMetadata?: (
+      type: 'baseline' | 'test' | 'diff',
+      filename: string
+    ) => { updatedAt?: string } | null;
   }
 
   let {
@@ -70,6 +76,7 @@
     isAccepted = false,
     analyzing = false,
     recomparing = false,
+    getImageMetadata,
   }: Props = $props();
 
 
@@ -139,6 +146,7 @@
   let localThreshold = $state(compareThreshold);
   let columnMode = $state<ColumnMode>(loadSavedColumnMode());
   let lastMultiColumnMode = $state<ColumnMode>(columnMode === '1' ? 'auto' : columnMode);
+  let lastNonAutoColumnMode = $state<ColumnMode>(columnMode === 'auto' ? '1' : columnMode);
   let panicActive = $state(false);
   let panicPrevView = $state<'baseline' | 'test' | 'diff'>(currentView);
   let panicFlipHandle = 0;
@@ -190,6 +198,12 @@
   $effect(() => {
     if (columnMode !== '1') {
       lastMultiColumnMode = columnMode;
+    }
+  });
+
+  $effect(() => {
+    if (columnMode !== 'auto') {
+      lastNonAutoColumnMode = columnMode;
     }
   });
 
@@ -253,6 +267,18 @@
   let leftLabel = $derived(isCompareMode ? (effectiveCompareImages?.left.label || 'Left') : 'Baseline');
   let rightLabel = $derived(isCompareMode ? (effectiveCompareImages?.right.label || 'Right') : 'Test');
   let diffLabel = $derived(isCompareMode ? (effectiveCompareImages?.diff?.label || 'Diff') : 'Diff');
+
+  let queueUpdatedAt = $derived.by(() => {
+    if (isCompareMode) return null;
+    if (!currentImage || !getImageMetadata) return null;
+
+    const type: 'baseline' | 'test' | 'diff' =
+      currentView === 'baseline' ? 'baseline' : currentView === 'diff' ? 'diff' : 'test';
+    const label = currentView === 'baseline' ? leftLabel : currentView === 'diff' ? diffLabel : rightLabel;
+    const iso = getImageMetadata(type, currentImage.filename)?.updatedAt;
+    if (!iso) return null;
+    return { label, iso };
+  });
 
   // Load baseline & test dimensions when image changes
   $effect(() => {
@@ -572,6 +598,13 @@
     }
   }
 
+  function navigateCompareTo(index: number) {
+    if (!hasCompareQueue || !onCompareNavigate) return;
+    if (index >= 0 && index < compareQueue.length) {
+      onCompareNavigate(index);
+    }
+  }
+
   function navigateTo(index: number) {
     if (index >= 0 && index < queue.length) {
       currentIndex = index;
@@ -673,7 +706,7 @@
         break;
       case 'f':
       case 'F':
-        fitColumnsToScreen();
+        toggleAutoFit();
         break;
       case 'c':
       case 'C':
@@ -681,7 +714,7 @@
         break;
       case 'p':
       case 'P':
-        if (isCompareMode) togglePanic();
+        if (hasBaseline) togglePanic();
         break;
     }
   }
@@ -705,7 +738,7 @@
   }
 
   function togglePanic() {
-    if (!isCompareMode) return;
+    if (!hasBaseline) return;
     if (panicActive) {
       stopPanic();
       return;
@@ -715,6 +748,7 @@
   }
 
   function startPanicLoop() {
+    if (!hasBaseline) return;
     panicNextView = 'baseline';
     panicShowingDiff = false;
     currentView = panicNextView;
@@ -862,6 +896,15 @@
     imageContainer?.scrollTo(0, 0);
   }
 
+  function toggleAutoFit() {
+    if (!baseImageSrc) return;
+    if (columnMode === 'auto') {
+      columnMode = lastNonAutoColumnMode;
+      return;
+    }
+    fitColumnsToScreen();
+  }
+
   function toggleColumnMode() {
     if (columnMode === '1') {
       columnMode = lastMultiColumnMode === '1' ? 'auto' : lastMultiColumnMode;
@@ -885,6 +928,7 @@
     {displayTitle}
     {effectiveCompareBadge}
     effectiveCompareUpdatedAt={effectiveCompareUpdatedAt}
+    {queueUpdatedAt}
     {hasCompareQueue}
     {compareIndexValue}
     compareQueueLength={compareQueue.length}
@@ -901,24 +945,19 @@
     {leftLabel}
     {rightLabel}
     {diffLabel}
-    {panicActive}
     {zoom}
     {columnMode}
     {baseImageSrc}
-    {showThumbnails}
     {localThreshold}
     {recomparing}
     onViewChange={(view) => { if (panicActive) stopPanic(); currentView = view; }}
-    onTogglePanic={togglePanic}
     onZoomIn={zoomIn}
     onZoomOut={zoomOut}
     onResetZoom={resetZoom}
     onFitToHeight={fitToHeight}
     onColumnModeChange={(mode) => { columnMode = mode; }}
     onToggleColumnMode={toggleColumnMode}
-    onFitColumnsToScreen={fitColumnsToScreen}
     onDiffOpacityChange={(value) => { diffOpacity = value; }}
-    onToggleThumbnails={() => { showThumbnails = !showThumbnails; }}
     onClose={onClose}
     {onRecompare}
     {onThresholdChange}
@@ -967,11 +1006,28 @@
     />
   {/if}
 
+  {#if showThumbnails && isCompareMode && hasCompareQueue}
+    <CompareThumbnailStrip
+      queue={compareQueue}
+      currentIndex={compareIndexValue}
+      onNavigateTo={navigateCompareTo}
+    />
+  {/if}
+
   <FullscreenGalleryFooter
     {isCompareMode}
     {queue}
     {currentImage}
     {canAct}
+    panicAvailable={hasBaseline}
+    {panicActive}
+    thumbnailsAvailable={isCompareMode ? hasCompareQueue : queue.length > 1}
+    thumbnailsActive={showThumbnails}
+    autoFitAvailable={!!baseImageSrc}
+    autoFitActive={!!baseImageSrc && columnMode === 'auto'}
+    onTogglePanic={togglePanic}
+    onToggleThumbnails={() => { showThumbnails = !showThumbnails; }}
+    onToggleAutoFit={toggleAutoFit}
     onApprove={() => handleApprove()}
     onReject={() => handleReject()}
     {onRerun}

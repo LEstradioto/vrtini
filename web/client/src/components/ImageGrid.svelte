@@ -56,6 +56,13 @@
 
   const SEARCH_DEBOUNCE_MS = 200;
 
+  function formatUpdatedAt(iso?: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString();
+  }
+
   function getTagLabel(tag: ImageTag): string {
     switch (tag) {
       case 'approved': return 'Approved';
@@ -202,6 +209,9 @@
               <div class="image-meta">
                 {#if meta}
                   {meta.browser}{meta.version ? ` v${meta.version}` : ''} · {meta.viewport}
+                  {#if meta.updatedAt}
+                    <span class="image-updated"> · Updated {formatUpdatedAt(meta.updatedAt)}</span>
+                  {/if}
                 {:else}
                   {currentImageType}
                 {/if}

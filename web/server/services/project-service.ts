@@ -1,6 +1,6 @@
-import { readdir, readFile, writeFile, copyFile, unlink, mkdir } from 'fs/promises';
+import { readdir, readFile, writeFile, copyFile, unlink, mkdir, stat } from 'fs/promises';
 import { existsSync } from 'fs';
-import { resolve, basename, dirname } from 'path';
+import { resolve, basename, dirname, join } from 'path';
 import { ConfigSchema } from '../../../src/core/config.js';
 import { IMAGE_METADATA_SCHEMA_VERSION } from '../../../src/core/image-metadata.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
@@ -258,6 +258,8 @@ export interface ImageMetadata {
   browser: string;
   version?: string;
   viewport: string;
+  /** Screenshot file mtime (ISO). */
+  updatedAt?: string;
 }
 
 type ImageType = 'baseline' | 'test' | 'diff';
@@ -480,7 +482,22 @@ async function loadImageMetadataIndex(dir: string): Promise<Record<string, Image
 export async function listImagesWithMetadata(dir: string): Promise<ImageMetadata[]> {
   const files = await listImages(dir);
   const metadataIndex = await loadImageMetadataIndex(dir);
-  return files.map((filename) => metadataIndex?.[filename] ?? parseImageFilename(filename));
+  const updatedAtByFilename = new Map<string, string | undefined>();
+  await Promise.all(
+    files.map(async (filename) => {
+      try {
+        const s = await stat(join(dir, filename));
+        updatedAtByFilename.set(filename, s.mtime.toISOString());
+      } catch {
+        updatedAtByFilename.set(filename, undefined);
+      }
+    })
+  );
+
+  return files.map((filename) => {
+    const base = metadataIndex?.[filename] ?? parseImageFilename(filename);
+    return { ...base, updatedAt: updatedAtByFilename.get(filename) };
+  });
 }
 
 export interface ProjectImages {

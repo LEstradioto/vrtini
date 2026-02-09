@@ -6,6 +6,15 @@
     queue: GalleryImage[];
     currentImage?: GalleryImage;
     canAct: boolean;
+    panicAvailable: boolean;
+    panicActive: boolean;
+    thumbnailsAvailable: boolean;
+    thumbnailsActive: boolean;
+    autoFitAvailable: boolean;
+    autoFitActive: boolean;
+    onTogglePanic?: () => void;
+    onToggleThumbnails?: () => void;
+    onToggleAutoFit?: () => void;
     onApprove?: (filename?: string) => void;
     onReject?: (filename?: string) => void;
     onRerun?: (filename: string) => void;
@@ -22,6 +31,15 @@
     queue,
     currentImage,
     canAct,
+    panicAvailable,
+    panicActive,
+    thumbnailsAvailable,
+    thumbnailsActive,
+    autoFitAvailable,
+    autoFitActive,
+    onTogglePanic,
+    onToggleThumbnails,
+    onToggleAutoFit,
     onApprove,
     onReject,
     onRerun,
@@ -62,11 +80,45 @@
       {/if}
       <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Views
       <kbd>+</kbd><kbd>-</kbd> Zoom
-      {#if !isCompareMode}
-        <kbd>T</kbd> Thumbnails
-      {:else}
+      {#if isCompareMode}
         <kbd>A</kbd> Approve
         <kbd>U</kbd> Undo
+      {/if}
+      {#if thumbnailsAvailable}
+        <button
+          type="button"
+          class="hint-toggle"
+          class:active={thumbnailsActive}
+          aria-pressed={thumbnailsActive}
+          title="Toggle thumbnails (T)"
+          onclick={() => onToggleThumbnails?.()}
+        >
+          <kbd>T</kbd> Thumbnails
+        </button>
+      {/if}
+      {#if autoFitAvailable}
+        <button
+          type="button"
+          class="hint-toggle"
+          class:active={autoFitActive}
+          aria-pressed={autoFitActive}
+          title="Toggle auto-fit columns (F)"
+          onclick={() => onToggleAutoFit?.()}
+        >
+          <kbd>F</kbd> Auto-fit
+        </button>
+      {/if}
+      {#if panicAvailable}
+        <button
+          type="button"
+          class="hint-toggle"
+          class:active={panicActive}
+          aria-pressed={panicActive}
+          title="Toggle panic check (P)"
+          onclick={() => onTogglePanic?.()}
+        >
+          <kbd>P</kbd> Panic
+        </button>
       {/if}
     </span>
   </div>
@@ -160,9 +212,33 @@
     color: var(--text-muted);
   }
 
+  .hint-toggle {
+    margin: 0;
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .hint-toggle:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .hint-toggle.active {
+    color: #fecaca;
+    border-color: rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.12);
+    font-weight: 700;
+  }
+
   .queue-info {
     font-size: 12px;
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .action-btn {

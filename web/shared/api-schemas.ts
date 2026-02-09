@@ -8,6 +8,7 @@ export const ImageMetadataSchema = z.object({
   browser: z.string(),
   version: z.string().optional(),
   viewport: z.string(),
+  updatedAt: z.string().optional(),
 });
 
 export const AcceptanceMetricsSchema = z.object({

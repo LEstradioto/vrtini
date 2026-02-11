@@ -44,8 +44,22 @@ function buildStatusInfo(result: ComparisonResult): { status: string; info: stri
       return { status: '!', info: result.error };
     case 'diff': {
       const parts: string[] = [`${result.diffPercentage.toFixed(2)}% diff`];
+      if (result.ssimScore !== undefined) {
+        parts.push(`SSIM: ${(result.ssimScore * 100).toFixed(1)}%`);
+      }
       if (result.phash) {
         parts.push(`pHash: ${(result.phash.similarity * 100).toFixed(0)}%`);
+      }
+      if (result.engineResults) {
+        const errored = result.engineResults.filter((e) => e.error);
+        if (errored.length > 0) {
+          parts.push(`⚠ ${errored.map((e) => e.engine).join(', ')} failed`);
+        }
+      }
+      if (result.confidence) {
+        parts.push(
+          `conf: ${(result.confidence.score * 100).toFixed(0)}% [${result.confidence.verdict}]`
+        );
       }
       if (result.aiAnalysis) {
         parts.push(`AI: ${result.aiAnalysis.category}`);
@@ -218,6 +232,7 @@ async function enrichDiffResult(
       const aiResult = await analyzeWithAI(task.baselinePath, task.testPath, result.diffPath, {
         provider: (ai.config?.provider ?? 'anthropic') as AIProvider,
         apiKey: ai.config?.apiKey,
+        authToken: ai.config?.authToken,
         model: ai.config?.model,
         scenarioName: scenario.name,
         url: scenario.url,
@@ -242,7 +257,26 @@ async function enrichDiffResult(
   return { ...enriched, confidence };
 }
 
-function printSummary(comparisons: ComparisonResult[]): void {
+function collectEngineStatus(comparisons: ComparisonResult[]): {
+  ran: Set<string>;
+  errored: Map<string, number>;
+} {
+  const ran = new Set<string>();
+  const errored = new Map<string, number>();
+
+  for (const r of comparisons) {
+    if (!isDiff(r) || !r.engineResults) continue;
+    for (const er of r.engineResults) {
+      ran.add(er.engine);
+      if (er.error) {
+        errored.set(er.engine, (errored.get(er.engine) ?? 0) + 1);
+      }
+    }
+  }
+  return { ran, errored };
+}
+
+function printSummary(comparisons: ComparisonResult[], quickMode: boolean): void {
   const passed = comparisons.filter((r) => r.match).length;
   const failed = comparisons.filter((r) => r.reason === 'diff').length;
   const newCount = comparisons.filter((r) => r.reason === 'no-baseline').length;
@@ -255,6 +289,20 @@ function printSummary(comparisons: ComparisonResult[]): void {
 
   if (aiAnalyzed > 0) {
     log.info(`  🤖 ${aiAnalyzed} AI analyzed`);
+  }
+
+  // Engine status
+  const allEngines = ['pixelmatch', 'odiff', 'ssim', 'phash'] as const;
+  const { ran, errored } = collectEngineStatus(comparisons);
+
+  if (failed > 0 || ran.size > 0) {
+    const engineStatus = allEngines.map((e) => {
+      if (quickMode && e !== 'pixelmatch') return `${e}: skipped`;
+      if (errored.has(e)) return `${e}: ⚠ ${errored.get(e)} errors`;
+      if (ran.has(e)) return `${e}: ✓`;
+      return `${e}: disabled`;
+    });
+    log.info(`\n  🔧 Engines: ${engineStatus.join(' | ')}`);
   }
 }
 
@@ -291,6 +339,11 @@ export function registerTestCommand(program: Command): void {
           : config.scenarios;
 
         const quickMode = options.quick || config.quickMode;
+        if (quickMode) {
+          log.warn(
+            '⚠ Quick mode: only pixelmatch enabled (ssim, phash, odiff skipped). Confidence scores are limited.'
+          );
+        }
         const ai = resolveAISettings(options, config);
 
         const comparisonTasks = buildComparisonMatrix(
@@ -329,7 +382,7 @@ export function registerTestCommand(program: Command): void {
           openInBrowser(reportPath);
         }
 
-        printSummary(comparisons);
+        printSummary(comparisons, quickMode);
 
         if (comparisons.some((r) => r.reason === 'diff')) {
           process.exit(1);

@@ -52,7 +52,15 @@ function resultToEngineResult(result: ODiffResult, diffOutput: string): EngineRe
 }
 
 export async function isOdiffAvailable(): Promise<boolean> {
-  return true;
+  try {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const exec = promisify(execFile);
+    await exec('odiff', ['--help']);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function compareWithOdiff(

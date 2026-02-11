@@ -100,10 +100,18 @@ export interface CompareResult {
   domDiff?: DomDiffSummary;
 }
 
+export interface EngineResultInfo {
+  engine: string;
+  similarity: number;
+  diffPercent: number;
+  error?: string;
+}
+
 export interface ImageResult {
   status: 'passed' | 'failed' | 'new';
   confidence?: { score: number; pass: boolean; verdict: 'pass' | 'warn' | 'fail' };
   metrics?: { pixelDiff: number; diffPercentage: number; ssimScore?: number };
+  engineResults?: EngineResultInfo[];
 }
 
 export interface ProjectTiming {
@@ -245,6 +253,7 @@ export interface VRTConfig {
     enabled: boolean;
     provider: 'anthropic' | 'openai';
     apiKey?: string;
+    authToken?: string;
     model?: string;
     analyzeThreshold: {
       maxPHashSimilarity: number;

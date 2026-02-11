@@ -22,6 +22,7 @@ export type { AIProviderName as AIProvider };
 export interface AIAnalysisOptions {
   provider: AIProviderName;
   apiKey?: string;
+  authToken?: string;
   model?: string;
   scenarioName?: string;
   url?: string;
@@ -49,7 +50,7 @@ function resolveModel(options: AIAnalysisOptions): string {
 function getProvider(options: AIAnalysisOptions): AIProvider {
   switch (options.provider) {
     case 'anthropic':
-      return createAnthropicProvider({ apiKey: options.apiKey });
+      return createAnthropicProvider({ apiKey: options.apiKey, authToken: options.authToken });
     case 'openai':
       return createOpenAIProvider({ apiKey: options.apiKey });
     default:

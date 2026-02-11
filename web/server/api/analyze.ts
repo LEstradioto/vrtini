@@ -30,7 +30,7 @@ interface AnalyzeResultItem {
 }
 
 function resolveProvider(): AIProvider | null {
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return 'anthropic';
   if (process.env.OPENAI_API_KEY) return 'openai';
   return null;
 }
@@ -58,7 +58,9 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // Load project config to get AI settings
-      let aiConfig: { provider: AIProvider; apiKey?: string; model?: string } | undefined;
+      let aiConfig:
+        | { provider: AIProvider; apiKey?: string; authToken?: string; model?: string }
+        | undefined;
 
       try {
         const config = await loadProjectConfig(project.path, project.configFile);
@@ -66,6 +68,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
           aiConfig = {
             provider: config.ai.provider,
             apiKey: config.ai.apiKey,
+            authToken: config.ai.authToken,
             model: config.ai.model,
           };
         }
@@ -80,7 +83,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
         reply.code(400);
         return {
           error:
-            'AI not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or configure AI in project settings.',
+            'AI not configured. Set ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN (Claude Max), or OPENAI_API_KEY, or configure AI in project settings.',
         };
       }
 
@@ -108,6 +111,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
           const analysis = await analyzeWithAI(baselinePath, testPath, diffPath, {
             provider: provider as AIProvider,
             apiKey: aiConfig?.apiKey,
+            authToken: aiConfig?.authToken,
             model: aiConfig?.model,
             scenarioName: item.name || item.test.filename,
           });
@@ -140,6 +144,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
           {
             provider: provider as AIProvider,
             apiKey: aiConfig?.apiKey,
+            authToken: aiConfig?.authToken,
             model: aiConfig?.model,
           },
           3 // concurrency

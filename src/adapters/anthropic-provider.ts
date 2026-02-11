@@ -8,15 +8,23 @@ import { imageToBase64 } from './image-utils.js';
 
 export interface AnthropicProviderOptions {
   apiKey?: string;
+  authToken?: string;
 }
 
 export function createAnthropicProvider(options: AnthropicProviderOptions = {}): AIProvider {
   const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('Anthropic API key not provided. Set ANTHROPIC_API_KEY or pass apiKey option.');
+  const authToken = options.authToken || process.env.ANTHROPIC_AUTH_TOKEN;
+
+  if (!apiKey && !authToken) {
+    throw new Error(
+      'Anthropic credentials not provided. Set ANTHROPIC_API_KEY (API) or ANTHROPIC_AUTH_TOKEN (Claude Max), or pass apiKey/authToken option.'
+    );
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({
+    apiKey: apiKey || undefined,
+    authToken: authToken || undefined,
+  });
 
   return {
     name: 'anthropic',

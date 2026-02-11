@@ -36,8 +36,13 @@
       </label>
       <label>
         API Key
-        <input type="password" bind:value={config.ai.apiKey} placeholder="Set via env var" />
+        <input type="password" bind:value={config.ai.apiKey} placeholder="Set via ANTHROPIC_API_KEY env var" />
       </label>
+      <label>
+        Auth Token (Claude Max)
+        <input type="password" bind:value={config.ai.authToken} placeholder="Set via ANTHROPIC_AUTH_TOKEN env var" />
+      </label>
+      <p class="hint">Use either API Key (standard) or Auth Token (Claude Max subscription). Auth Token takes effect when no API Key is set.</p>
       <label>
         Model (optional)
         <input type="text" bind:value={config.ai.model} placeholder="claude-sonnet-4-20250514" />

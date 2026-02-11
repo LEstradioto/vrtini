@@ -114,6 +114,7 @@ const AIAnalysisSchema = z.object({
   enabled: z.boolean().default(false),
   provider: z.enum(['anthropic', 'openai']).default('anthropic'),
   apiKey: z.string().optional(),
+  authToken: z.string().optional(),
   model: z.string().optional(),
   // Only analyze diffs that exceed these thresholds (to save API costs)
   analyzeThreshold: z

@@ -269,20 +269,20 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 2200;
     padding: 2rem;
   }
 
   .modal-content {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 0;
     max-width: 600px;
     width: 100%;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    font-family: var(--font-body, 'IBM Plex Mono', monospace);
   }
 
   .modal-header {
@@ -300,12 +300,14 @@
   }
 
   .header-title h2 {
-    font-size: 1.125rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 1rem;
     font-weight: 600;
   }
 
   .result-counter {
-    font-size: 0.875rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
     color: var(--text-muted);
   }
 
@@ -335,12 +337,13 @@
   }
 
   .filename {
-    font-family: monospace;
-    font-size: 0.875rem;
-    color: var(--text-muted);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
+    color: var(--accent);
     background: var(--bg);
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0;
+    border: 1px solid var(--border);
     display: inline-block;
   }
 
@@ -349,23 +352,25 @@
     align-items: center;
     gap: 0.75rem;
     padding: 1rem;
-    background: rgba(239, 68, 68, 0.1);
+    background: rgba(239, 68, 68, 0.08);
     border: 1px solid #ef4444;
-    border-radius: 8px;
+    border-left: 3px solid #ef4444;
+    border-radius: 0;
     color: #ef4444;
+    font-family: var(--font-mono, monospace);
   }
 
   .error-icon {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #ef4444;
     color: var(--text-strong);
-    border-radius: 50%;
+    border-radius: 0;
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
   }
 
   .analysis-grid {
@@ -382,9 +387,11 @@
   }
 
   .item-label {
-    font-size: 0.75rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.7rem;
     color: var(--text-muted);
-    text-transform: uppercase;
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
   }
 
   .item-value {
@@ -397,33 +404,34 @@
 
   .badge {
     display: inline-flex;
-    padding: 0.25rem 0.6rem;
-    background: rgba(255, 255, 255, 0.05);
+    padding: 0.2rem 0.5rem;
+    background: transparent;
     border: 1px solid var(--badge-color);
-    border-radius: 4px;
+    border-radius: 0;
     color: var(--badge-color);
-    font-size: 0.8rem;
-    text-transform: capitalize;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    text-transform: lowercase;
   }
 
   .badge.large {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
     font-weight: 600;
   }
 
   .confidence-bar {
     width: 60px;
-    height: 6px;
+    height: 4px;
     background: var(--border);
-    border-radius: 3px;
+    border-radius: 0;
     overflow: hidden;
   }
 
   .confidence-fill {
     height: 100%;
     background: var(--accent);
-    border-radius: 3px;
+    border-radius: 0;
   }
 
   .analysis-section {
@@ -431,10 +439,12 @@
   }
 
   .analysis-section h4 {
-    font-size: 0.75rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.7rem;
     font-weight: 600;
     color: var(--text-muted);
-    text-transform: uppercase;
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
     margin-bottom: 0.5rem;
   }
 
@@ -466,7 +476,8 @@
     gap: 1rem;
     padding-top: 1rem;
     border-top: 1px solid var(--border);
-    font-size: 0.75rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.7rem;
     color: var(--text-muted);
   }
 
@@ -491,45 +502,45 @@
   }
 
   .btn {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--border-soft);
-    border-radius: 6px;
-    background: var(--border);
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
     color: var(--text-strong);
-    font-size: 0.875rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
     cursor: pointer;
     transition: all 0.15s;
+    text-transform: lowercase;
   }
 
   .btn:hover:not(:disabled) {
-    background: var(--border-soft);
-    border-color: var(--border-soft);
+    border-color: var(--text-muted);
   }
 
   .btn:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
   }
 
   .btn.success {
-    background: #22c55e;
     border-color: #22c55e;
-    color: var(--text-strong);
+    color: #22c55e;
   }
 
   .btn.success:hover:not(:disabled) {
-    background: #16a34a;
-    border-color: #16a34a;
+    background: #22c55e;
+    color: var(--bg);
   }
 
   .btn.danger {
-    background: #ef4444;
     border-color: #ef4444;
+    color: #ef4444;
   }
 
   .btn.danger:hover:not(:disabled) {
-    background: #dc2626;
-    border-color: #dc2626;
+    background: #ef4444;
+    color: var(--bg);
   }
 
   .btn.outline {
@@ -539,8 +550,7 @@
   }
 
   .btn.outline:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: var(--text-muted);
+    border-color: var(--text-strong);
     color: var(--text-strong);
   }
 </style>

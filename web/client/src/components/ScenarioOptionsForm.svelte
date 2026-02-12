@@ -151,6 +151,7 @@
 
   label {
     display: block;
+    font-family: var(--font-mono, monospace);
     font-size: 0.8rem;
     color: var(--text-muted);
   }
@@ -165,7 +166,7 @@
     padding: 0.5rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text);
     font-size: 0.875rem;
   }
@@ -178,7 +179,7 @@
   }
 
   textarea {
-    font-family: monospace;
+    font-family: var(--font-mono, monospace);
     resize: vertical;
   }
 

@@ -8,6 +8,7 @@ export const ImageMetadataSchema = z.object({
   browser: z.string(),
   version: z.string().optional(),
   viewport: z.string(),
+  updatedAt: z.string().optional(),
 });
 
 export const AcceptanceMetricsSchema = z.object({
@@ -44,6 +45,12 @@ export const AcceptanceSchema = z.object({
   signals: AcceptanceSignalsSchema.optional(),
 });
 
+export const ImageFlagSchema = z.object({
+  filename: z.string(),
+  flaggedAt: z.string(),
+  reason: z.string().optional(),
+});
+
 export const AutoThresholdCapSchema = z.object({
   scenario: z.string(),
   viewport: z.string(),
@@ -69,6 +76,7 @@ const ChangeCategorySchema = z.enum([
 
 const SeveritySchema = z.enum(['critical', 'warning', 'info']);
 const RecommendationSchema = z.enum(['approve', 'review', 'reject']);
+const AIProviderNameSchema = z.enum(['anthropic', 'openai', 'openrouter', 'google']);
 
 export const AIAnalysisResultSchema = z.object({
   category: ChangeCategorySchema,
@@ -166,6 +174,10 @@ export const CrossResultItemSchema = z.object({
   error: z.string().optional(),
   accepted: z.boolean().optional(),
   acceptedAt: z.string().optional(),
+  flagged: z.boolean().optional(),
+  flaggedAt: z.string().optional(),
+  aiAnalysis: AIAnalysisResultSchema.optional(),
+  outdated: z.boolean().optional(),
 });
 
 export const CrossResultsSchema = z.object({
@@ -189,11 +201,19 @@ export const CrossResultsSummarySchema = z.object({
   matchCount: z.number(),
   diffCount: z.number(),
   issueCount: z.number(),
+  flaggedCount: z.number(),
+  outdatedCount: z.number().optional(),
 });
 
 export const CrossAcceptanceSchema = z.object({
   itemKey: z.string(),
   acceptedAt: z.string(),
+  reason: z.string().optional(),
+});
+
+export const CrossFlagSchema = z.object({
+  itemKey: z.string(),
+  flaggedAt: z.string(),
   reason: z.string().optional(),
 });
 
@@ -249,9 +269,12 @@ export const VRTConfigSchema = z
     ai: z
       .object({
         enabled: z.boolean(),
-        provider: z.enum(['anthropic', 'openai']),
+        provider: AIProviderNameSchema,
         apiKey: z.string().optional(),
+        authToken: z.string().optional(),
         model: z.string().optional(),
+        baseUrl: z.string().optional(),
+        manualOnly: z.boolean().optional(),
         analyzeThreshold: z.object({
           maxPHashSimilarity: z.number(),
           maxSSIM: z.number(),
@@ -280,10 +303,10 @@ export const ProjectResponseSchema = z.object({ project: ProjectSchema });
 export const SuccessResponseSchema = z.object({ success: z.boolean() });
 
 export const ConfigGetResponseSchema = z.object({
-  config: VRTConfigSchema,
+  config: z.unknown().nullable(),
   raw: z.unknown(),
   valid: z.boolean(),
-  errors: z.array(z.unknown()).nullable(),
+  errors: z.array(z.object({ path: z.string(), message: z.string() })).nullable(),
 });
 
 export const ConfigSaveResponseSchema = z.object({
@@ -315,6 +338,7 @@ export const ImagesListResponseSchema = z.object({
     diffs: z.array(ImageMetadataSchema),
   }),
   acceptances: z.record(z.string(), AcceptanceSchema),
+  flags: z.record(z.string(), ImageFlagSchema),
   autoThresholdCaps: AutoThresholdCapsSchema,
 });
 
@@ -366,6 +390,16 @@ export const CrossAcceptResponseSchema = z.object({
   acceptance: CrossAcceptanceSchema,
 });
 
+export const ImageFlagResponseSchema = z.object({
+  success: z.boolean(),
+  flag: ImageFlagSchema,
+});
+
+export const CrossFlagResponseSchema = z.object({
+  success: z.boolean(),
+  flag: CrossFlagSchema,
+});
+
 export const AcceptanceListResponseSchema = z.object({
   acceptances: z.array(AcceptanceSchema),
   acceptanceMap: z.record(z.string(), AcceptanceSchema),
@@ -389,6 +423,26 @@ export const AnalyzeResponseSchema = z.object({
       error: z.string().optional(),
     })
   ),
+});
+
+export const AIProviderStatusSchema = z.object({
+  provider: AIProviderNameSchema,
+  configured: z.boolean(),
+  active: z.boolean(),
+  source: z.enum(['config', 'env', 'config+env', 'none']),
+  detail: z.string(),
+});
+
+export const AIProviderStatusResponseSchema = z.object({
+  activeProvider: AIProviderNameSchema.nullable(),
+  providers: z.array(AIProviderStatusSchema),
+});
+
+export const AIProviderValidationResponseSchema = z.object({
+  provider: AIProviderNameSchema,
+  valid: z.boolean(),
+  source: z.enum(['input', 'env', 'none']),
+  message: z.string(),
 });
 
 export const TestRunResponseSchema = z.object({

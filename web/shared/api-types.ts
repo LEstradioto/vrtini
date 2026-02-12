@@ -4,6 +4,8 @@ export interface ImageMetadata {
   browser: string;
   version?: string;
   viewport: string;
+  /** Screenshot file mtime (ISO). Useful to spot stale baselines/tests. */
+  updatedAt?: string;
 }
 
 export function formatBrowserLabel(browser: string, version?: string): string {
@@ -40,6 +42,12 @@ export interface Acceptance {
   signals?: AcceptanceSignals;
 }
 
+export interface ImageFlag {
+  filename: string;
+  flaggedAt: string;
+  reason?: string;
+}
+
 export interface AutoThresholdCap {
   scenario: string;
   viewport: string;
@@ -63,6 +71,7 @@ export type ChangeCategory =
   | 'noise';
 export type Severity = 'critical' | 'warning' | 'info';
 export type Recommendation = 'approve' | 'review' | 'reject';
+export type AIProviderName = 'anthropic' | 'openai' | 'openrouter' | 'google';
 
 export interface AIAnalysisResult {
   category: ChangeCategory;
@@ -75,6 +84,26 @@ export interface AIAnalysisResult {
   provider: string;
   model: string;
   tokensUsed?: number;
+}
+
+export interface AIProviderStatus {
+  provider: AIProviderName;
+  configured: boolean;
+  active: boolean;
+  source: 'config' | 'env' | 'config+env' | 'none';
+  detail: string;
+}
+
+export interface AIProviderStatusResponse {
+  activeProvider: AIProviderName | null;
+  providers: AIProviderStatus[];
+}
+
+export interface AIProviderValidationResponse {
+  provider: AIProviderName;
+  valid: boolean;
+  source: 'input' | 'env' | 'none';
+  message: string;
 }
 
 export interface DomDiffSummary {
@@ -98,10 +127,18 @@ export interface CompareResult {
   domDiff?: DomDiffSummary;
 }
 
+export interface EngineResultInfo {
+  engine: string;
+  similarity: number;
+  diffPercent: number;
+  error?: string;
+}
+
 export interface ImageResult {
   status: 'passed' | 'failed' | 'new';
   confidence?: { score: number; pass: boolean; verdict: 'pass' | 'warn' | 'fail' };
   metrics?: { pixelDiff: number; diffPercentage: number; ssimScore?: number };
+  engineResults?: EngineResultInfo[];
 }
 
 export interface ProjectTiming {
@@ -119,6 +156,18 @@ export interface Project {
   lastRun?: string;
   lastStatus?: 'passed' | 'failed' | 'new';
   lastTiming?: ProjectTiming;
+}
+
+export interface ConfigValidationIssue {
+  path: string;
+  message: string;
+}
+
+export interface ConfigGetResponse {
+  config: unknown;
+  raw: unknown;
+  valid: boolean;
+  errors: ConfigValidationIssue[] | null;
 }
 
 export interface CrossReport {
@@ -155,6 +204,10 @@ export interface CrossResultItem {
   error?: string;
   accepted?: boolean;
   acceptedAt?: string;
+  flagged?: boolean;
+  flaggedAt?: string;
+  aiAnalysis?: AIAnalysisResult;
+  outdated?: boolean;
 }
 
 export interface CrossResults {
@@ -178,11 +231,19 @@ export interface CrossResultsSummary {
   matchCount: number;
   diffCount: number;
   issueCount: number;
+  flaggedCount: number;
+  outdatedCount?: number;
 }
 
 export interface CrossAcceptance {
   itemKey: string;
   acceptedAt: string;
+  reason?: string;
+}
+
+export interface CrossFlag {
+  itemKey: string;
+  flaggedAt: string;
   reason?: string;
 }
 
@@ -241,9 +302,12 @@ export interface VRTConfig {
   };
   ai?: {
     enabled: boolean;
-    provider: 'anthropic' | 'openai';
+    provider: AIProviderName;
     apiKey?: string;
+    authToken?: string;
     model?: string;
+    baseUrl?: string;
+    manualOnly?: boolean;
     analyzeThreshold: {
       maxPHashSimilarity: number;
       maxSSIM: number;

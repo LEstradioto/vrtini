@@ -1,6 +1,6 @@
-import { readdir, readFile, writeFile, copyFile, unlink, mkdir } from 'fs/promises';
+import { readdir, readFile, writeFile, copyFile, unlink, mkdir, stat } from 'fs/promises';
 import { existsSync } from 'fs';
-import { resolve, basename, dirname } from 'path';
+import { resolve, basename, dirname, join } from 'path';
 import { ConfigSchema } from '../../../src/core/config.js';
 import { IMAGE_METADATA_SCHEMA_VERSION } from '../../../src/core/image-metadata.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
@@ -116,7 +116,7 @@ export function getConfigSchemaInfo(): Record<string, string[]> {
   return {
     browsers: ['chromium', 'webkit'],
     waitForOptions: ['load', 'networkidle', 'domcontentloaded'],
-    aiProviders: ['anthropic', 'openai'],
+    aiProviders: ['anthropic', 'openai', 'openrouter', 'google'],
     severityLevels: ['info', 'warning', 'critical'],
     changeCategories: ['cosmetic', 'noise', 'content_change', 'layout_shift', 'regression'],
     ruleActions: ['approve', 'flag', 'reject'],
@@ -172,6 +172,16 @@ export interface AutoThresholdCaps {
 
 interface AcceptancesFile {
   acceptances: Acceptance[];
+}
+
+export interface ImageFlag {
+  filename: string;
+  flaggedAt: string;
+  reason?: string;
+}
+
+interface ImageFlagsFile {
+  flags: ImageFlag[];
 }
 
 async function ensureAcceptancesDir(projectPath: string): Promise<string> {
@@ -247,6 +257,77 @@ export async function revokeAcceptance(projectPath: string, filename: string): P
   return true;
 }
 
+function getImageFlagsPath(projectPath: string): string {
+  return resolve(projectPath, '.vrt', 'acceptances', 'flags.json');
+}
+
+async function ensureImageFlagsPath(projectPath: string): Promise<string> {
+  const path = getImageFlagsPath(projectPath);
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
+  }
+  return path;
+}
+
+export async function loadImageFlags(projectPath: string): Promise<ImageFlag[]> {
+  const filePath = await ensureImageFlagsPath(projectPath);
+  if (!existsSync(filePath)) {
+    return [];
+  }
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    const data: ImageFlagsFile = JSON.parse(content);
+    return data.flags || [];
+  } catch (err) {
+    log.warn(`Failed to load image flags from ${filePath}:`, getErrorMessage(err));
+    return [];
+  }
+}
+
+export async function saveImageFlags(projectPath: string, flags: ImageFlag[]): Promise<void> {
+  const filePath = await ensureImageFlagsPath(projectPath);
+  const data: ImageFlagsFile = { flags };
+  await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+export function imageFlagsToMap(flags: ImageFlag[]): Record<string, ImageFlag> {
+  const map: Record<string, ImageFlag> = {};
+  for (const flag of flags) {
+    map[flag.filename] = flag;
+  }
+  return map;
+}
+
+export async function setImageFlag(
+  projectPath: string,
+  flag: Omit<ImageFlag, 'flaggedAt'>
+): Promise<ImageFlag> {
+  const flags = await loadImageFlags(projectPath);
+  const filtered = flags.filter((entry) => entry.filename !== flag.filename);
+
+  const next: ImageFlag = {
+    ...flag,
+    flaggedAt: new Date().toISOString(),
+  };
+
+  filtered.push(next);
+  await saveImageFlags(projectPath, filtered);
+  return next;
+}
+
+export async function revokeImageFlag(projectPath: string, filename: string): Promise<boolean> {
+  const flags = await loadImageFlags(projectPath);
+  const filtered = flags.filter((entry) => entry.filename !== filename);
+
+  if (filtered.length === flags.length) {
+    return false;
+  }
+
+  await saveImageFlags(projectPath, filtered);
+  return true;
+}
+
 // ─── Image Management ────────────────────────────────────────────────────────
 
 /** Fallback value for unparseable filename components */
@@ -258,6 +339,8 @@ export interface ImageMetadata {
   browser: string;
   version?: string;
   viewport: string;
+  /** Screenshot file mtime (ISO). */
+  updatedAt?: string;
 }
 
 type ImageType = 'baseline' | 'test' | 'diff';
@@ -480,7 +563,22 @@ async function loadImageMetadataIndex(dir: string): Promise<Record<string, Image
 export async function listImagesWithMetadata(dir: string): Promise<ImageMetadata[]> {
   const files = await listImages(dir);
   const metadataIndex = await loadImageMetadataIndex(dir);
-  return files.map((filename) => metadataIndex?.[filename] ?? parseImageFilename(filename));
+  const updatedAtByFilename = new Map<string, string | undefined>();
+  await Promise.all(
+    files.map(async (filename) => {
+      try {
+        const s = await stat(join(dir, filename));
+        updatedAtByFilename.set(filename, s.mtime.toISOString());
+      } catch {
+        updatedAtByFilename.set(filename, undefined);
+      }
+    })
+  );
+
+  return files.map((filename) => {
+    const base = metadataIndex?.[filename] ?? parseImageFilename(filename);
+    return { ...base, updatedAt: updatedAtByFilename.get(filename) };
+  });
 }
 
 export interface ProjectImages {
@@ -494,6 +592,7 @@ export interface ProjectImages {
     diffs: ImageMetadata[];
   };
   acceptances: Record<string, Acceptance>;
+  flags: Record<string, ImageFlag>;
   autoThresholdCaps: AutoThresholdCaps;
 }
 
@@ -503,11 +602,12 @@ export async function getProjectImages(
 ): Promise<ProjectImages> {
   const { baselineDir, outputDir, diffDir } = getProjectDirs(projectPath, config);
 
-  const [baselines, tests, diffs, acceptancesList] = await Promise.all([
+  const [baselines, tests, diffs, acceptancesList, flagsList] = await Promise.all([
     listImages(baselineDir),
     listImages(outputDir),
     listImages(diffDir),
     loadAcceptances(projectPath),
+    loadImageFlags(projectPath),
   ]);
 
   const [baselinesWithMeta, testsWithMeta, diffsWithMeta] = await Promise.all([
@@ -527,6 +627,7 @@ export async function getProjectImages(
       diffs: diffsWithMeta,
     },
     acceptances: acceptancesToMap(acceptancesList),
+    flags: imageFlagsToMap(flagsList),
     autoThresholdCaps: computeAutoThresholdCaps(acceptancesList),
   };
 }

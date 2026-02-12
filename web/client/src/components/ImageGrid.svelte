@@ -1,14 +1,28 @@
 <script lang="ts">
-  import type { ImageMetadata } from '../lib/api';
+  import type { ImageMetadata, ImageResult } from '../lib/api';
 
   type ImageStatus = 'passed' | 'failed' | 'new';
-  type ImageTag = 'all' | 'passed' | 'failed' | 'new' | 'approved' | 'unapproved' | 'diff' | 'auto-review';
+  type ImageTag =
+    | 'all'
+    | 'passed'
+    | 'failed'
+    | 'new'
+    | 'flagged'
+    | 'approved'
+    | 'unapproved'
+    | 'diff'
+    | 'auto-review';
+  type ViewMode = 'grid' | 'list';
+  type SortMode = 'name' | 'diff';
+
+  const VIEW_MODE_KEY = 'vrt-image-view-mode';
+  const SORT_MODE_KEY = 'vrt-image-sort-mode';
 
   let {
-    currentList,
-    fullList,
+    currentList: currentListProp,
+    fullList: fullListProp,
     rawList,
-    totalPages,
+    totalPages: totalPagesProp,
     currentPage = $bindable(),
     searchQuery = $bindable(),
     tagFilter = $bindable(),
@@ -17,6 +31,7 @@
     autoThresholdReviewCount,
     activeTab,
     testState,
+    imageResults,
     getImageUrl,
     getImageStatus,
     getTagFor,
@@ -25,7 +40,6 @@
     matchesTagSet,
     metadataMap,
     onOpenGallery,
-    onBulkRerun,
   } = $props<{
     currentList: string[];
     fullList: string[];
@@ -39,6 +53,7 @@
     autoThresholdReviewCount: number;
     activeTab: string;
     testState: unknown;
+    imageResults?: Record<string, ImageResult>;
     getImageUrl: (type: 'baseline' | 'test' | 'diff', filename: string) => string;
     getImageStatus: (filename: string) => ImageStatus | null;
     getTagFor: (filename: string) => ImageTag;
@@ -47,18 +62,62 @@
     matchesTagSet: (filename: string, tags: Set<ImageTag>) => boolean;
     metadataMap: Map<string, ImageMetadata>;
     onOpenGallery: (filename: string) => void;
-    onBulkRerun: () => void;
   }>();
+
+  let sortMode = $state<SortMode>((localStorage.getItem(SORT_MODE_KEY) as SortMode) || 'name');
+
+  function setSortMode(mode: SortMode) {
+    sortMode = mode;
+    localStorage.setItem(SORT_MODE_KEY, mode);
+  }
+
+  // Sort fullList by diff % descending when sortMode is 'diff'
+  let fullList = $derived.by(() => {
+    if (sortMode !== 'diff' || !imageResults) return fullListProp;
+    return [...fullListProp].sort((a, b) => {
+      const aDiff = imageResults[a]?.metrics?.diffPercentage ?? -1;
+      const bDiff = imageResults[b]?.metrics?.diffPercentage ?? -1;
+      return bDiff - aDiff;
+    });
+  });
+
+  let currentList = $derived.by(() => {
+    if (sortMode !== 'diff' || !imageResults) return currentListProp;
+    const PAGE_SIZE = Math.ceil(fullListProp.length / (totalPagesProp || 1));
+    return fullList.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  });
+
+  let totalPages = $derived(sortMode === 'diff' && imageResults ? totalPagesProp : totalPagesProp);
 
   let debouncedSearchQuery = $state('');
   let loadedImages = $state<Set<string>>(new Set());
   let lastSelectedIndex = $state<number | null>(null);
+  let viewMode = $state<ViewMode>((localStorage.getItem(VIEW_MODE_KEY) as ViewMode) || 'grid');
+
+  function setViewMode(mode: ViewMode) {
+    viewMode = mode;
+    localStorage.setItem(VIEW_MODE_KEY, mode);
+  }
+
+  function getDiffColor(pct: number): string {
+    if (pct < 1) return '#22c55e';
+    if (pct <= 5) return '#f59e0b';
+    return '#ef4444';
+  }
 
   const SEARCH_DEBOUNCE_MS = 200;
+
+  function formatUpdatedAt(iso?: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString();
+  }
 
   function getTagLabel(tag: ImageTag): string {
     switch (tag) {
       case 'approved': return 'Approved';
+      case 'flagged': return 'Flagged';
       case 'unapproved': return 'Unapproved';
       case 'new': return 'New';
       case 'passed': return 'Passed';
@@ -136,6 +195,7 @@
       <button class="tag-filter tag-all" class:active={isTagActive('all')} onclick={(event) => toggleTagFilter('all', event)} title="Show all images">All</button>
       <button class="tag-filter tag-passed" class:active={isTagActive('passed')} onclick={(event) => toggleTagFilter('passed', event)} title="Baseline matches test">Passed</button>
       <button class="tag-filter tag-new" class:active={isTagActive('new')} onclick={(event) => toggleTagFilter('new', event)} title="Test exists without baseline">New</button>
+      <button class="tag-filter tag-flagged" class:active={isTagActive('flagged')} onclick={(event) => toggleTagFilter('flagged', event)} title="Items flagged for later review">Flagged</button>
       <button class="tag-filter tag-unapproved" class:active={isTagActive('unapproved')} onclick={(event) => toggleTagFilter('unapproved', event)} title="Diffs or new items not approved">Unapproved</button>
       <button class="tag-filter tag-approved" class:active={isTagActive('approved')} onclick={(event) => toggleTagFilter('approved', event)} title="Items you have approved">Approved</button>
       <button class="tag-filter tag-diff" class:active={isTagActive('diff')} onclick={(event) => toggleTagFilter('diff', event)} title="Images with visual diffs">Diff</button>
@@ -148,12 +208,18 @@
     <div class="selection-controls">
       <button class="btn small" class:expanded={allPageSelected && !allFilteredSelected && totalPages > 1} class:all-selected={allFilteredSelected} onclick={selectAll}>{selectAllLabel}</button>
       <button class="btn small" onclick={deselectAll} disabled={selectedCount === 0}>Deselect</button>
-      {#if selectedCount > 0}
-        <span class="selected-count">{selectedCount} selected</span>
-        <button class="btn small rerun" onclick={onBulkRerun} disabled={!!testState}>
-          {testState ? 'Running...' : `Rerun (${selectedCount})`}
-        </button>
-      {/if}
+      <span class="view-divider"></span>
+      <button class="view-toggle" class:active={viewMode === 'grid'} onclick={() => setViewMode('grid')} title="Grid view">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      </button>
+      <button class="view-toggle" class:active={viewMode === 'list'} onclick={() => setViewMode('list')} title="List view">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <span class="view-divider"></span>
+      <button class="sort-toggle" class:active={sortMode === 'diff'} onclick={() => setSortMode(sortMode === 'diff' ? 'name' : 'diff')} title={sortMode === 'diff' ? 'Sort by name' : 'Sort by diff % (highest first)'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h12M3 18h6"/></svg>
+        {sortMode === 'diff' ? '% ↓' : 'A-Z'}
+      </button>
     </div>
   </div>
 
@@ -176,59 +242,118 @@
       <div class="image-count">{fullList.length} images</div>
     {/if}
 
-    <div class="image-grid">
-      {#each currentList as filename, index (filename)}
-        {@const status = getImageStatus(filename)}
-        {@const checked = isSelected(filename)}
-        {@const meta = metadataMap.get(filename)}
-        {@const tag = getTagFor(filename)}
-        <div
-          class="image-card"
-          class:multi-selected={checked}
-          class:tag-approved={tag === 'approved'}
-          class:tag-unapproved={tag === 'unapproved'}
-          class:tag-new={tag === 'new'}
-          class:tag-passed={tag === 'passed'}
-          class:tag-diff={tag === 'diff'}
-          class:tag-auto-review={tag === 'auto-review'}
-          onclick={() => onOpenGallery(filename)}
-          onkeydown={(e) => e.key === 'Enter' && onOpenGallery(filename)}
-          role="button"
-          tabindex="0"
-        >
-          <div class="image-card-header">
-            <div class="image-card-title">
-              <div class="image-title" title={meta?.scenario || filename}>{meta?.scenario || filename}</div>
-              <div class="image-meta">
-                {#if meta}
-                  {meta.browser}{meta.version ? ` v${meta.version}` : ''} · {meta.viewport}
-                {:else}
-                  {currentImageType}
+    {#if viewMode === 'grid'}
+      <div class="image-grid">
+        {#each currentList as filename, index (filename)}
+          {@const status = getImageStatus(filename)}
+          {@const checked = isSelected(filename)}
+          {@const meta = metadataMap.get(filename)}
+          {@const tag = getTagFor(filename)}
+          {@const result = imageResults?.[filename]}
+          <div
+            class="image-card"
+            class:multi-selected={checked}
+            class:tag-approved={tag === 'approved'}
+            class:tag-unapproved={tag === 'unapproved'}
+            class:tag-new={tag === 'new'}
+            class:tag-flagged={tag === 'flagged'}
+            class:tag-passed={tag === 'passed'}
+            class:tag-diff={tag === 'diff'}
+            class:tag-auto-review={tag === 'auto-review'}
+            onclick={() => onOpenGallery(filename)}
+            onkeydown={(e) => e.key === 'Enter' && onOpenGallery(filename)}
+            role="button"
+            tabindex="0"
+          >
+            <div class="image-card-header">
+              <div class="image-card-title">
+                <div class="image-title" title={meta?.scenario || filename}>{meta?.scenario || filename}</div>
+                <div class="image-meta">
+                  {#if meta}
+                    {meta.browser}{meta.version ? ` v${meta.version}` : ''} · {meta.viewport}
+                    {#if meta.updatedAt}
+                      <span class="image-updated"> · Updated {formatUpdatedAt(meta.updatedAt)}</span>
+                    {/if}
+                  {:else}
+                    {currentImageType}
+                  {/if}
+                </div>
+              </div>
+              <div class="card-badges">
+                {#if result?.metrics}
+                  <span class="card-diff" style="color: {getDiffColor(result.metrics.diffPercentage)}">{result.metrics.diffPercentage.toFixed(2)}%</span>
                 {/if}
+                <div class="image-tag tag-{tag}">{getTagLabel(tag)}</div>
               </div>
             </div>
-            <div class="image-tag tag-{tag}">{getTagLabel(tag)}</div>
+            <div class="image-thumb">
+              <label class="checkbox-wrapper" class:visible={checked} onclick={(e) => e.stopPropagation()}>
+                <input type="checkbox" checked={checked} onclick={(e) => toggleImageSelection(filename, index, e)} />
+                <span class="checkmark"></span>
+              </label>
+              {#if !loadedImages.has(filename)}
+                <div class="image-placeholder"></div>
+              {/if}
+              <img
+                src={getImageUrl(currentImageType, filename)}
+                alt={filename}
+                loading="lazy"
+                onload={() => onImageLoad(filename)}
+                class:loaded={loadedImages.has(filename)}
+              />
+            </div>
+            <div class="image-name" title={filename}>{filename}</div>
           </div>
-          <div class="image-thumb">
-            <label class="checkbox-wrapper" class:visible={checked} onclick={(e) => e.stopPropagation()}>
+        {/each}
+      </div>
+    {:else}
+      <div class="image-list">
+        {#each currentList as filename, index (filename)}
+          {@const checked = isSelected(filename)}
+          {@const meta = metadataMap.get(filename)}
+          {@const tag = getTagFor(filename)}
+          {@const result = imageResults?.[filename]}
+          <div
+            class="list-row"
+            class:multi-selected={checked}
+            onclick={() => onOpenGallery(filename)}
+            onkeydown={(e) => e.key === 'Enter' && onOpenGallery(filename)}
+            role="button"
+            tabindex="0"
+          >
+            <label class="list-checkbox" onclick={(e) => e.stopPropagation()}>
               <input type="checkbox" checked={checked} onclick={(e) => toggleImageSelection(filename, index, e)} />
               <span class="checkmark"></span>
             </label>
-            {#if !loadedImages.has(filename)}
-              <div class="image-placeholder"></div>
+            <div class="list-thumb">
+              <img
+                src={getImageUrl(currentImageType, filename)}
+                alt={filename}
+                loading="lazy"
+                onload={() => onImageLoad(filename)}
+                class:loaded={loadedImages.has(filename)}
+              />
+            </div>
+            <div class="list-info">
+              <span class="list-scenario" title={meta?.scenario || filename}>{meta?.scenario || filename}</span>
+              <span class="list-detail">
+                {#if meta}
+                  {meta.browser} · {meta.viewport}
+                {:else}
+                  {filename}
+                {/if}
+              </span>
+            </div>
+            {#if result?.metrics}
+              <span class="list-diff" style="color: {getDiffColor(result.metrics.diffPercentage)}">
+                {result.metrics.diffPercentage.toFixed(2)}%
+              </span>
             {/if}
-            <img
-              src={getImageUrl(currentImageType, filename)}
-              alt={filename}
-              loading="lazy"
-              onload={() => onImageLoad(filename)}
-              class:loaded={loadedImages.has(filename)}
-            />
+            <div class="image-tag tag-{tag}">{getTagLabel(tag)}</div>
           </div>
-          <div class="image-name" title={filename}>{filename}</div>
-        </div>
-      {/each}
-    </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -238,7 +363,7 @@
     flex-direction: column;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -257,7 +382,7 @@
     padding: 0.5rem 0.75rem;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text-strong);
     font-size: 0.875rem;
   }
@@ -276,7 +401,7 @@
 
   .tag-filter {
     padding: 0.28rem 0.6rem;
-    border-radius: 999px;
+    border-radius: 0;
     border: 1px solid transparent;
     background: var(--panel-strong);
     color: var(--text-muted);
@@ -284,11 +409,12 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
-    opacity: 0.55;
+    opacity: 0.24;
     transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s;
   }
   .tag-filter.active { opacity: 1; color: var(--text-strong); }
   .tag-filter.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
+  .tag-filter.tag-flagged { border-color: rgba(255, 107, 0, 0.6); background: rgba(255, 107, 0, 0.16); color: var(--tag-flagged); }
   .tag-filter.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .tag-filter.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }
   .tag-filter.tag-diff { border-color: rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.12); color: var(--tag-diff); }
@@ -304,15 +430,11 @@
     border-left: 1px solid var(--border);
   }
 
-  .selected-count { font-size: 0.8rem; color: var(--accent); font-weight: 500; }
-
-  .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: none; border-radius: 6px; background: var(--border); color: var(--text-strong); font-size: 0.875rem; cursor: pointer; transition: background 0.2s; }
+  .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: none; border-radius: 0; background: var(--border); color: var(--text-strong); font-size: 0.875rem; font-family: var(--font-mono, monospace); text-transform: lowercase; cursor: pointer; transition: background 0.2s; }
   .btn:hover { background: var(--border-soft); }
   .btn.small { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
   .btn.small.expanded { background: var(--accent); color: #fff; }
   .btn.small.all-selected { background: #22c55e; color: #fff; }
-  .btn.small.rerun { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
-  .btn.small.rerun:hover:not(:disabled) { background: var(--accent); color: #fff; }
 
   .empty {
     text-align: center;
@@ -352,7 +474,7 @@
   .image-card {
     background: var(--panel-soft);
     border: 2px solid var(--border-soft);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 0.6rem;
     display: flex;
     flex-direction: column;
@@ -366,6 +488,7 @@
   .image-card:hover { border-color: var(--text-muted); transform: translateY(-2px); }
   .image-card.multi-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
   .image-card.tag-approved { border-color: rgba(34, 197, 94, 0.6); }
+  .image-card.tag-flagged { border-color: rgba(255, 107, 0, 0.85); box-shadow: inset 0 0 0 1px rgba(255, 107, 0, 0.28); }
   .image-card.tag-unapproved { border-color: rgba(239, 68, 68, 0.6); }
   .image-card.tag-new { border-color: rgba(245, 158, 11, 0.7); }
   .image-card.tag-diff { border-color: rgba(249, 115, 22, 0.7); }
@@ -373,16 +496,19 @@
   .image-card.tag-passed { border-color: rgba(56, 189, 248, 0.7); }
 
   .image-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
+  .card-badges { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+  .card-diff { font-size: 0.75rem; font-weight: 700; font-family: var(--font-mono, monospace); white-space: nowrap; }
   .image-card-title { min-width: 0; }
   .image-title { font-size: 0.85rem; font-weight: 600; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .image-meta { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.15rem; }
 
   .image-tag {
     font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
-    padding: 0.18rem 0.5rem; border-radius: 999px; border: 1px solid var(--border);
+    padding: 0.18rem 0.5rem; border-radius: 0; border: 1px solid var(--border);
     background: var(--panel-strong); color: var(--text-muted); white-space: nowrap;
   }
   .image-tag.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
+  .image-tag.tag-flagged { border-color: rgba(255, 107, 0, 0.65); background: rgba(255, 107, 0, 0.14); color: var(--tag-flagged); }
   .image-tag.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .image-tag.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }
   .image-tag.tag-diff { border-color: rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.12); color: var(--tag-diff); }
@@ -391,7 +517,7 @@
 
   .image-thumb {
     position: relative; height: 120px; background: var(--panel-strong);
-    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border); border-radius: 0; overflow: hidden;
   }
 
   .checkbox-wrapper {
@@ -402,7 +528,7 @@
   .checkbox-wrapper input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
   .checkmark {
     display: block; width: 18px; height: 18px; background: rgba(0, 0, 0, 0.6);
-    border: 2px solid var(--text-muted); border-radius: 4px; cursor: pointer;
+    border: 2px solid var(--text-muted); border-radius: 0; cursor: pointer;
     transition: all 0.15s;
   }
   .checkbox-wrapper:hover .checkmark { border-color: var(--accent); }
@@ -430,6 +556,82 @@
   .image-name {
     padding: 0.25rem 0.35rem 0.1rem; font-size: 0.65rem; color: var(--text-muted);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-top: 1px solid transparent;
+  }
+
+  /* View toggle */
+  .view-divider { width: 1px; height: 16px; background: var(--border); }
+  .view-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+  }
+  .view-toggle:hover { color: var(--text-strong); border-color: var(--text-muted); }
+  .view-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+
+  .sort-toggle {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0 0.5rem; height: 28px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); cursor: pointer;
+    font-size: 0.7rem; font-family: var(--font-mono, monospace); transition: all 0.15s;
+  }
+  .sort-toggle:hover { color: var(--text-strong); border-color: var(--text-muted); }
+  .sort-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+
+  /* List view */
+  .image-list {
+    display: flex; flex-direction: column;
+    overflow-y: auto; flex: 1;
+  }
+
+  .list-row {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer; transition: background 0.1s;
+  }
+  .list-row:hover { background: var(--panel-soft); }
+  .list-row.multi-selected { background: rgba(99, 102, 241, 0.08); }
+
+  .list-checkbox {
+    display: flex; align-items: center; flex-shrink: 0;
+    position: relative; cursor: pointer;
+  }
+  .list-checkbox input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
+  .list-checkbox .checkmark {
+    display: block; width: 16px; height: 16px; background: var(--panel-strong);
+    border: 2px solid var(--text-muted); border-radius: 0; cursor: pointer; transition: all 0.15s;
+  }
+  .list-checkbox:hover .checkmark { border-color: var(--accent); }
+  .list-checkbox input:checked ~ .checkmark { background: var(--accent); border-color: var(--accent); }
+  .list-checkbox input:checked ~ .checkmark::after {
+    content: ''; position: absolute; left: 5px; top: 1px;
+    width: 4px; height: 8px; border: solid var(--text-strong);
+    border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+
+  .list-thumb {
+    width: 40px; height: 40px; flex-shrink: 0;
+    background: var(--panel-strong); border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .list-thumb img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.2s; }
+  .list-thumb img.loaded { opacity: 1; }
+
+  .list-info {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem;
+  }
+  .list-scenario {
+    font-size: 0.8rem; font-weight: 600; color: var(--text-strong);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .list-detail {
+    font-size: 0.7rem; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .list-diff {
+    font-size: 0.8rem; font-weight: 700; font-family: var(--font-mono, monospace);
+    white-space: nowrap; flex-shrink: 0;
   }
 
   @media (max-width: 768px) {

@@ -1,1 +1,27 @@
+#!/bin/sh
+set -e
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --config .gitleaks.toml .
+else
+  DOCKER_BIN=""
+  if command -v docker >/dev/null 2>&1; then
+    DOCKER_BIN="$(command -v docker)"
+  elif [ -x /usr/bin/docker ]; then
+    DOCKER_BIN="/usr/bin/docker"
+  elif [ -x /usr/local/bin/docker ]; then
+    DOCKER_BIN="/usr/local/bin/docker"
+  elif [ -x /Applications/Docker.app/Contents/Resources/bin/docker ]; then
+    DOCKER_BIN="/Applications/Docker.app/Contents/Resources/bin/docker"
+  fi
+
+  if [ -n "$DOCKER_BIN" ]; then
+    "$DOCKER_BIN" run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git --pre-commit --staged --config /repo/.gitleaks.toml /repo
+  else
+    echo "gitleaks is required for pre-commit secret scanning."
+    echo "Install gitleaks or Docker, then retry."
+    exit 1
+  fi
+fi
+
 npx lint-staged

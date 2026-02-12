@@ -13,6 +13,7 @@ import { compareRoutes } from './api/compare.js';
 import { acceptanceRoutes } from './api/acceptance.js';
 import { analyzeRoutes } from './api/analyze.js';
 import { crossCompareRoutes } from './api/cross-compare.js';
+import { aiTriageRoutes } from './api/ai-triage.js';
 import { registerAuth } from './plugins/auth.js';
 import { log } from '../../src/core/logger.js';
 
@@ -74,6 +75,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   await fastify.register(testRoutes, { prefix: '/api' });
   await fastify.register(compareRoutes, { prefix: '/api' });
   await fastify.register(crossCompareRoutes, { prefix: '/api' });
+  await fastify.register(aiTriageRoutes, { prefix: '/api' });
   await fastify.register(acceptanceRoutes, { prefix: '/api' });
   await fastify.register(analyzeRoutes, { prefix: '/api' });
 

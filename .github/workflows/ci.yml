@@ -12,6 +12,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:latest git --config /repo/.gitleaks.toml /repo
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -24,6 +29,12 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
 
       - name: Typecheck
         run: npm run typecheck

@@ -112,9 +112,12 @@ const DomSnapshotSchema = z
 
 const AIAnalysisSchema = z.object({
   enabled: z.boolean().default(false),
-  provider: z.enum(['anthropic', 'openai']).default('anthropic'),
+  provider: z.enum(['anthropic', 'openai', 'openrouter', 'google']).default('anthropic'),
   apiKey: z.string().optional(),
+  authToken: z.string().optional(),
   model: z.string().optional(),
+  baseUrl: z.string().url().optional(),
+  manualOnly: z.boolean().default(false),
   // Only analyze diffs that exceed these thresholds (to save API costs)
   analyzeThreshold: z
     .object({

@@ -430,7 +430,7 @@
   .compare-selector {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 1rem;
   }
 
@@ -497,7 +497,7 @@
     color: var(--text-muted);
     font-size: 0.75rem;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 0;
     transition: all 0.2s;
   }
 
@@ -523,7 +523,7 @@
     padding-right: 2rem;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text-strong);
     font-size: 0.875rem;
     box-sizing: border-box;
@@ -565,7 +565,7 @@
     overflow-y: auto;
     background: var(--panel);
     border: 1px solid var(--border-soft);
-    border-radius: 6px;
+    border-radius: 0;
     margin-top: 4px;
     z-index: 100;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
@@ -597,7 +597,7 @@
 
   .dropdown-item:hover,
   .dropdown-item.highlighted {
-    background: #2a2a2a;
+    background: var(--border);
     color: var(--text-strong);
   }
 
@@ -618,9 +618,11 @@
     padding: 0.75rem 1rem;
     background: var(--accent);
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text-strong);
     font-size: 0.875rem;
+    font-family: var(--font-mono, monospace);
+    text-transform: lowercase;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.2s;

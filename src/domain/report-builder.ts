@@ -252,6 +252,33 @@ export function buildConfidenceSection(result: ComparisonResult): string {
   `;
 }
 
+export function buildEngineBreakdownSection(result: ComparisonResult): string {
+  if (!isDiff(result) || !result.engineResults || result.engineResults.length === 0) return '';
+
+  const items = result.engineResults
+    .map((er) => {
+      if (er.error) {
+        return `<span class="engine-item engine-error" title="${escapeAttribute(er.error)}">
+          ${escapeHtml(er.engine)}: <strong>error</strong>
+        </span>`;
+      }
+      const pct = (er.similarity * 100).toFixed(1);
+      const cls =
+        er.similarity >= 0.95 ? 'engine-good' : er.similarity >= 0.8 ? 'engine-warn' : 'engine-bad';
+      return `<span class="engine-item ${cls}">
+        ${escapeHtml(er.engine)}: <strong>${pct}%</strong>
+      </span>`;
+    })
+    .join('');
+
+  return `
+    <details class="engine-breakdown">
+      <summary>Engine Breakdown (${result.engineResults.length} engines)</summary>
+      <div class="engine-items">${items}</div>
+    </details>
+  `;
+}
+
 export function buildPhashSection(result: ComparisonResult): string {
   if (!('phash' in result) || !result.phash) return '';
 
@@ -316,6 +343,7 @@ export function buildResultCardHtml(
   const aiSection = buildAiSection(result);
   const domInsightsSection = buildDomInsightsSection(result);
   const confidenceSection = buildConfidenceSection(result);
+  const engineBreakdownSection = buildEngineBreakdownSection(result);
   const phashSection = buildPhashSection(result);
   const autoActionBadge = buildAutoActionBadge(result);
   const approvedClass = result.approved ? ' approved' : '';
@@ -345,6 +373,7 @@ export function buildResultCardHtml(
         <button class="compare-btn" data-action="compare">Compare</button>
       </div>
       ${aiSection}
+      ${engineBreakdownSection}
       ${domInsightsSection}
       <div class="images">
         ${buildImageContainer({

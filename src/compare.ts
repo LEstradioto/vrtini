@@ -84,6 +84,12 @@ export interface CompareOptions {
   confidenceThresholds?: ConfidenceThresholds;
   sizeNormalization?: 'pad' | 'resize' | 'crop';
   sizeMismatchHandling?: 'strict' | 'ignore';
+  /**
+   * When baseline/test heights differ, allow trimming the taller image if the
+   * extra bottom region is effectively uniform (usually just trailing
+   * whitespace/background). This prevents noisy "height mismatch" diffs.
+   */
+  trimUniformBottom?: boolean | { threshold?: number; samplePixels?: number };
   maxDiffPercentage?: number;
   maxDiffPixels?: number;
   baselineSnapshot?: string;
@@ -103,6 +109,98 @@ function buildMissingResult(
     pixelDiff: 0,
     diffPercentage: 0,
   };
+}
+
+function getTrimUniformBottomOptions(raw: CompareOptions['trimUniformBottom']): {
+  enabled: boolean;
+  threshold: number;
+  samplePixels: number;
+} {
+  if (raw === false) return { enabled: false, threshold: 0.995, samplePixels: 8000 };
+  if (raw === true || raw === undefined)
+    return { enabled: true, threshold: 0.995, samplePixels: 8000 };
+  return {
+    enabled: true,
+    threshold: raw.threshold ?? 0.995,
+    samplePixels: raw.samplePixels ?? 8000,
+  };
+}
+
+function pixelKey(data: Buffer, offset: number): number {
+  // Pack RGBA into a single 32-bit value for fast equality checks.
+  return (
+    ((data[offset] ?? 0) << 24) |
+    ((data[offset + 1] ?? 0) << 16) |
+    ((data[offset + 2] ?? 0) << 8) |
+    (data[offset + 3] ?? 0)
+  );
+}
+
+function modeFractionInRegion(
+  data: Buffer,
+  width: number,
+  yStart: number,
+  yEndExclusive: number,
+  samplePixels: number
+): number {
+  const h = yEndExclusive - yStart;
+  if (h <= 0 || width <= 0) return 0;
+  const total = width * h;
+  const step = Math.max(1, Math.floor(total / Math.max(1, samplePixels)));
+  const counts = new Map<number, number>();
+
+  const startOffset = yStart * width * 4;
+  let sampled = 0;
+  let maxCount = 0;
+
+  for (let p = 0; p < total; p += step) {
+    const off = startOffset + p * 4;
+    const key = pixelKey(data, off);
+    const next = (counts.get(key) ?? 0) + 1;
+    counts.set(key, next);
+    sampled += 1;
+    if (next > maxCount) maxCount = next;
+  }
+
+  return sampled === 0 ? 0 : maxCount / sampled;
+}
+
+function maybeTrimUniformBottom(img1: PNG, img2: PNG, options: CompareOptions): void {
+  const trim = getTrimUniformBottomOptions(options.trimUniformBottom);
+  if (!trim.enabled) return;
+
+  // Only attempt this when widths match. Height-only mismatches are the common
+  // noisy case we want to de-flake.
+  if (img1.width !== img2.width) return;
+  if (img1.height === img2.height) return;
+
+  const shortH = Math.min(img1.height, img2.height);
+
+  if (img1.height > img2.height) {
+    const frac = modeFractionInRegion(
+      img1.data,
+      img1.width,
+      shortH,
+      img1.height,
+      trim.samplePixels
+    );
+    if (frac >= trim.threshold) {
+      img1.data = cropImageData(img1.data, img1.width, img1.height, img1.width, shortH);
+      img1.height = shortH;
+    }
+  } else {
+    const frac = modeFractionInRegion(
+      img2.data,
+      img2.width,
+      shortH,
+      img2.height,
+      trim.samplePixels
+    );
+    if (frac >= trim.threshold) {
+      img2.data = cropImageData(img2.data, img2.width, img2.height, img2.width, shortH);
+      img2.height = shortH;
+    }
+  }
 }
 
 export async function compareImages(
@@ -130,6 +228,7 @@ export async function compareImages(
 
   try {
     const [img1, img2] = await Promise.all([loadPNG(baselinePath), loadPNG(testPath)]);
+    maybeTrimUniformBottom(img1, img2, options);
     const maxOriginalHeight = Math.max(img1.height, img2.height);
     const tallPage = maxOriginalHeight >= 4000;
 

@@ -80,11 +80,12 @@
   .section {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 1rem;
   }
 
   .section h2 {
+    font-family: var(--font-mono, monospace);
     font-size: 1rem;
     font-weight: 600;
     margin-bottom: 1rem;
@@ -99,9 +100,10 @@
     gap: 0.5rem;
     padding: 0.5rem 1rem;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--border);
     color: var(--text-strong);
+    font-family: var(--font-mono, monospace);
     font-size: 0.875rem;
     cursor: pointer;
     transition: background 0.2s;
@@ -139,7 +141,7 @@
     padding: 0.5rem 0.75rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
   }
 
   .browser-name {
@@ -155,7 +157,7 @@
     padding: 0.5rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text);
     font-size: 0.875rem;
   }
@@ -172,7 +174,7 @@
     text-align: center;
     background: var(--panel-strong);
     border: 1px dashed var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     margin-bottom: 0.5rem;
   }
 

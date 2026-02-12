@@ -6,8 +6,10 @@ import type { VRTConfig } from '../../../src/config.js';
 import {
   deleteCrossItems,
   loadCrossResults,
+  revokeCrossFlag,
   runCrossCompare,
   revokeCrossAcceptance,
+  setCrossFlag,
   setCrossAcceptance,
   type CrossResults,
 } from './cross-compare-service.js';
@@ -120,5 +122,30 @@ describe('cross-compare smart pass rerun', () => {
 
     expect(revokedItem?.accepted).toBeUndefined();
     expect(revokedItem?.acceptedAt).toBeUndefined();
+  });
+
+  it('persists cross flags in results.json', async () => {
+    const [report] = await runCrossCompare('demo', TEMP_ROOT, config);
+    const key = report.key;
+
+    const results = await loadCrossResults(TEMP_ROOT, config, key);
+    const itemKey = results.items[0].itemKey as string;
+
+    await setCrossFlag(TEMP_ROOT, key, itemKey, 'Review later', config);
+
+    const resultsPath = resolve(TEMP_ROOT, '.vrt', 'output', 'cross-reports', key, 'results.json');
+    const flaggedData = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
+    const flaggedItem = flaggedData.items.find((item) => item.itemKey === itemKey);
+
+    expect(flaggedItem?.flagged).toBe(true);
+    expect(flaggedItem?.flaggedAt).toBeTruthy();
+
+    await revokeCrossFlag(TEMP_ROOT, key, itemKey, config);
+
+    const unflaggedData = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
+    const unflaggedItem = unflaggedData.items.find((item) => item.itemKey === itemKey);
+
+    expect(unflaggedItem?.flagged).toBeUndefined();
+    expect(unflaggedItem?.flaggedAt).toBeUndefined();
   });
 });

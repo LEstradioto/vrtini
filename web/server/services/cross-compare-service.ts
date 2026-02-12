@@ -10,6 +10,7 @@ import { getDiffPath } from '../../../src/core/types.js';
 import { buildEnginesConfig } from '../../../src/core/compare-runner.js';
 import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';
+import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
 
 function buildCrossComparePairs(
   browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[]
@@ -77,6 +78,10 @@ export interface CrossResultItem {
   error?: string;
   accepted?: boolean;
   acceptedAt?: string;
+  flagged?: boolean;
+  flaggedAt?: string;
+  aiAnalysis?: AIAnalysisResult;
+  outdated?: boolean;
 }
 
 export interface CrossResults {
@@ -100,6 +105,8 @@ export interface CrossResultsSummary {
   matchCount: number;
   diffCount: number;
   issueCount: number;
+  flaggedCount: number;
+  outdatedCount?: number;
 }
 
 export interface CrossCompareRunOptions {
@@ -115,8 +122,14 @@ interface CrossAcceptanceRecord {
   reason?: string;
 }
 
+interface CrossFlagRecord {
+  flaggedAt: string;
+  reason?: string;
+}
+
 type CrossAcceptanceStore = Record<string, Record<string, CrossAcceptanceRecord>>;
 type CrossDeletionStore = Record<string, Record<string, { deletedAt: string }>>;
+type CrossFlagStore = Record<string, Record<string, CrossFlagRecord>>;
 
 function getCrossAcceptancesPath(projectPath: string): string {
   return resolve(projectPath, '.vrt', 'acceptances', 'cross.json');
@@ -124,6 +137,10 @@ function getCrossAcceptancesPath(projectPath: string): string {
 
 function getCrossDeletionsPath(projectPath: string): string {
   return resolve(projectPath, '.vrt', 'acceptances', 'cross-deleted.json');
+}
+
+function getCrossFlagsPath(projectPath: string): string {
+  return resolve(projectPath, '.vrt', 'acceptances', 'cross-flags.json');
 }
 
 async function loadCrossAcceptances(projectPath: string): Promise<CrossAcceptanceStore> {
@@ -159,6 +176,23 @@ async function loadCrossDeletions(projectPath: string): Promise<CrossDeletionSto
 
 async function saveCrossDeletions(projectPath: string, data: CrossDeletionStore): Promise<void> {
   const path = getCrossDeletionsPath(projectPath);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify(data, null, 2));
+}
+
+async function loadCrossFlags(projectPath: string): Promise<CrossFlagStore> {
+  const path = getCrossFlagsPath(projectPath);
+  if (!existsSync(path)) return {};
+  try {
+    const raw = await readFile(path, 'utf-8');
+    return JSON.parse(raw) as CrossFlagStore;
+  } catch {
+    return {};
+  }
+}
+
+async function saveCrossFlags(projectPath: string, data: CrossFlagStore): Promise<void> {
+  const path = getCrossFlagsPath(projectPath);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(data, null, 2));
 }
@@ -309,10 +343,17 @@ function toComparisonResult(item: CrossResultItem, projectPath: string): Compari
 function summarizeCrossItems(
   items: CrossResultItem[],
   acceptances: Record<string, CrossAcceptanceRecord> | undefined,
+  flags: Record<string, CrossFlagRecord> | undefined,
   deletions: Record<string, { deletedAt: string }> | undefined
 ): Pick<
   CrossResultsSummary,
-  'itemCount' | 'approvedCount' | 'smartPassCount' | 'matchCount' | 'diffCount' | 'issueCount'
+  | 'itemCount'
+  | 'approvedCount'
+  | 'smartPassCount'
+  | 'matchCount'
+  | 'diffCount'
+  | 'issueCount'
+  | 'flaggedCount'
 > {
   const summary = {
     itemCount: 0,
@@ -321,6 +362,7 @@ function summarizeCrossItems(
     matchCount: 0,
     diffCount: 0,
     issueCount: 0,
+    flaggedCount: 0,
   };
 
   for (const item of items) {
@@ -328,6 +370,9 @@ function summarizeCrossItems(
     if (deletions?.[itemKey]) continue;
 
     summary.itemCount += 1;
+    if (flags?.[itemKey]) {
+      summary.flaggedCount += 1;
+    }
 
     const accepted = !!acceptances?.[itemKey];
     if (accepted) {
@@ -639,17 +684,22 @@ export async function loadCrossResults(
   }
   const acceptances = await loadCrossAcceptances(projectPath);
   const pairAcceptances = acceptances[key] || {};
+  const flags = await loadCrossFlags(projectPath);
+  const pairFlags = flags[key] || {};
   const deletions = await loadCrossDeletions(projectPath);
   const pairDeletions = deletions[key] || {};
 
   results.items = results.items.map((item) => {
     const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
-    const record = pairAcceptances[itemKey];
+    const acceptanceRecord = pairAcceptances[itemKey];
+    const flagRecord = pairFlags[itemKey];
     return {
       ...item,
       itemKey,
-      accepted: !!record,
-      acceptedAt: record?.acceptedAt,
+      accepted: !!acceptanceRecord,
+      acceptedAt: acceptanceRecord?.acceptedAt,
+      flagged: !!flagRecord,
+      flaggedAt: flagRecord?.flaggedAt,
     };
   });
 
@@ -667,13 +717,23 @@ export async function loadCrossResults(
     }
   }
 
+  const generatedAtMs = Date.parse(results.generatedAt) || 0;
+
   results.items = await Promise.all(
-    results.items.map(async (item) => ({
-      ...item,
-      baselineUpdatedAt: await getMtimeIso(item.baseline),
-      testUpdatedAt: await getMtimeIso(item.test),
-      diffUpdatedAt: await getMtimeIso(item.diff),
-    }))
+    results.items.map(async (item) => {
+      const baselineUpdatedAt = await getMtimeIso(item.baseline);
+      const testUpdatedAt = await getMtimeIso(item.test);
+      const diffUpdatedAt = await getMtimeIso(item.diff);
+
+      // Item is outdated if any source screenshot was modified after the comparison ran
+      const latestMtime = Math.max(
+        baselineUpdatedAt ? Date.parse(baselineUpdatedAt) || 0 : 0,
+        testUpdatedAt ? Date.parse(testUpdatedAt) || 0 : 0
+      );
+      const outdated = generatedAtMs > 0 && latestMtime > generatedAtMs;
+
+      return { ...item, baselineUpdatedAt, testUpdatedAt, diffUpdatedAt, outdated };
+    })
   );
 
   return results;
@@ -690,6 +750,7 @@ export async function listCrossResults(
   const entries = await readdir(root, { withFileTypes: true });
   const summaries: CrossResultsSummary[] = [];
   const acceptances = await loadCrossAcceptances(projectPath);
+  const flags = await loadCrossFlags(projectPath);
   const deletions = await loadCrossDeletions(projectPath);
 
   for (const entry of entries) {
@@ -699,7 +760,7 @@ export async function listCrossResults(
     try {
       const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
       const key = data.key ?? entry.name;
-      const summary = summarizeCrossItems(data.items, acceptances[key], deletions[key]);
+      const summary = summarizeCrossItems(data.items, acceptances[key], flags[key], deletions[key]);
       summaries.push({
         key,
         title: data.title,
@@ -759,6 +820,49 @@ export async function revokeCrossAcceptance(
   return true;
 }
 
+export async function setCrossFlag(
+  projectPath: string,
+  key: string,
+  itemKey: string,
+  reason?: string,
+  config?: VRTConfig
+): Promise<CrossFlagRecord> {
+  const store = await loadCrossFlags(projectPath);
+  if (!store[key]) store[key] = {};
+  const record: CrossFlagRecord = { flaggedAt: new Date().toISOString(), reason };
+  store[key][itemKey] = record;
+  await saveCrossFlags(projectPath, store);
+  if (config) {
+    await updateCrossResultsFlag(projectPath, config, key, itemKey, record);
+  }
+  return record;
+}
+
+export async function revokeCrossFlag(
+  projectPath: string,
+  key: string,
+  itemKey: string,
+  config?: VRTConfig
+): Promise<boolean> {
+  const store = await loadCrossFlags(projectPath);
+  const pair = store[key];
+  if (!pair || !pair[itemKey]) return false;
+
+  const { [itemKey]: _removed, ...remaining } = pair;
+  let nextStore: CrossFlagStore = { ...store, [key]: remaining };
+
+  if (Object.keys(remaining).length === 0) {
+    const { [key]: _pair, ...rest } = nextStore;
+    nextStore = rest;
+  }
+
+  await saveCrossFlags(projectPath, nextStore);
+  if (config) {
+    await updateCrossResultsFlag(projectPath, config, key, itemKey);
+  }
+  return true;
+}
+
 async function loadCrossResultsRaw(
   projectPath: string,
   config: VRTConfig,
@@ -807,6 +911,47 @@ async function updateCrossResultsAcceptance(
       }
 
       const { accepted: _accepted, acceptedAt: _acceptedAt, ...rest } = item;
+      return { ...rest, itemKey: resolvedKey };
+    });
+
+    if (changed) {
+      await writeFile(resultsPath, JSON.stringify(data, null, 2));
+    }
+  } catch {
+    // ignore invalid results.json
+  }
+}
+
+async function updateCrossResultsFlag(
+  projectPath: string,
+  config: VRTConfig,
+  key: string,
+  itemKey: string,
+  record?: CrossFlagRecord
+): Promise<void> {
+  const { outputDir } = getProjectDirs(projectPath, config);
+  const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
+  if (!existsSync(resultsPath)) return;
+
+  try {
+    const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
+    let changed = false;
+
+    data.items = data.items.map((item) => {
+      const resolvedKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+      if (resolvedKey !== itemKey) return item;
+      changed = true;
+
+      if (record) {
+        return {
+          ...item,
+          itemKey: resolvedKey,
+          flagged: true,
+          flaggedAt: record.flaggedAt,
+        };
+      }
+
+      const { flagged: _flagged, flaggedAt: _flaggedAt, ...rest } = item;
       return { ...rest, itemKey: resolvedKey };
     });
 
@@ -874,6 +1019,22 @@ export async function deleteCrossItems(
         await saveCrossAcceptances(projectPath, { ...acceptances, [key]: remaining });
       }
     }
+
+    const flags = await loadCrossFlags(projectPath);
+    const pairFlags = flags[key] || {};
+    const deletedFlagsSet = new Set(deleted);
+    const remainingFlags = Object.fromEntries(
+      Object.entries(pairFlags).filter(([itemKey]) => !deletedFlagsSet.has(itemKey))
+    );
+    const flagsChanged = Object.keys(remainingFlags).length !== Object.keys(pairFlags).length;
+    if (flagsChanged) {
+      if (Object.keys(remainingFlags).length === 0) {
+        const { [key]: _removed, ...rest } = flags;
+        await saveCrossFlags(projectPath, rest);
+      } else {
+        await saveCrossFlags(projectPath, { ...flags, [key]: remainingFlags });
+      }
+    }
   }
 
   return { deleted, missing };
@@ -902,5 +1063,41 @@ export async function clearCrossResults(
     await saveCrossAcceptances(projectPath, rest);
   }
 
+  const flags = await loadCrossFlags(projectPath);
+  if (flags[key]) {
+    const { [key]: _removed, ...rest } = flags;
+    await saveCrossFlags(projectPath, rest);
+  }
+
   await clearCrossDeletions(projectPath, key);
+}
+
+export async function saveCrossItemAIResults(
+  projectPath: string,
+  config: VRTConfig,
+  key: string,
+  updates: Map<string, AIAnalysisResult>
+): Promise<void> {
+  const { outputDir } = getProjectDirs(projectPath, config);
+  const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
+  if (!existsSync(resultsPath)) return;
+
+  try {
+    const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
+    let changed = false;
+
+    data.items = data.items.map((item) => {
+      const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+      const analysis = updates.get(itemKey);
+      if (!analysis) return item;
+      changed = true;
+      return { ...item, itemKey, aiAnalysis: analysis };
+    });
+
+    if (changed) {
+      await writeFile(resultsPath, JSON.stringify(data, null, 2));
+    }
+  } catch {
+    // ignore invalid results.json
+  }
 }

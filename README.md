@@ -145,9 +145,19 @@ Optional: set `BROWSER=webkit` to launch WebKit instead of Chromium.
 
 ```bash
 npm run build
+npm run lint
+npm run format:check
 npm run test:unit
 npm run test:ui
 ```
+
+Git hooks enforce secret scanning with `gitleaks` on commit. Install either:
+
+```bash
+brew install gitleaks
+```
+
+or use Docker (the hook falls back to Docker if available).
 
 ## Automation
 

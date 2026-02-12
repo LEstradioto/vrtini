@@ -6,13 +6,26 @@
     queue: GalleryImage[];
     currentImage?: GalleryImage;
     canAct: boolean;
+    panicAvailable: boolean;
+    panicActive: boolean;
+    thumbnailsAvailable: boolean;
+    thumbnailsActive: boolean;
+    autoFitAvailable: boolean;
+    autoFitActive: boolean;
+    onTogglePanic?: () => void;
+    onToggleThumbnails?: () => void;
+    onToggleAutoFit?: () => void;
     onApprove?: (filename?: string) => void;
     onReject?: (filename?: string) => void;
     onRerun?: (filename: string) => void;
     testRunning: boolean;
     onAnalyze?: () => void;
     analyzing: boolean;
+    canAnalyze?: boolean;
     isAccepted: boolean;
+    isFlagged: boolean;
+    onFlag?: () => void;
+    onUnflag?: () => void;
     onRevokeAcceptance?: () => void;
     onAcceptForBrowser?: () => void;
   }
@@ -22,13 +35,26 @@
     queue,
     currentImage,
     canAct,
+    panicAvailable,
+    panicActive,
+    thumbnailsAvailable,
+    thumbnailsActive,
+    autoFitAvailable,
+    autoFitActive,
+    onTogglePanic,
+    onToggleThumbnails,
+    onToggleAutoFit,
     onApprove,
     onReject,
     onRerun,
     testRunning,
     onAnalyze,
     analyzing,
+    canAnalyze = true,
     isAccepted,
+    isFlagged,
+    onFlag,
+    onUnflag,
     onRevokeAcceptance,
     onAcceptForBrowser,
   }: Props = $props();
@@ -62,11 +88,48 @@
       {/if}
       <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Views
       <kbd>+</kbd><kbd>-</kbd> Zoom
-      {#if !isCompareMode}
-        <kbd>T</kbd> Thumbnails
-      {:else}
+      {#if onFlag || onUnflag}
+        <kbd>G</kbd> Flag
+      {/if}
+      {#if isCompareMode}
         <kbd>A</kbd> Approve
         <kbd>U</kbd> Undo
+      {/if}
+      {#if thumbnailsAvailable}
+        <button
+          type="button"
+          class="hint-toggle"
+          class:active={thumbnailsActive}
+          aria-pressed={thumbnailsActive}
+          title="Toggle thumbnails (T)"
+          onclick={() => onToggleThumbnails?.()}
+        >
+          <kbd>T</kbd> Thumbnails
+        </button>
+      {/if}
+      {#if autoFitAvailable}
+        <button
+          type="button"
+          class="hint-toggle"
+          class:active={autoFitActive}
+          aria-pressed={autoFitActive}
+          title="Toggle auto-fit columns (F)"
+          onclick={() => onToggleAutoFit?.()}
+        >
+          <kbd>F</kbd> Auto-fit
+        </button>
+      {/if}
+      {#if panicAvailable}
+        <button
+          type="button"
+          class="hint-toggle"
+          class:active={panicActive}
+          aria-pressed={panicActive}
+          title="Toggle panic check (P)"
+          onclick={() => onTogglePanic?.()}
+        >
+          <kbd>P</kbd> Panic
+        </button>
       {/if}
     </span>
   </div>
@@ -76,6 +139,15 @@
       {#if onAnalyze}
         <button class="action-btn ai" onclick={onAnalyze} disabled={analyzing}>
           {analyzing ? 'Analyzing...' : 'Analyze with AI'}
+        </button>
+      {/if}
+      {#if isFlagged && onUnflag}
+        <button class="action-btn flagged" onclick={onUnflag}>
+          Unflag
+        </button>
+      {:else if onFlag}
+        <button class="action-btn flagged" onclick={onFlag}>
+          Flag It
         </button>
       {/if}
       {#if isAccepted && onRevokeAcceptance}
@@ -89,6 +161,20 @@
         </button>
       {/if}
     {:else if currentImage && onApprove && onReject}
+      {#if onAnalyze}
+        <button class="action-btn ai" onclick={onAnalyze} disabled={analyzing || !canAnalyze}>
+          {analyzing ? 'Analyzing...' : 'AI Triage'}
+        </button>
+      {/if}
+      {#if isFlagged && onUnflag}
+        <button class="action-btn flagged" onclick={onUnflag}>
+          Unflag
+        </button>
+      {:else if onFlag}
+        <button class="action-btn flagged" onclick={onFlag}>
+          Flag It <kbd>G</kbd>
+        </button>
+      {/if}
       <button class="action-btn approve" onclick={handleApprove} disabled={!canAct}>
         {#if currentImage.status === 'new'}
           Approve as Baseline
@@ -126,9 +212,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 20px;
-    background: #1a1a2e;
+    padding: 8px 16px;
+    background: var(--bg);
     border-top: 1px solid var(--border);
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
   }
 
   .footer-left,
@@ -142,108 +229,149 @@
 
   .footer-center {
     display: flex;
-    gap: 12px;
+    gap: 8px;
   }
 
   .hint {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
   }
 
   .hint kbd {
     display: inline-block;
-    padding: 2px 5px;
+    padding: 1px 4px;
     margin: 0 2px;
-    background: var(--border);
-    border-radius: 3px;
-    font-size: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    font-size: 9px;
     color: var(--text-muted);
+  }
+
+  .hint-toggle {
+    margin: 0;
+    padding: 2px 6px;
+    border-radius: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .hint-toggle:hover {
+    border-color: var(--border);
+  }
+
+  .hint-toggle.active {
+    color: var(--accent, #10B981);
+    border-color: var(--accent, #10B981);
+    background: transparent;
+    font-weight: 600;
   }
 
   .queue-info {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .action-btn {
-    padding: 10px 24px;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 600;
+    padding: 6px 16px;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
+    text-transform: lowercase;
+    background: transparent;
+    color: var(--text-strong);
   }
 
   .action-btn kbd {
     display: inline-block;
-    padding: 2px 6px;
-    margin-left: 8px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-    font-size: 11px;
+    padding: 1px 4px;
+    margin-left: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    font-size: 9px;
   }
 
   .action-btn.approve {
-    background: #22c55e;
-    color: var(--text-strong);
+    border-color: #22c55e;
+    color: #22c55e;
   }
 
   .action-btn.approve:hover:not(:disabled) {
-    background: #16a34a;
+    background: #22c55e;
+    color: var(--bg);
   }
 
   .action-btn.reject {
-    background: #ef4444;
-    color: var(--text-strong);
+    border-color: #ef4444;
+    color: #ef4444;
   }
 
   .action-btn.reject:hover:not(:disabled) {
-    background: #dc2626;
+    background: #ef4444;
+    color: var(--bg);
   }
 
   .action-btn.rerun {
-    background: var(--border);
-    border: 1px solid var(--accent);
+    border-color: var(--accent);
     color: var(--accent);
   }
 
   .action-btn.rerun:hover:not(:disabled) {
     background: var(--accent);
-    color: var(--text-strong);
+    color: var(--bg);
   }
 
   .action-btn.ai {
-    background: #0ea5e9;
-    color: var(--text-strong);
+    border-color: #0ea5e9;
+    color: #0ea5e9;
   }
 
   .action-btn.ai:hover:not(:disabled) {
-    background: #0284c7;
+    background: #0ea5e9;
+    color: var(--bg);
   }
 
   .action-btn.accept {
-    background: #16a34a;
-    color: var(--text-strong);
+    border-color: #22c55e;
+    color: #22c55e;
+  }
+
+  .action-btn.flagged {
+    border-color: #ff6b00;
+    color: #ff6b00;
+  }
+
+  .action-btn.flagged:hover:not(:disabled) {
+    background: #ff6b00;
+    color: var(--bg);
   }
 
   .action-btn.accept:hover:not(:disabled) {
-    background: #15803d;
+    background: #22c55e;
+    color: var(--bg);
   }
 
   .action-btn.revoke {
-    background: transparent;
-    border: 1px solid #ef4444;
+    border-color: #ef4444;
     color: #ef4444;
   }
 
   .action-btn.revoke:hover:not(:disabled) {
     background: #ef4444;
-    color: var(--text-strong);
+    color: var(--bg);
   }
 
   .action-btn:disabled {
-    opacity: 0.4;
+    opacity: 0.3;
     cursor: not-allowed;
   }
 
@@ -251,12 +379,12 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 8px 14px;
-    background: rgba(34, 197, 94, 0.1);
+    padding: 5px 12px;
+    background: transparent;
     border: 1px solid #22c55e;
-    border-radius: 6px;
+    border-radius: 0;
     color: #22c55e;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 500;
   }
 

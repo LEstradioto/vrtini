@@ -8,6 +8,9 @@ import {
   parseImageFilename,
   computeAutoThresholdCaps,
   listImagesWithMetadata,
+  loadImageFlags,
+  setImageFlag,
+  revokeImageFlag,
   type Acceptance,
 } from './project-service.js';
 
@@ -192,6 +195,41 @@ describe('computeAutoThresholdCaps', () => {
   });
 });
 
+describe('image flags', () => {
+  it('persists, updates, and revokes flags', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'vrt-flags-'));
+
+    try {
+      const first = await setImageFlag(dir, {
+        filename: 'homepage_chromium_desktop.png',
+        reason: 'Needs product review',
+      });
+      expect(first.flaggedAt).toEqual(expect.any(String));
+      expect(first.reason).toBe('Needs product review');
+
+      const updated = await setImageFlag(dir, {
+        filename: 'homepage_chromium_desktop.png',
+        reason: 'Still under review',
+      });
+      expect(updated.flaggedAt).toEqual(expect.any(String));
+      expect(updated.reason).toBe('Still under review');
+
+      const flags = await loadImageFlags(dir);
+      expect(flags).toHaveLength(1);
+      expect(flags[0]).toMatchObject({
+        filename: 'homepage_chromium_desktop.png',
+        reason: 'Still under review',
+      });
+
+      expect(await revokeImageFlag(dir, 'homepage_chromium_desktop.png')).toBe(true);
+      expect(await loadImageFlags(dir)).toEqual([]);
+      expect(await revokeImageFlag(dir, 'homepage_chromium_desktop.png')).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('listImagesWithMetadata', () => {
   it('prefers persisted metadata when available', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'vrt-meta-'));
@@ -222,6 +260,7 @@ describe('listImagesWithMetadata', () => {
         browser: 'chromium',
         viewport: 'desktop',
       });
+      expect(result[0].updatedAt).toEqual(expect.any(String));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -256,6 +295,7 @@ describe('listImagesWithMetadata', () => {
         browser: 'chromium',
         viewport: 'desktop',
       });
+      expect(result[0].updatedAt).toEqual(expect.any(String));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -67,9 +67,36 @@
   // CrossComparePanel component ref
   let crossPanel: ReturnType<typeof CrossComparePanel> | undefined = $state();
 
+  function getCrossItemKey(item: CrossResultItem): string {
+    return item.itemKey ?? `${item.scenario}__${item.viewport}`;
+  }
+
+  function getActiveCrossModalItem(): CrossResultItem | null {
+    const state = crossPanel?.getCrossState();
+    const filteredItems = state?.crossFilteredItems ?? [];
+    if (filteredItems.length === 0) return null;
+    const bounded = Math.max(0, Math.min(filteredItems.length - 1, crossQueueIndex));
+    return filteredItems[bounded] ?? null;
+  }
+
+  function openCrossAIAnalysisModal(item?: CrossResultItem | null) {
+    const target = item ?? currentCrossItem ?? getActiveCrossModalItem();
+    if (!target?.aiAnalysis) {
+      showToast('No AI analysis for this item yet. Run AI Triage first.', 'error');
+      return;
+    }
+    analysisResults = [
+      {
+        filename: `${target.scenario} · ${target.viewport}`,
+        analysis: target.aiAnalysis,
+      },
+    ];
+    showAnalysisModal = true;
+  }
+
   async function approveCrossFromModal() {
     if (!currentCrossItem || !crossPanel) return;
-    const prevKey = currentCrossItem.itemKey;
+    const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
     await crossPanel.approveCrossFromModal(currentCrossItem);
     syncCrossModalSelection(prevKey, prevIndex);
@@ -77,10 +104,60 @@
 
   async function revokeCrossFromModal() {
     if (!currentCrossItem || !crossPanel) return;
-    const prevKey = currentCrossItem.itemKey;
+    const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
     await crossPanel.revokeCrossFromModal(currentCrossItem);
     syncCrossModalSelection(prevKey, prevIndex);
+  }
+
+  async function flagCrossFromModal() {
+    if (!currentCrossItem || !crossPanel) return;
+    const prevKey = getCrossItemKey(currentCrossItem);
+    const prevIndex = crossQueueIndex;
+    await crossPanel.flagCrossFromModal(currentCrossItem);
+    syncCrossModalSelection(prevKey, prevIndex);
+  }
+
+  async function unflagCrossFromModal() {
+    if (!currentCrossItem || !crossPanel) return;
+    const prevKey = getCrossItemKey(currentCrossItem);
+    const prevIndex = crossQueueIndex;
+    await crossPanel.unflagCrossFromModal(currentCrossItem);
+    syncCrossModalSelection(prevKey, prevIndex);
+  }
+
+  async function runCrossAITriageFromModal() {
+    if (!currentCrossItem || !crossPanel) return;
+    const prevKey = getCrossItemKey(currentCrossItem);
+    const prevIndex = crossQueueIndex;
+    await crossPanel.runAITriage([prevKey]);
+    syncCrossModalSelection(prevKey, prevIndex);
+    const refreshed = getActiveCrossModalItem();
+    if (refreshed?.aiAnalysis) {
+      currentCrossItem = refreshed;
+      openCrossAIAnalysisModal(refreshed);
+    }
+  }
+
+  function handleCompareAnalyze() {
+    if (compareMode === 'manual') {
+      if (compareRight) {
+        void handleAnalyze([compareRight.filename]);
+      }
+      return;
+    }
+    if (compareMode === 'cross') {
+      void runCrossAITriageFromModal();
+    }
+  }
+
+  function handleCompareOpenAIAnalysis() {
+    if (compareMode !== 'cross') return;
+    openCrossAIAnalysisModal();
+  }
+
+  function handleOpenCrossAIAnalysis(item: CrossResultItem) {
+    openCrossAIAnalysisModal(item);
   }
 
   function syncCrossModalSelection(preferredKey?: string, fallbackIndex = crossQueueIndex) {
@@ -141,6 +218,12 @@
   let analysisResults = $state<Array<{ filename: string; analysis?: AIAnalysisResult; error?: string }>>([]);
   let showAnalysisModal = $state(false);
   let aiAnalysisCache = $state<Record<string, AIAnalysisResult>>({});
+  type AnalyzeItemInput = {
+    baseline: { type: 'baseline' | 'test'; filename: string };
+    test: { type: 'baseline' | 'test'; filename: string };
+    diff?: { type: 'diff' | 'custom-diff'; filename: string };
+    name?: string;
+  };
 
   // Compare fullscreen modal state
   let showCompareFullscreen = $state(false);
@@ -193,6 +276,7 @@
       store.testsMetadata = imagesRes.metadata?.tests || [];
       store.diffsMetadata = imagesRes.metadata?.diffs || [];
       store.acceptances = imagesRes.acceptances || {};
+      store.flags = imagesRes.flags || {};
       store.autoThresholdCaps = imagesRes.autoThresholdCaps || null;
       store.imageResults = resultsRes.results;
       crossReports = crossRes.results;
@@ -342,26 +426,34 @@
       },
       viewport: item.viewport,
       badge: {
-        label: item.accepted
-          ? 'Approved'
-          : item.match
-            ? item.diffPercentage > 0
-              ? 'Smart Pass'
-              : 'Match'
-            : item.reason === 'diff'
-              ? 'Diff'
-              : 'Issue',
-        tone: item.accepted
-          ? 'approved'
-          : item.match
-            ? item.diffPercentage > 0
-              ? 'smart'
-              : 'passed'
-            : item.reason === 'diff'
-              ? 'diff'
-              : 'unapproved',
+        label: item.flagged
+          ? 'Flagged'
+          : item.accepted
+            ? 'Approved'
+            : item.match
+              ? item.diffPercentage > 0
+                ? 'Smart Pass'
+                : 'Match'
+              : item.reason === 'diff'
+                ? 'Diff'
+                : 'Issue',
+        tone: item.flagged
+          ? 'flagged'
+          : item.accepted
+            ? 'approved'
+            : item.match
+              ? item.diffPercentage > 0
+                ? 'smart'
+                : 'passed'
+              : item.reason === 'diff'
+                ? 'diff'
+                : 'unapproved',
       },
       accepted: item.accepted,
+      flagged: item.flagged,
+      aiRecommendation: item.aiAnalysis?.recommendation,
+      aiCategory: item.aiAnalysis?.category,
+      aiConfidence: item.aiAnalysis?.confidence,
     }));
   });
 
@@ -372,6 +464,65 @@
   // Delegate image status to store
   function getImageStatus(filename: string): ImageStatus | null {
     return store.getImageStatus(filename);
+  }
+
+  async function setImageFlag(filename: string) {
+    const previous = store.flags[filename];
+    store.flags = {
+      ...store.flags,
+      [filename]: {
+        filename,
+        flaggedAt: new Date().toISOString(),
+      },
+    };
+    try {
+      const result = await images.flag(projectId, filename);
+      store.flags = {
+        ...store.flags,
+        [filename]: result.flag,
+      };
+    } catch (err) {
+      if (previous) {
+        store.flags = { ...store.flags, [filename]: previous };
+      } else {
+        const { [filename]: _removed, ...rest } = store.flags;
+        store.flags = rest;
+      }
+      showToast(getErrorMessage(err, 'Failed to flag image'), 'error');
+    }
+  }
+
+  async function unsetImageFlag(filename: string) {
+    const previous = store.flags[filename];
+    if (!previous) return;
+    const { [filename]: _removed, ...rest } = store.flags;
+    store.flags = rest;
+    try {
+      await images.unflag(projectId, filename);
+    } catch (err) {
+      store.flags = { ...store.flags, [filename]: previous };
+      showToast(getErrorMessage(err, 'Failed to unflag image'), 'error');
+    }
+  }
+
+  async function handleCompareFlag() {
+    if (compareMode === 'manual' && compareRight) {
+      await setImageFlag(compareRight.filename);
+      return;
+    }
+    if (compareMode === 'cross') {
+      await flagCrossFromModal();
+    }
+  }
+
+  async function handleCompareUnflag() {
+    if (compareMode === 'manual' && compareRight) {
+      await unsetImageFlag(compareRight.filename);
+      return;
+    }
+    if (compareMode === 'cross') {
+      await unflagCrossFromModal();
+    }
   }
 
   // Check if selected images are approvable (must have test images)
@@ -640,6 +791,14 @@
     });
   }
 
+  async function handleGalleryFlag(filename: string) {
+    await setImageFlag(filename);
+  }
+
+  async function handleGalleryUnflag(filename: string) {
+    await unsetImageFlag(filename);
+  }
+
   async function handleRerun(filename: string) {
     if (!project) return;
     try {
@@ -746,23 +905,10 @@
     }
   }
 
-  async function handleAnalyze(filenames: string[]) {
-    if (!compareLeft || !compareRight) {
-      error = 'Select images to compare before analyzing';
-      return;
-    }
-
+  async function runAnalyzeItems(items: AnalyzeItemInput[]): Promise<void> {
+    if (items.length === 0) return;
     try {
       analyzing = true;
-      const items = filenames.map((filename) => ({
-        baseline: { type: compareLeft!.type, filename: compareLeft!.filename },
-        test: { type: compareRight!.type, filename },
-        diff: compareResult?.diffFilename
-          ? { type: 'custom-diff' as const, filename: compareResult.diffFilename }
-          : undefined,
-        name: filename,
-      }));
-
       const result = await analyze.run(projectId, items);
       analysisResults = result.results;
 
@@ -772,7 +918,6 @@
         }
       }
       aiAnalysisCache = { ...aiAnalysisCache };
-
       showAnalysisModal = true;
     } catch (err) {
       error = getErrorMessage(err, 'AI analysis failed');
@@ -781,9 +926,82 @@
     }
   }
 
+  async function handleAnalyze(filenames: string[]) {
+    if (!compareLeft || !compareRight) {
+      error = 'Select images to compare before analyzing';
+      return;
+    }
+
+    const items: AnalyzeItemInput[] = filenames.map((filename) => ({
+      baseline: { type: compareLeft.type, filename: compareLeft.filename },
+      test: { type: compareRight.type, filename },
+      diff: compareResult?.diffFilename
+        ? { type: 'custom-diff', filename: compareResult.diffFilename }
+        : undefined,
+      name: filename,
+    }));
+
+    await runAnalyzeItems(items);
+  }
+
+  function buildTriageItems(
+    filenames: string[]
+  ): { items: AnalyzeItemInput[]; skippedNoBaseline: number; skippedNoTest: number } {
+    const unique = [...new Set(filenames)];
+    const items: AnalyzeItemInput[] = [];
+    let skippedNoBaseline = 0;
+    let skippedNoTest = 0;
+
+    for (const filename of unique) {
+      if (!store.testsSet.has(filename)) {
+        skippedNoTest += 1;
+        continue;
+      }
+      if (!store.baselinesSet.has(filename)) {
+        skippedNoBaseline += 1;
+        continue;
+      }
+
+      const meta = store.testMetadataMap.get(filename) ?? store.baselineMetadataMap.get(filename);
+      items.push({
+        baseline: { type: 'baseline', filename },
+        test: { type: 'test', filename },
+        diff: store.diffsSet.has(filename) ? { type: 'diff', filename } : undefined,
+        name: meta?.scenario ?? filename,
+      });
+    }
+
+    return { items, skippedNoBaseline, skippedNoTest };
+  }
+
+  async function handleAITriage(filenames: string[]) {
+    const { items, skippedNoBaseline, skippedNoTest } = buildTriageItems(filenames);
+    if (items.length === 0) {
+      showToast('No comparable baseline/test pairs selected for AI triage', 'error');
+      return;
+    }
+
+    await runAnalyzeItems(items);
+
+    if (skippedNoBaseline > 0 || skippedNoTest > 0) {
+      const skippedParts: string[] = [];
+      if (skippedNoBaseline > 0) skippedParts.push(`${skippedNoBaseline} missing baseline`);
+      if (skippedNoTest > 0) skippedParts.push(`${skippedNoTest} missing test`);
+      showToast(`AI triage skipped ${skippedParts.join(', ')}`, 'error');
+    }
+  }
+
   function closeAnalysisModal() {
     showAnalysisModal = false;
     analysisResults = [];
+  }
+
+  function handleAnalysisAccept(filename: string) {
+    if (compareMode === 'cross') {
+      void approveCrossFromModal();
+      return;
+    }
+    void handleAcceptForBrowser(filename);
   }
 
   function openFullscreenCompare() {
@@ -1051,13 +1269,6 @@
       </button>
       <button
         class="tab"
-        class:active={activeTab === 'compare'}
-        onclick={() => { activeTab = 'compare'; setTagFilter('all'); }}
-      >
-        Compare Tool
-      </button>
-      <button
-        class="tab"
         class:active={activeTab === 'cross'}
         onclick={() => { activeTab = 'cross'; setTagFilter('all'); }}
       >
@@ -1102,6 +1313,7 @@
           {getFileUrl}
           {getFileThumbUrl}
           onOpenCrossCompare={handleOpenCrossCompare}
+          onOpenAIAnalysis={handleOpenCrossAIAnalysis}
           onSetActiveTab={(tab) => activeTab = tab}
         />
       {:else}
@@ -1125,8 +1337,8 @@
           {toggleTagFilter}
           {matchesTagSet}
           {metadataMap}
+          imageResults={store.imageResults}
           onOpenGallery={openGallery}
-          onBulkRerun={handleBulkRerun}
         />
       {/if}
 
@@ -1146,7 +1358,7 @@
   <AIAnalysisModal
     results={analysisResults}
     onClose={closeAnalysisModal}
-    onAccept={handleAcceptForBrowser}
+    onAccept={handleAnalysisAccept}
   />
 {/if}
 
@@ -1163,7 +1375,22 @@
     compareThreshold={compareMode === 'manual' ? threshold : undefined}
     onThresholdChange={compareMode === 'manual' ? (t) => (threshold = t) : undefined}
     onRecompare={compareMode === 'manual' ? recompareWithThreshold : undefined}
-    onAnalyze={compareMode === 'manual' ? () => compareRight && handleAnalyze([compareRight.filename]) : undefined}
+    onAnalyze={compareMode ? handleCompareAnalyze : undefined}
+    onOpenAIAnalysis={compareMode === 'cross' ? handleCompareOpenAIAnalysis : undefined}
+    onFlag={
+      compareMode === 'manual'
+        ? () => compareRight && setImageFlag(compareRight.filename)
+        : compareMode === 'cross'
+          ? handleCompareFlag
+          : undefined
+    }
+    onUnflag={
+      compareMode === 'manual'
+        ? () => compareRight && unsetImageFlag(compareRight.filename)
+        : compareMode === 'cross'
+          ? handleCompareUnflag
+          : undefined
+    }
     onAcceptForBrowser={
       compareMode === 'manual'
         ? () => compareRight && handleAcceptForBrowser(compareRight.filename)
@@ -1185,7 +1412,20 @@
           ? !!currentCrossItem?.accepted
           : false
     }
-    analyzing={compareMode === 'manual' ? analyzing : false}
+    isFlagged={
+      compareMode === 'manual' && compareRight
+        ? !!store.flags[compareRight.filename]
+        : compareMode === 'cross'
+          ? !!currentCrossItem?.flagged
+          : false
+    }
+    analyzing={
+      compareMode === 'manual'
+        ? analyzing
+        : compareMode === 'cross'
+          ? (crossPanel?.getCrossState()?.aiTriageRunning ?? false)
+          : false
+    }
     recomparing={compareMode === 'manual' ? comparing : false}
     onClose={closeCompareFullscreen}
   />
@@ -1202,8 +1442,31 @@
     {bulkTotal}
     onApprove={handleBulkApprove}
     onReject={handleBulkReject}
+    onRerun={handleBulkRerun}
+    onAITriage={() => handleAITriage([...selectedImages])}
+    aiTriageRunning={analyzing}
     onDelete={handleBulkDelete}
+    onSelectAll={() => { selectedImages = new Set(fullList); }}
     onCancel={deselectAll}
+  />
+{/if}
+{#if activeTab === 'cross' && (crossPanel?.getCrossState()?.selectedCrossCount ?? 0) > 0}
+  {@const crossState = crossPanel?.getCrossState()}
+  <BulkActionBar
+    selectedCount={crossState?.selectedCrossCount ?? 0}
+    mode="cross"
+    crossRunning={crossState?.crossCompareRunning || crossState?.crossTestRunning || false}
+    onApprove={() => crossPanel?.approveSelectedCrossItems()}
+    onRerun={() => crossPanel?.rerunSelectedCrossItems()}
+    onRerunTests={() => crossPanel?.rerunSelectedCrossItemTests()}
+    onAITriage={() => {
+      const keys = crossState?.selectedCrossItems ? [...crossState.selectedCrossItems] : undefined;
+      crossPanel?.runAITriage(keys);
+    }}
+    aiTriageRunning={crossState?.aiTriageRunning || false}
+    onDelete={() => crossPanel?.deleteCrossItems()}
+    onSelectAll={() => crossPanel?.selectAllCross()}
+    onCancel={() => crossPanel?.deselectAllCross()}
   />
 {/if}
 
@@ -1224,9 +1487,14 @@
     onClose={closeGallery}
     onApprove={handleGalleryApprove}
     onReject={handleGalleryReject}
+    onFlag={handleGalleryFlag}
+    onUnflag={handleGalleryUnflag}
     onRerun={handleRerun}
+    onAnalyze={(filename) => filename && handleAITriage([filename])}
+    analyzing={analyzing}
     testRunning={!!testState}
     {getImageUrl}
+    getImageMetadata={(type, filename) => store.getMetadataForType(type, filename)}
   />
 {/if}
 
@@ -1237,7 +1505,9 @@
     display: flex;
     flex-direction: column;
     min-height: calc(100vh - 100px);
+    font-family: var(--font-body);
     --tag-approved: #22c55e;
+    --tag-flagged: #ff6b00;
     --tag-unapproved: #ef4444;
     --tag-new: #f59e0b;
     --tag-diff: #f97316;
@@ -1251,44 +1521,54 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 6px;
-    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--panel-strong);
     color: var(--text-strong);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, border-color 0.2s;
+    text-transform: lowercase;
+    letter-spacing: 0.03em;
   }
 
   .btn:hover {
-    background: var(--border-soft);
+    border-color: var(--text-muted);
+    background: var(--border);
   }
 
   .btn.primary {
-    background: var(--accent);
-    color: #fff;
+    background: transparent;
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .btn.primary:hover {
-    background: var(--accent-strong);
+    background: var(--accent);
+    color: var(--bg);
   }
 
   .btn.warning {
-    background: #f59e0b;
-    color: #fff;
+    border-color: #f59e0b;
+    color: #f59e0b;
+    background: transparent;
   }
 
   .btn.warning:hover {
-    background: #d97706;
+    background: #f59e0b;
+    color: var(--bg);
   }
 
   .btn.danger {
-    background: #7f1d1d;
-    color: #fff;
+    border-color: #ef4444;
+    color: #ef4444;
+    background: transparent;
   }
 
   .btn.danger:hover {
     background: #ef4444;
+    color: var(--bg);
   }
 
   .btn.small {
@@ -1298,7 +1578,8 @@
 
   .btn.active {
     background: var(--accent);
-    color: #fff;
+    border-color: var(--accent);
+    color: var(--bg);
   }
 
   .btn.ghost {
@@ -1309,15 +1590,17 @@
 
   .btn.ghost:hover:not(:disabled) {
     border-color: var(--accent);
-    color: var(--text-strong);
+    color: var(--accent);
   }
 
   .error {
-    background: #7f1d1d;
+    background: rgba(239, 68, 68, 0.08);
     border: 1px solid #ef4444;
+    border-left: 3px solid #ef4444;
     padding: 0.75rem 1rem;
-    border-radius: 6px;
+    border-radius: 0;
     margin-bottom: 1rem;
+    font-family: var(--font-mono);
   }
 
   .test-error {
@@ -1347,8 +1630,8 @@
   }
 
   .error-message {
-    font-family: monospace;
-    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
     white-space: pre-wrap;
     color: #fca5a5;
   }
@@ -1368,7 +1651,7 @@
   .status-card {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 0.65rem 0.9rem;
     text-align: center;
     font: inherit;
@@ -1377,12 +1660,11 @@
 
   .status-card.clickable {
     cursor: pointer;
-    transition: border-color 0.2s, transform 0.2s;
+    transition: border-color 0.2s;
   }
 
   .status-card.clickable:hover {
     border-color: var(--text-muted);
-    transform: translateY(-2px);
   }
 
   .status-card.clickable.active {
@@ -1391,16 +1673,18 @@
   }
 
   .status-value {
+    font-family: var(--font-mono);
     font-size: 1.35rem;
     font-weight: 600;
     margin-bottom: 0.25rem;
   }
 
   .status-label {
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
   }
 
   .status-card.passed .status-value {
@@ -1425,20 +1709,24 @@
 
   .tabs {
     display: flex;
-    gap: 0.25rem;
+    gap: 0;
     margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
   }
 
   .tab {
     padding: 0.5rem 1rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-bottom: none;
-    border-radius: 6px 6px 0 0;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: color 0.2s, border-color 0.2s;
+    text-transform: lowercase;
+    letter-spacing: 0.03em;
   }
 
   .tab:hover {
@@ -1446,9 +1734,9 @@
   }
 
   .tab.active {
-    background: var(--border);
-    color: var(--text-strong);
-    border-color: var(--accent);
+    background: transparent;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
   }
 
   .content {
@@ -1465,7 +1753,7 @@
     flex-direction: column;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -1485,9 +1773,10 @@
     padding: 0.5rem 0.75rem;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text-strong);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
   }
 
   .search-bar .search-input:focus {
@@ -1527,14 +1816,15 @@
   }
 
   .tag-filter {
-    padding: 0.28rem 0.6rem;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    background: var(--panel-strong);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0;
+    border: 1px solid var(--border);
+    background: transparent;
     color: var(--text-muted);
+    font-family: var(--font-mono);
     font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
     cursor: pointer;
     opacity: 0.55;
     transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s;
@@ -1658,14 +1948,14 @@
 
   .image-card {
     background: var(--panel-soft);
-    border: 2px solid var(--border-soft);
-    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 0;
     padding: 0.6rem;
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
     cursor: pointer;
-    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s;
     contain: layout style paint;
     content-visibility: auto;
     contain-intrinsic-size: auto 220px auto 210px;
@@ -1673,12 +1963,10 @@
 
   .image-card:hover {
     border-color: var(--text-muted);
-    transform: translateY(-2px);
   }
 
   .image-card.multi-selected {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
   }
 
   .image-card.tag-approved {
@@ -1732,14 +2020,15 @@
   }
 
   .image-tag {
+    font-family: var(--font-mono);
     font-size: 0.6rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    padding: 0.18rem 0.5rem;
-    border-radius: 999px;
+    font-weight: 500;
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0;
     border: 1px solid var(--border);
-    background: var(--panel-strong);
+    background: transparent;
     color: var(--text-muted);
     white-space: nowrap;
   }
@@ -1785,7 +2074,7 @@
     height: 120px;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -1817,7 +2106,7 @@
     height: 18px;
     background: rgba(0, 0, 0, 0.6);
     border: 2px solid var(--text-muted);
-    border-radius: 4px;
+    border-radius: 0;
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -1893,13 +2182,14 @@
     color: var(--text-muted);
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
+    font-family: var(--font-mono);
   }
 
   .compare-results {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 1rem;
   }
 
@@ -1951,13 +2241,14 @@
     padding: 0.6rem 0.75rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     color: var(--text);
-    font-size: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
   }
 
   .cross-search-bar {
-    border-radius: 8px;
+    border-radius: 0;
   }
 
   .cross-search-bar .search-input {
@@ -1974,10 +2265,11 @@
   }
 
   .cross-summary-line {
+    font-family: var(--font-mono);
     font-size: 0.75rem;
     color: var(--text-muted);
     padding: 0.45rem 0.65rem;
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px solid var(--border);
     background: var(--panel);
   }
@@ -1990,8 +2282,8 @@
 
   .cross-card {
     background: var(--panel-soft);
-    border: 2px solid var(--border-soft);
-    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 0;
     padding: 0.8rem;
     display: flex;
     flex-direction: column;
@@ -2038,7 +2330,7 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px solid var(--border);
     background: var(--panel-strong);
   }
@@ -2061,14 +2353,15 @@
   }
 
   .cross-badge {
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 0.2rem 0.5rem;
-    border-radius: 999px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0;
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
     border: 1px solid var(--border);
-    background: var(--panel-strong);
+    background: transparent;
     color: var(--text-muted);
   }
 
@@ -2136,7 +2429,7 @@
   .cross-image {
     background: var(--panel-strong);
     border: 1px solid var(--border-soft);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 0;
     overflow: hidden;
     cursor: pointer;
@@ -2176,9 +2469,10 @@
     padding: 0.375rem 0.5rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 0;
     color: var(--text);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
     text-align: center;
   }
 
@@ -2189,11 +2483,11 @@
 
   .threshold-slider {
     flex: 1;
-    height: 6px;
+    height: 4px;
     -webkit-appearance: none;
     appearance: none;
     background: var(--border);
-    border-radius: 3px;
+    border-radius: 0;
     outline: none;
     cursor: pointer;
   }
@@ -2201,9 +2495,9 @@
   .threshold-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
     background: var(--accent);
     cursor: pointer;
     transition: background 0.15s;
@@ -2214,9 +2508,9 @@
   }
 
   .threshold-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
     background: var(--accent);
     cursor: pointer;
     border: none;
@@ -2237,12 +2531,15 @@
   }
 
   .stat-label {
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
     color: var(--text-muted);
-    text-transform: uppercase;
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
   }
 
   .stat-value {
+    font-family: var(--font-mono);
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--text-strong);
@@ -2258,7 +2555,7 @@
     position: relative;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -2286,7 +2583,7 @@
     padding: 1rem;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     margin-bottom: 1rem;
   }
 
@@ -2315,15 +2612,18 @@
   }
 
   .config-value {
+    font-family: var(--font-mono);
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--text);
   }
 
   .config-label {
-    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
     color: var(--text-muted);
-    text-transform: uppercase;
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
   }
 
   .last-run {
@@ -2339,12 +2639,14 @@
   }
 
   .last-status-badge {
+    font-family: var(--font-mono);
     font-size: 0.65rem;
-    padding: 0.2rem 0.4rem;
-    border-radius: 3px;
-    text-transform: uppercase;
-    font-weight: 600;
+    padding: 0.15rem 0.35rem;
+    border-radius: 0;
+    text-transform: lowercase;
+    font-weight: 500;
     color: var(--text-strong);
+    border: 1px solid var(--border);
   }
 
   .timing-stats {
@@ -2421,7 +2723,7 @@
   }
 
   .bulk-action-bar.operating {
-    background: #252525;
+    background: var(--panel-strong);
   }
 
   .bulk-info {
@@ -2453,8 +2755,9 @@
     left: 50%;
     transform: translateX(-50%);
     padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-size: 0.875rem;
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
     font-weight: 500;
     z-index: 200;
     animation: fadeInUp 0.3s ease-out;

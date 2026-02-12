@@ -50,7 +50,7 @@
     display: flex;
     gap: 8px;
     padding: 12px 20px;
-    background: #1a1a2e;
+    background: var(--panel);
     border-top: 1px solid var(--border);
     overflow-x: auto;
     overflow-y: hidden;
@@ -61,9 +61,10 @@
     flex-shrink: 0;
     width: 80px;
     height: 60px;
-    background: #0a0a0a;
+    background: var(--bg);
     border: 2px solid var(--border);
-    border-radius: 4px;
+    border-radius: 0;
+    font-family: var(--font-mono, monospace);
     overflow: hidden;
     cursor: pointer;
     transition: all 0.15s;
@@ -91,7 +92,7 @@
     right: 2px;
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: 0;
     border: 1px solid rgba(0, 0, 0, 0.5);
   }
 </style>

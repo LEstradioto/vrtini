@@ -129,12 +129,21 @@
     loadProjects();
   });
 
-  function getStatusColor(status?: string) {
+  function getStatusLabel(status?: string): string {
     switch (status) {
-      case 'passed': return '#22c55e';
-      case 'failed': return '#ef4444';
-      case 'new': return '#f59e0b';
-      default: return '#666';
+      case 'passed': return '[passed]';
+      case 'failed': return '[failed]';
+      case 'new': return '[new]';
+      default: return '[--]';
+    }
+  }
+
+  function getStatusClass(status?: string): string {
+    switch (status) {
+      case 'passed': return 'passed';
+      case 'failed': return 'failed';
+      case 'new': return 'new';
+      default: return 'none';
     }
   }
 
@@ -154,158 +163,188 @@
     if (data.tests.length === 0) return 'not run';
     return 'passed';
   }
+
+  // Aggregate metrics
+  let metrics = $derived.by(() => {
+    let totalTests = 0;
+    let totalPassed = 0;
+    let totalDiffs = 0;
+
+    for (const [, data] of imageData) {
+      totalTests += data.tests.length;
+      totalDiffs += data.diffs.length;
+      const passed = data.tests.length - data.diffs.length;
+      totalPassed += Math.max(0, passed);
+    }
+
+    const passRate = totalTests > 0 ? Math.round((totalPassed / totalTests) * 100) : 0;
+
+    return {
+      totalTests,
+      passRate,
+      totalDiffs,
+      projectCount: projectList.length,
+    };
+  });
 </script>
 
 <div class="dashboard">
-  <div class="header">
-    <h1>Projects</h1>
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <div class="title-line">
+        <span class="prompt">&gt;</span>
+        <h1>dashboard</h1>
+      </div>
+      <p class="subtitle">// visual regression testing overview</p>
+    </div>
     <div class="header-actions">
       {#if serverInfo?.hasConfig}
-        <button class="btn" onclick={importCurrentProject}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          Import Current
-        </button>
+        <button class="btn ghost" onclick={importCurrentProject}>$ vrt import</button>
       {/if}
-      <button class="btn primary" onclick={openAddModal}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        Add Project
-      </button>
+      <button class="btn primary" onclick={openAddModal}>$ vrt add</button>
     </div>
   </div>
 
   {#if error}
-    <div class="error">{error}</div>
+    <div class="error-banner">{error}</div>
   {/if}
 
   {#if testErrors.size > 0}
-    {#each [...testErrors.entries()] as [projectId, testError]}
-      {@const project = projectList.find(p => p.id === projectId)}
-      <div class="error test-error">
+    {#each [...testErrors.entries()] as [pid, testError]}
+      {@const project = projectList.find(p => p.id === pid)}
+      <div class="error-banner">
         <div class="error-header">
-          <strong>Test failed{project ? ` for ${project.name}` : ''}</strong>
-          <button class="error-close" onclick={() => clearTestError(projectId)}>&times;</button>
+          <strong>test failed{project ? ` // ${project.name}` : ''}</strong>
+          <button class="error-close" onclick={() => clearTestError(pid)}>&times;</button>
         </div>
-        <div class="error-message">{testError}</div>
+        <pre class="error-message">{testError}</pre>
       </div>
     {/each}
   {/if}
 
   {#if loading}
-    <div class="loading">Loading projects...</div>
-  {:else if projectList.length === 0}
-    <div class="empty">
-      <p>No projects yet. Add a project to get started.</p>
-    </div>
+    <div class="loading">loading projects...</div>
   {:else}
-    <div class="grid">
-      {#each projectList as project}
-        {@const computedStatus = getComputedStatus(imageData.get(project.id))}
-        <div
-          class="card"
-          onclick={() => navigate(`/project/${project.id}`)}
-          onkeydown={(e) => e.key === 'Enter' && navigate(`/project/${project.id}`)}
-          role="button"
-          tabindex="0"
-        >
-          <div class="card-header">
-            <h3>{project.name}</h3>
-            <span class="status" style="background: {getStatusColor(computedStatus)}">
-              {computedStatus}
-            </span>
-          </div>
+    <!-- Metrics Row -->
+    <div class="metrics-section">
+      <span class="section-label">// overview_stats</span>
+      <div class="metrics-row">
+        <div class="metric-card">
+          <span class="metric-label">total_tests</span>
+          <span class="metric-value">{metrics.totalTests}</span>
+          <span class="metric-delta">
+            <span class="delta-prefix">++</span>
+            {metrics.totalTests > 0 ? `${metrics.projectCount} project${metrics.projectCount !== 1 ? 's' : ''}` : 'no tests yet'}
+          </span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">pass_rate</span>
+          <span class="metric-value">{metrics.passRate}%</span>
+          <span class="metric-delta">
+            <span class="delta-prefix">++</span>
+            {metrics.passRate === 100 ? 'all passing' : `${metrics.totalDiffs} diff${metrics.totalDiffs !== 1 ? 's' : ''} found`}
+          </span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">active_diffs</span>
+          <span class="metric-value">{metrics.totalDiffs}</span>
+          <span class="metric-delta">
+            <span class="delta-prefix">{metrics.totalDiffs > 0 ? '--' : '++'}</span>
+            {metrics.totalDiffs === 0 ? 'clean' : 'needs review'}
+          </span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">projects</span>
+          <span class="metric-value">{metrics.projectCount}</span>
+          <span class="metric-delta">
+            <span class="delta-prefix">++</span>
+            registered
+          </span>
+        </div>
+      </div>
+    </div>
 
-          <p class="path">{project.path}</p>
+    <!-- Projects List -->
+    <div class="projects-section">
+      <div class="section-header">
+        <span class="section-label">// recent_projects</span>
+        <span class="section-action">$ vrt list</span>
+      </div>
 
-          <!-- Image counts -->
-          {#if imageData.get(project.id)}
-            {@const data = imageData.get(project.id)!}
-            <div class="stats">
-              <span class="stat" title="Baselines">
-                <span class="stat-icon">B</span>
-                {data.baselines.length}
-              </span>
-              <span class="stat" title="Tests">
-                <span class="stat-icon">T</span>
-                {data.tests.length}
-              </span>
-              {#if data.diffs.length > 0}
-                <span class="stat diff" title="Diffs (changes detected)">
-                  <span class="stat-icon">D</span>
-                  {data.diffs.length}
-                </span>
+      {#if projectList.length === 0}
+        <div class="empty">
+          <p>no projects registered. run <code>$ vrt add</code> to get started.</p>
+        </div>
+      {:else}
+        <div class="project-list">
+          {#each projectList as project, i}
+            {@const computedStatus = getComputedStatus(imageData.get(project.id))}
+            {@const data = imageData.get(project.id)}
+            <div
+              class="project-item"
+              class:last={i === projectList.length - 1}
+              onclick={() => navigate(`/project/${project.id}`)}
+              onkeydown={(e) => e.key === 'Enter' && navigate(`/project/${project.id}`)}
+              role="button"
+              tabindex="0"
+            >
+              {#if runningTests.has(project.id)}
+                {@const testState = runningTests.get(project.id)}
+                <div class="project-left">
+                  <span class="project-dot running"></span>
+                  <div class="project-info">
+                    <span class="project-name">{project.name}/</span>
+                    <span class="project-meta">{testState!.phase}</span>
+                  </div>
+                </div>
+                <div class="project-right">
+                  <div class="progress-inline">
+                    <div class="progress-track">
+                      <div
+                        class="progress-fill"
+                        style="width: {testState!.total > 0 ? (testState!.progress / testState!.total) * 100 : 0}%"
+                      ></div>
+                    </div>
+                    <span class="progress-text">{testState!.progress}/{testState!.total}</span>
+                    <button
+                      class="btn-inline stop"
+                      onclick={(e) => abortTests(project, e)}
+                      disabled={testState!.aborting}
+                    >
+                      {testState!.aborting ? '...' : 'stop'}
+                    </button>
+                  </div>
+                </div>
+              {:else}
+                <div class="project-left">
+                  <span class="project-dot {getStatusClass(computedStatus)}"></span>
+                  <div class="project-info">
+                    <span class="project-name">{project.name}/</span>
+                    <span class="project-meta">
+                      {#if data}
+                        {data.baselines.length} baselines
+                        {#if data.diffs.length > 0}
+                          &middot; {data.diffs.length} diff{data.diffs.length !== 1 ? 's' : ''}
+                        {/if}
+                      {:else}
+                        {project.path}
+                      {/if}
+                      {#if project.lastTiming?.totalDuration}
+                        &middot; {formatDuration(project.lastTiming.totalDuration)}
+                      {/if}
+                    </span>
+                  </div>
+                </div>
+                <div class="project-right">
+                  <button class="btn-inline" onclick={(e) => runTests(project, e)}>run</button>
+                  <span class="status-badge {getStatusClass(computedStatus)}">{getStatusLabel(computedStatus)}</span>
+                </div>
               {/if}
             </div>
-          {/if}
-
-          {#if project.lastRun}
-            <p class="meta">Last run: {new Date(project.lastRun).toLocaleString()}</p>
-            {#if project.lastTiming}
-              <div class="timing-stats">
-                <span class="timing" title="Screenshot capture time">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <circle cx="9" cy="9" r="2"></circle>
-                    <path d="M21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
-                  </svg>
-                  {formatDuration(project.lastTiming.screenshotDuration)}
-                </span>
-                <span class="timing" title="Comparison time">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
-                  </svg>
-                  {formatDuration(project.lastTiming.compareDuration)}
-                </span>
-                <span class="timing total" title="Total time">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                  </svg>
-                  {formatDuration(project.lastTiming.totalDuration)}
-                </span>
-              </div>
-            {/if}
-          {/if}
-
-          <div class="actions">
-            {#if runningTests.has(project.id)}
-              {@const testState = runningTests.get(project.id)}
-              <div class="progress-section">
-                <div class="progress-phase">{testState!.phase}</div>
-                <div class="progress-container">
-                  <div class="progress-bar">
-                    <div
-                      class="progress-fill"
-                      style="width: {testState!.total > 0 ? (testState!.progress / testState!.total) * 100 : 0}%"
-                    ></div>
-                    <span>{testState!.progress}/{testState!.total}</span>
-                  </div>
-                  <button
-                    class="btn small stop"
-                    onclick={(e) => abortTests(project, e)}
-                    disabled={testState!.aborting}
-                  >
-                    {testState!.aborting ? '...' : 'Stop'}
-                  </button>
-                </div>
-              </div>
-            {:else}
-              <button class="btn small primary" onclick={(e) => runTests(project, e)}>
-                Run Tests
-              </button>
-              <button class="btn small" onclick={(e) => { e.stopPropagation(); navigate(`/project/${project.id}`); }}>
-                View
-              </button>
-            {/if}
-          </div>
+          {/each}
         </div>
-      {/each}
+      {/if}
     </div>
   {/if}
 </div>
@@ -313,26 +352,26 @@
 {#if showModal}
   <div class="modal-overlay" onclick={() => (showModal = false)} onkeydown={(e) => e.key === 'Escape' && (showModal = false)} role="dialog" aria-modal="true">
     <div class="modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="document">
-      <h2>Add Project</h2>
+      <h2>&gt; add_project</h2>
 
       <label>
-        Project Name
-        <input type="text" bind:value={newProject.name} placeholder="My App" />
+        name
+        <input type="text" bind:value={newProject.name} placeholder="my-app" />
       </label>
 
       <label>
-        Project Path
+        path
         <input type="text" bind:value={newProject.path} placeholder="/path/to/project" />
       </label>
 
       <label>
-        Config File
+        config
         <input type="text" bind:value={newProject.configFile} placeholder="vrt.config.json" />
       </label>
 
       <div class="modal-actions">
-        <button class="btn" onclick={() => (showModal = false)}>Cancel</button>
-        <button class="btn primary" onclick={createProject}>Create</button>
+        <button class="btn ghost" onclick={() => (showModal = false)}>cancel</button>
+        <button class="btn primary" onclick={createProject}>create</button>
       </div>
     </div>
   </div>
@@ -344,67 +383,114 @@
     margin: 0 auto;
   }
 
-  .header {
+  /* Page Header */
+  .page-header {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 40px;
+  }
+
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .title-line {
+    display: flex;
     align-items: center;
-    margin-bottom: 1.5rem;
+    gap: 12px;
+  }
+
+  .prompt {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 28px;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 28px;
+    color: var(--text-strong);
+  }
+
+  .subtitle {
+    font-family: var(--font-body);
+    font-size: 14px;
+    color: var(--text-muted);
   }
 
   .header-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: 12px;
+    align-items: center;
   }
 
-  h1 {
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-
+  /* Buttons */
   .btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
+    justify-content: center;
+    height: 40px;
+    padding: 0 20px;
     border: none;
-    border-radius: 6px;
-    background: var(--border);
-    color: var(--text-strong);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: opacity 0.15s;
+    white-space: nowrap;
   }
 
-  .btn:hover {
-    background: var(--border-soft);
-  }
+  .btn:hover { opacity: 0.85; }
 
   .btn.primary {
     background: var(--accent);
-    color: #fff;
+    color: var(--bg);
   }
 
-  .btn.primary:hover {
-    background: var(--accent-strong);
+  .btn.ghost {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
   }
 
-  .btn.small {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.8rem;
+  .btn.ghost:hover {
+    border-color: var(--accent);
+    color: var(--text-strong);
   }
 
-  .error {
-    background: rgba(239, 68, 68, 0.12);
-    border: 1px solid rgba(239, 68, 68, 0.5);
-    padding: 0.75rem 1rem;
-    border-radius: 6px;
-    margin-bottom: 1rem;
+  .btn-inline {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
   }
 
-  .test-error {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+  .btn-inline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn-inline.stop {
+    border-color: var(--color-failed);
+    color: var(--color-failed);
+  }
+
+  /* Error */
+  .error-banner {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 16px;
+    margin-bottom: 24px;
+    font-size: 13px;
   }
 
   .error-header {
@@ -416,183 +502,220 @@
   .error-close {
     background: none;
     border: none;
-    color: #ef4444;
-    font-size: 1.5rem;
+    color: var(--color-failed);
+    font-size: 18px;
     cursor: pointer;
     padding: 0;
     line-height: 1;
   }
 
-  .error-close:hover {
+  .error-message {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+    color: var(--color-failed);
+    margin-top: 8px;
+  }
+
+  /* Loading */
+  .loading {
+    text-align: center;
+    padding: 60px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  /* Metrics Section */
+  .metrics-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
     color: var(--text-strong);
   }
 
-  .error-message {
-    font-family: monospace;
-    font-size: 0.85rem;
-    white-space: pre-wrap;
-    color: #fca5a5;
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
   }
 
-  .loading, .empty {
-    text-align: center;
-    padding: 3rem;
+  .metric-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+    border: 1px solid var(--border);
+  }
+
+  .metric-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
     color: var(--text-muted);
   }
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1rem;
+  .metric-value {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-strong);
   }
 
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1rem;
-    cursor: pointer;
-    transition: border-color 0.2s, transform 0.2s;
+  .metric-delta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--accent);
   }
 
-  .card:hover {
-    border-color: var(--accent);
-    transform: translateY(-2px);
+  .delta-prefix {
+    font-family: var(--font-mono);
+    font-weight: 700;
   }
 
-  .card-header {
+  /* Projects Section */
+  .projects-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
   }
 
-  .card h3 {
-    font-size: 1.1rem;
-    font-weight: 500;
-  }
-
-  .status {
-    font-size: 0.7rem;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    text-transform: uppercase;
-    font-weight: 600;
-    color: var(--text-strong);
-  }
-
-  .path {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    font-family: monospace;
-    margin-bottom: 0.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .stats {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    margin-bottom: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .stat {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-  }
-
-  .stat-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    background: var(--border);
-    border-radius: 3px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--text-muted);
-  }
-
-  .stat.diff {
-    color: #ef4444;
-  }
-
-  .stat.diff .stat-icon {
-    background: #7f1d1d;
-    color: #ef4444;
-  }
-
-  .meta {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-bottom: 0.5rem;
-  }
-
-  .timing-stats {
-    display: flex;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .timing {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    font-size: 0.7rem;
-    color: var(--text-muted);
-  }
-
-  .timing svg {
-    opacity: 0.6;
-  }
-
-  .timing.total {
+  .section-action {
+    font-family: var(--font-mono);
+    font-size: 12px;
     color: var(--accent);
   }
 
-  .timing.total svg {
-    opacity: 1;
+  .empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
   }
 
-  .actions {
+  .empty code {
+    color: var(--accent);
+  }
+
+  .project-list {
+    border: 1px solid var(--border);
+  }
+
+  .project-item {
     display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px;
+    gap: 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid var(--border);
   }
 
-  .progress-section {
-    flex: 1;
+  .project-item.last {
+    border-bottom: none;
+  }
+
+  .project-item:hover {
+    background: var(--accent-subtle);
+  }
+
+  .project-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+  }
+
+  .project-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+  }
+
+  .project-dot.passed { background: var(--color-passed); }
+  .project-dot.failed { background: var(--color-failed); }
+  .project-dot.new { background: var(--color-new); }
+
+  .project-dot.running {
+    background: var(--accent);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .project-info {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 4px;
+    min-width: 0;
   }
 
-  .progress-phase {
-    font-size: 0.7rem;
-    color: var(--accent);
-    font-weight: 500;
-  }
-
-  .progress-container {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .progress-bar {
-    flex: 1;
-    height: 28px;
-    background: var(--border);
-    border-radius: 4px;
+  .project-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-strong);
+    white-space: nowrap;
     overflow: hidden;
-    position: relative;
+    text-overflow: ellipsis;
+  }
+
+  .project-meta {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .project-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .status-badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .status-badge.passed { color: var(--color-passed); }
+  .status-badge.failed { color: var(--color-failed); }
+  .status-badge.new { color: var(--color-new); }
+  .status-badge.none { color: var(--text-muted); }
+
+  /* Progress inline */
+  .progress-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .progress-track {
+    width: 120px;
+    height: 4px;
+    background: var(--border);
+    overflow: hidden;
   }
 
   .progress-fill {
@@ -601,29 +724,14 @@
     transition: width 0.3s;
   }
 
-  .progress-bar span {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 0.75rem;
-    font-weight: 500;
+  .progress-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 40px;
   }
 
-  .btn.stop {
-    background: #ef4444;
-    flex-shrink: 0;
-  }
-
-  .btn.stop:hover {
-    background: #dc2626;
-  }
-
-  .btn.stop:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
+  /* Modal */
   .modal-overlay {
     position: fixed;
     inset: 0;
@@ -635,36 +743,39 @@
   }
 
   .modal {
-    background: var(--panel);
+    background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.5rem;
+    padding: 32px;
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
   }
 
   .modal h2 {
-    font-size: 1.25rem;
-    margin-bottom: 1rem;
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 24px;
   }
 
   .modal label {
     display: block;
-    margin-bottom: 1rem;
-    font-size: 0.875rem;
+    margin-bottom: 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
     color: var(--text-muted);
   }
 
   .modal input {
     display: block;
     width: 100%;
-    margin-top: 0.25rem;
-    padding: 0.5rem;
+    margin-top: 8px;
+    padding: 10px 12px;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 6px;
     color: var(--text);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 13px;
   }
 
   .modal input:focus {
@@ -675,7 +786,25 @@
   .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 1.5rem;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .metrics-row {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 600px) {
+    .page-header {
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .metrics-row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

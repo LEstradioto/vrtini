@@ -36,6 +36,7 @@ export interface ImageResultData {
   status: 'passed' | 'failed' | 'new';
   confidence?: { score: number; pass: boolean; verdict: 'pass' | 'warn' | 'fail' };
   metrics?: { pixelDiff: number; diffPercentage: number; ssimScore?: number };
+  engineResults?: { engine: string; similarity: number; diffPercent: number; error?: string }[];
 }
 
 export interface TestJob {
@@ -277,6 +278,15 @@ function buildResultsData(results: ComparisonResult[]): Record<string, ImageResu
             ssimScore: result.ssimScore,
           }
         : undefined,
+      engineResults:
+        result.reason === 'diff' && result.engineResults
+          ? result.engineResults.map((er) => ({
+              engine: er.engine,
+              similarity: er.similarity,
+              diffPercent: er.diffPercent,
+              error: er.error,
+            }))
+          : undefined,
     };
   }
   return resultsData;

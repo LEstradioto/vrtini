@@ -165,6 +165,8 @@ export interface CrossResultItem {
   error?: string;
   accepted?: boolean;
   acceptedAt?: string;
+  aiAnalysis?: AIAnalysisResult;
+  outdated?: boolean;
 }
 
 export interface CrossResults {
@@ -188,6 +190,7 @@ export interface CrossResultsSummary {
   matchCount: number;
   diffCount: number;
   issueCount: number;
+  outdatedCount?: number;
 }
 
 export interface CrossAcceptance {
@@ -251,10 +254,11 @@ export interface VRTConfig {
   };
   ai?: {
     enabled: boolean;
-    provider: 'anthropic' | 'openai';
+    provider: 'anthropic' | 'openai' | 'openrouter' | 'google';
     apiKey?: string;
     authToken?: string;
     model?: string;
+    baseUrl?: string;
     analyzeThreshold: {
       maxPHashSimilarity: number;
       maxSSIM: number;

@@ -13,6 +13,8 @@
     onDelete,
     onRerun,
     onRerunTests,
+    onAITriage,
+    aiTriageRunning = false,
     onSelectAll,
     onCancel,
   } = $props<{
@@ -29,6 +31,8 @@
     onDelete?: () => void;
     onRerun?: () => void;
     onRerunTests?: () => void;
+    onAITriage?: () => void;
+    aiTriageRunning?: boolean;
     onSelectAll?: () => void;
     onCancel: () => void;
   }>();
@@ -54,6 +58,11 @@
       {#if onRerunTests}
         <button class="btn warning" onclick={onRerunTests} disabled={crossRunning}>
           {crossRunning ? 'Running...' : `Rerun Tests (${selectedCount})`}
+        </button>
+      {/if}
+      {#if onAITriage}
+        <button class="btn ai-triage" onclick={onAITriage} disabled={crossRunning || aiTriageRunning}>
+          {aiTriageRunning ? 'AI Triaging...' : `AI Triage (${selectedCount})`}
         </button>
       {/if}
       {#if onDelete}
@@ -140,4 +149,6 @@
   .btn.warning:hover:not(:disabled) { background: #f59e0b; color: var(--bg); }
   .btn.danger { background: #7f1d1d; color: #fff; }
   .btn.danger:hover { background: #ef4444; }
+  .btn.ai-triage { background: transparent; border: 1px solid #a78bfa; color: #a78bfa; }
+  .btn.ai-triage:hover:not(:disabled) { background: #a78bfa; color: var(--bg); }
 </style>

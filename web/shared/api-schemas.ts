@@ -167,6 +167,8 @@ export const CrossResultItemSchema = z.object({
   error: z.string().optional(),
   accepted: z.boolean().optional(),
   acceptedAt: z.string().optional(),
+  aiAnalysis: AIAnalysisResultSchema.optional(),
+  outdated: z.boolean().optional(),
 });
 
 export const CrossResultsSchema = z.object({
@@ -190,6 +192,7 @@ export const CrossResultsSummarySchema = z.object({
   matchCount: z.number(),
   diffCount: z.number(),
   issueCount: z.number(),
+  outdatedCount: z.number().optional(),
 });
 
 export const CrossAcceptanceSchema = z.object({
@@ -250,9 +253,11 @@ export const VRTConfigSchema = z
     ai: z
       .object({
         enabled: z.boolean(),
-        provider: z.enum(['anthropic', 'openai']),
+        provider: z.enum(['anthropic', 'openai', 'openrouter', 'google']),
         apiKey: z.string().optional(),
+        authToken: z.string().optional(),
         model: z.string().optional(),
+        baseUrl: z.string().optional(),
         analyzeThreshold: z.object({
           maxPHashSimilarity: z.number(),
           maxSSIM: z.number(),

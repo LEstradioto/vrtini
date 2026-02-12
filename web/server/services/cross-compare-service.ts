@@ -10,6 +10,7 @@ import { getDiffPath } from '../../../src/core/types.js';
 import { buildEnginesConfig } from '../../../src/core/compare-runner.js';
 import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';
+import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
 
 function buildCrossComparePairs(
   browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[]
@@ -77,6 +78,8 @@ export interface CrossResultItem {
   error?: string;
   accepted?: boolean;
   acceptedAt?: string;
+  aiAnalysis?: AIAnalysisResult;
+  outdated?: boolean;
 }
 
 export interface CrossResults {
@@ -100,6 +103,7 @@ export interface CrossResultsSummary {
   matchCount: number;
   diffCount: number;
   issueCount: number;
+  outdatedCount?: number;
 }
 
 export interface CrossCompareRunOptions {
@@ -667,13 +671,23 @@ export async function loadCrossResults(
     }
   }
 
+  const generatedAtMs = Date.parse(results.generatedAt) || 0;
+
   results.items = await Promise.all(
-    results.items.map(async (item) => ({
-      ...item,
-      baselineUpdatedAt: await getMtimeIso(item.baseline),
-      testUpdatedAt: await getMtimeIso(item.test),
-      diffUpdatedAt: await getMtimeIso(item.diff),
-    }))
+    results.items.map(async (item) => {
+      const baselineUpdatedAt = await getMtimeIso(item.baseline);
+      const testUpdatedAt = await getMtimeIso(item.test);
+      const diffUpdatedAt = await getMtimeIso(item.diff);
+
+      // Item is outdated if any source screenshot was modified after the comparison ran
+      const latestMtime = Math.max(
+        baselineUpdatedAt ? Date.parse(baselineUpdatedAt) || 0 : 0,
+        testUpdatedAt ? Date.parse(testUpdatedAt) || 0 : 0
+      );
+      const outdated = generatedAtMs > 0 && latestMtime > generatedAtMs;
+
+      return { ...item, baselineUpdatedAt, testUpdatedAt, diffUpdatedAt, outdated };
+    })
   );
 
   return results;
@@ -903,4 +917,34 @@ export async function clearCrossResults(
   }
 
   await clearCrossDeletions(projectPath, key);
+}
+
+export async function saveCrossItemAIResults(
+  projectPath: string,
+  config: VRTConfig,
+  key: string,
+  updates: Map<string, AIAnalysisResult>
+): Promise<void> {
+  const { outputDir } = getProjectDirs(projectPath, config);
+  const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
+  if (!existsSync(resultsPath)) return;
+
+  try {
+    const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
+    let changed = false;
+
+    data.items = data.items.map((item) => {
+      const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+      const analysis = updates.get(itemKey);
+      if (!analysis) return item;
+      changed = true;
+      return { ...item, itemKey, aiAnalysis: analysis };
+    });
+
+    if (changed) {
+      await writeFile(resultsPath, JSON.stringify(data, null, 2));
+    }
+  } catch {
+    // ignore invalid results.json
+  }
 }

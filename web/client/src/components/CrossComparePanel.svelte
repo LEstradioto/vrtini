@@ -5,11 +5,12 @@
     type CrossResultItem,
     type CrossResults,
     type CrossResultsSummary,
+    type AIAnalysisResult,
   } from '../lib/api';
   import { getErrorMessage } from '../lib/errors';
   import { CROSS_PAGE_SIZE } from '../../../shared/constants';
 
-  type CrossStatusFilter = 'all' | 'diffs' | 'matches' | 'smart' | 'approved' | 'unapproved';
+  type CrossStatusFilter = 'all' | 'diffs' | 'matches' | 'smart' | 'approved' | 'unapproved' | 'outdated' | 'ai-approved' | 'ai-review' | 'ai-rejected';
   type CrossPairFilterValue = 'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches';
 
   type CrossPrefs = {
@@ -20,7 +21,7 @@
     selectedKey?: string | null;
   };
   const CROSS_STATUS_VALUES: CrossStatusFilter[] = [
-    'all', 'diffs', 'matches', 'smart', 'approved', 'unapproved',
+    'all', 'diffs', 'matches', 'smart', 'approved', 'unapproved', 'outdated', 'ai-approved', 'ai-review', 'ai-rejected',
   ];
   const CROSS_PAIR_VALUES = new Set<CrossPairFilterValue>([
     'all', 'diffs', 'issues', 'smart', 'approved', 'matches',
@@ -60,6 +61,9 @@
   let crossPrefsLoaded = $state(false);
   let crossPrefsApplying = $state(false);
   let selectedCrossItems = $state<Set<string>>(new Set());
+
+  let aiTriageRunning = $state(false);
+  let aiTriageError = $state<string | null>(null);
 
   type ViewMode = 'grid' | 'list';
   const CROSS_VIEW_KEY = 'vrt-cross-view-mode';
@@ -310,6 +314,29 @@
     }
   }
 
+  async function runAITriage(itemKeys?: string[]) {
+    if (!selectedCrossKey) return;
+    aiTriageRunning = true;
+    aiTriageError = null;
+    try {
+      await crossCompare.aiTriage(projectId, selectedCrossKey, itemKeys);
+      await loadCrossResults(selectedCrossKey);
+    } catch (err) {
+      aiTriageError = getErrorMessage(err, 'AI triage failed');
+    } finally {
+      aiTriageRunning = false;
+    }
+  }
+
+  async function revalidateOutdated() {
+    if (!selectedCrossKey || !crossResults) return;
+    const outdatedKeys = crossResults.items
+      .filter((i) => i.outdated)
+      .map((i) => i.itemKey ?? `${i.scenario}__${i.viewport}`);
+    if (outdatedKeys.length === 0) return;
+    await runCrossCompare({ key: selectedCrossKey, itemKeys: outdatedKeys, resetAcceptances: true });
+  }
+
   async function approveSelectedCrossItems() {
     if (!selectedCrossKey || !crossResults || selectedCrossItems.size === 0) return;
     const wanted = selectedCrossItems;
@@ -414,6 +441,10 @@
       case 'smart': return item.match && item.diffPercentage > 0;
       case 'approved': return !!item.accepted;
       case 'unapproved': return !item.accepted;
+      case 'outdated': return !!item.outdated;
+      case 'ai-approved': return item.aiAnalysis?.recommendation === 'approve';
+      case 'ai-review': return item.aiAnalysis?.recommendation === 'review';
+      case 'ai-rejected': return item.aiAnalysis?.recommendation === 'reject';
       default: return true;
     }
   }
@@ -504,9 +535,10 @@
 
   let crossPairSummary = $derived.by(() => {
     if (!crossResults) return null;
-    const summary = { total: 0, approved: 0, smart: 0, match: 0, diff: 0, issue: 0 };
+    const summary = { total: 0, approved: 0, smart: 0, match: 0, diff: 0, issue: 0, outdated: 0 };
     for (const item of crossResults.items) {
       summary.total += 1;
+      if (item.outdated) summary.outdated += 1;
       if (item.accepted) { summary.approved += 1; continue; }
       const smartPass = item.match && item.diffPercentage > 0;
       if (item.match) { if (smartPass) summary.smart += 1; else summary.match += 1; continue; }
@@ -514,6 +546,8 @@
     }
     return summary;
   });
+
+  let aiAnalyzedCount = $derived(crossResults?.items.filter((i) => i.aiAnalysis).length ?? 0);
 
   // Selection
   let selectedCrossCount = $derived(selectedCrossItems.size);
@@ -617,13 +651,14 @@
       selectedCrossKey,
       crossCompareRunning,
       crossTestRunning,
+      aiTriageRunning,
       selectedCrossItems,
       selectedCrossCount,
     };
   }
 
   /** Exposed actions for parent BulkActionBar */
-  export { approveSelectedCrossItems, rerunSelectedCrossItems, rerunSelectedCrossItemTests, deleteCrossItems, selectAllCross, deselectAllCross };
+  export { approveSelectedCrossItems, rerunSelectedCrossItems, rerunSelectedCrossItemTests, deleteCrossItems, selectAllCross, deselectAllCross, runAITriage };
 
   /** Called from parent after approve/revoke in fullscreen modal */
   export async function approveCrossFromModal(item: CrossResultItem) {
@@ -686,6 +721,14 @@
       <button class="tag-filter tag-smart" class:active={isCrossStatusActive('smart')} onclick={(event) => toggleCrossStatusFilter('smart', event)} title="Matches with non-zero diffs (smart pass)">Smart Pass</button>
       <button class="tag-filter tag-approved" class:active={isCrossStatusActive('approved')} onclick={(event) => toggleCrossStatusFilter('approved', event)} title="Items you have approved">Approved</button>
       <button class="tag-filter tag-unapproved" class:active={isCrossStatusActive('unapproved')} onclick={(event) => toggleCrossStatusFilter('unapproved', event)} title="Items not yet approved">Unapproved</button>
+      {#if crossPairSummary && crossPairSummary.outdated > 0}
+        <button class="tag-filter tag-outdated" class:active={isCrossStatusActive('outdated')} onclick={(event) => toggleCrossStatusFilter('outdated', event)} title="Items where screenshots changed after comparison ran">Outdated ({crossPairSummary.outdated})</button>
+      {/if}
+      {#if aiAnalyzedCount > 0}
+        <button class="tag-filter tag-ai-approved" class:active={isCrossStatusActive('ai-approved')} onclick={(event) => toggleCrossStatusFilter('ai-approved', event)} title="AI recommends approve">AI Approve</button>
+        <button class="tag-filter tag-ai-review" class:active={isCrossStatusActive('ai-review')} onclick={(event) => toggleCrossStatusFilter('ai-review', event)} title="AI recommends review">AI Review</button>
+        <button class="tag-filter tag-ai-rejected" class:active={isCrossStatusActive('ai-rejected')} onclick={(event) => toggleCrossStatusFilter('ai-rejected', event)} title="AI recommends reject">AI Reject</button>
+      {/if}
       <button class="tag-filter" class:active={crossHideApproved} onclick={() => crossHideApproved = !crossHideApproved} title="Hide approved items from results">Hide Approved</button>
     </div>
     <div class="cross-selection-controls">
@@ -713,6 +756,9 @@
   {#if crossResultsError}
     <div class="error">{crossResultsError}</div>
   {/if}
+  {#if aiTriageError}
+    <div class="error">{aiTriageError}</div>
+  {/if}
 
   {#if crossResultsLoading}
     <div class="compare-hint">Loading cross compare results...</div>
@@ -732,6 +778,15 @@
         · Match: {crossPairSummary.match}
         · Diff: {crossPairSummary.diff}
         · Issue: {crossPairSummary.issue}
+        {#if crossPairSummary.outdated > 0}
+          · <span class="outdated-indicator">Outdated: {crossPairSummary.outdated}</span>
+          <button class="btn small rerun-tests" onclick={revalidateOutdated} disabled={crossCompareRunning} title="Re-compare outdated items">
+            Re-validate
+          </button>
+        {/if}
+        {#if aiTriageRunning}
+          · <span class="ai-running">AI Triage running...</span>
+        {/if}
       {:else}
         Pair: {crossResults.baselineLabel} vs {crossResults.testLabel}
         · Generated: {new Date(crossResults.generatedAt).toLocaleString()}
@@ -776,8 +831,19 @@
                     </div>
                   {/if}
                 </div>
-                <div class="cross-badge tag-{crossTag}">
-                  {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
+                <div class="cross-badge-group">
+                  <div class="cross-badge tag-{crossTag}">
+                    {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
+                  </div>
+                  {#if item.outdated}
+                    <div class="cross-badge tag-outdated">Outdated</div>
+                  {/if}
+                  {#if item.aiAnalysis}
+                    {@const rec = item.aiAnalysis.recommendation}
+                    <div class="cross-badge tag-ai-{rec}" title="AI: {item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)">
+                      AI: {item.aiAnalysis.category} {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'}
+                    </div>
+                  {/if}
                 </div>
               </div>
               <div class="cross-stats">
@@ -858,6 +924,15 @@
               <div class="cross-badge tag-{crossTag}">
                 {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
               </div>
+              {#if item.outdated}
+                <div class="cross-badge tag-outdated">Outdated</div>
+              {/if}
+              {#if item.aiAnalysis}
+                {@const rec = item.aiAnalysis.recommendation}
+                <div class="cross-badge tag-ai-{rec}" title="{item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)">
+                  AI {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'} {(item.aiAnalysis.confidence * 100).toFixed(0)}%
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -1268,4 +1343,30 @@
     font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono, monospace);
     white-space: nowrap; flex-shrink: 0;
   }
+
+  /* Badge group for stacking multiple badges */
+  .cross-badge-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+  }
+
+  /* Outdated badge/indicator */
+  .cross-badge.tag-outdated { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.5); color: #f59e0b; }
+  .tag-filter.tag-outdated { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+  .cross-card.tag-outdated { border-color: rgba(245, 158, 11, 0.6); }
+
+  .outdated-indicator { color: #f59e0b; font-weight: 600; }
+  .ai-running { color: var(--accent); font-weight: 500; }
+
+  /* AI recommendation badges */
+  .cross-badge.tag-ai-approve { background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.4); color: #22c55e; }
+  .cross-badge.tag-ai-review { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b; }
+  .cross-badge.tag-ai-reject { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.4); color: #ef4444; }
+
+  /* AI filter tag styles */
+  .tag-filter.tag-ai-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+  .tag-filter.tag-ai-review { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+  .tag-filter.tag-ai-rejected { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: #ef4444; }
 </style>

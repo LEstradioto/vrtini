@@ -5,7 +5,7 @@
 
 import type { AIAnalysisResult, RawAIResponse } from '../domain/ai-prompt.js';
 
-export type AIProviderName = 'anthropic' | 'openai';
+export type AIProviderName = 'anthropic' | 'openai' | 'openrouter' | 'google';
 
 export interface ImageInput {
   baseline: string;

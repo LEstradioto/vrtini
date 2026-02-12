@@ -2,6 +2,37 @@
   import type { VRTConfig } from '../lib/api';
 
   let { config } = $props<{ config: VRTConfig }>();
+
+  const MODEL_PRESETS: Record<string, { label: string; value: string }[]> = {
+    anthropic: [
+      { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5-20241022' },
+      { label: 'Claude Sonnet 4.5', value: 'claude-sonnet-4-5-20250929' },
+    ],
+    openai: [
+      { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
+      { label: 'GPT-4o', value: 'gpt-4o' },
+    ],
+    openrouter: [
+      { label: 'Gemini 3 Flash (Google)', value: 'google/gemini-3-flash-preview' },
+      { label: 'Claude Haiku 4.5 (Anthropic)', value: 'anthropic/claude-haiku-4-5' },
+      { label: 'GPT-4o Mini (OpenAI)', value: 'openai/gpt-4o-mini' },
+    ],
+    google: [
+      { label: 'Gemini 3 Flash', value: 'gemini-3-flash' },
+      { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+    ],
+  };
+
+  const ENV_HINTS: Record<string, string> = {
+    anthropic: 'ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN',
+    openai: 'OPENAI_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+    google: 'GOOGLE_API_KEY',
+  };
+
+  let currentProvider = $derived(config.ai?.provider ?? 'anthropic');
+  let presets = $derived(MODEL_PRESETS[currentProvider] ?? []);
+  let envHint = $derived(ENV_HINTS[currentProvider] ?? '');
 </script>
 
 <section class="section">
@@ -29,24 +60,66 @@
     <div class="ai-settings">
       <label>
         Provider
-        <select bind:value={config.ai.provider}>
+        <select
+          bind:value={config.ai.provider}
+          onchange={() => {
+            // Clear model when switching providers
+            config.ai!.model = undefined;
+          }}
+        >
           <option value="anthropic">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT-4V)</option>
+          <option value="openrouter">OpenRouter (Multi-model)</option>
+          <option value="google">Google (Gemini)</option>
         </select>
       </label>
+
+      <label>
+        Model
+        <select
+          value={config.ai.model ?? ''}
+          onchange={(e) => {
+            const val = e.currentTarget.value;
+            config.ai!.model = val || undefined;
+          }}
+        >
+          <option value="">Default</option>
+          {#each presets as preset}
+            <option value={preset.value}>{preset.label}</option>
+          {/each}
+        </select>
+        <input type="text" bind:value={config.ai.model} placeholder="Or type a custom model ID" />
+      </label>
+
       <label>
         API Key
-        <input type="password" bind:value={config.ai.apiKey} placeholder="Set via ANTHROPIC_API_KEY env var" />
+        <input type="password" bind:value={config.ai.apiKey} placeholder="Set via {envHint} env var" />
       </label>
-      <label>
-        Auth Token (Claude Max)
-        <input type="password" bind:value={config.ai.authToken} placeholder="Set via ANTHROPIC_AUTH_TOKEN env var" />
-      </label>
-      <p class="hint">Use either API Key (standard) or Auth Token (Claude Max subscription). Auth Token takes effect when no API Key is set.</p>
-      <label>
-        Model (optional)
-        <input type="text" bind:value={config.ai.model} placeholder="claude-sonnet-4-20250514" />
-      </label>
+
+      {#if currentProvider === 'anthropic'}
+        <label>
+          Auth Token (Claude Max)
+          <input type="password" bind:value={config.ai.authToken} placeholder="Set via ANTHROPIC_AUTH_TOKEN env var" />
+        </label>
+        <p class="hint">Use either API Key (standard) or Auth Token (Claude Max subscription). Auth Token takes effect when no API Key is set.</p>
+      {/if}
+
+      {#if currentProvider === 'openrouter'}
+        <label>
+          Base URL
+          <input
+            type="text"
+            value={config.ai.baseUrl ?? 'https://openrouter.ai/api/v1'}
+            onchange={(e) => {
+              const val = e.currentTarget.value.trim();
+              config.ai!.baseUrl = val === 'https://openrouter.ai/api/v1' ? undefined : val || undefined;
+            }}
+            placeholder="https://openrouter.ai/api/v1"
+          />
+        </label>
+      {/if}
+
+      <p class="hint env-hint">Env var fallback: {envHint}</p>
 
       <h3>Analysis Thresholds</h3>
       <p class="hint">Only analyze diffs that exceed these thresholds (to save API costs)</p>
@@ -155,6 +228,11 @@
     font-size: 0.75rem;
     color: var(--text-muted);
     margin-top: -0.5rem;
+  }
+
+  .env-hint {
+    font-size: 0.65rem;
+    opacity: 0.7;
   }
 
   .form-row {

@@ -1210,6 +1210,11 @@
     onApprove={() => crossPanel?.approveSelectedCrossItems()}
     onRerun={() => crossPanel?.rerunSelectedCrossItems()}
     onRerunTests={() => crossPanel?.rerunSelectedCrossItemTests()}
+    onAITriage={() => {
+      const keys = crossState?.selectedCrossItems ? [...crossState.selectedCrossItems] : undefined;
+      crossPanel?.runAITriage(keys);
+    }}
+    aiTriageRunning={crossState?.aiTriageRunning || false}
     onDelete={() => crossPanel?.deleteCrossItems()}
     onSelectAll={() => crossPanel?.selectAllCross()}
     onCancel={() => crossPanel?.deselectAllCross()}

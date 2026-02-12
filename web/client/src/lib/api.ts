@@ -284,6 +284,14 @@ export const crossCompare = {
       },
       SuccessResponseSchema
     ),
+  aiTriage: (projectId: string, key: string, itemKeys?: string[]) =>
+    request<{ results: Array<{ itemKey: string; analysis?: AIAnalysisResult; error?: string }> }>(
+      `${projectPath(projectId)}/cross-compare/${key}/ai-triage`,
+      {
+        method: 'POST',
+        body: JSON.stringify(itemKeys?.length ? { itemKeys } : {}),
+      }
+    ),
 };
 
 // Acceptance API

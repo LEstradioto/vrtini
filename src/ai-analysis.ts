@@ -14,6 +14,8 @@ import {
   createAnalysisResult,
   createAnthropicProvider,
   createOpenAIProvider,
+  createOpenRouterProvider,
+  createGoogleProvider,
 } from './adapters/index.js';
 
 export type { AIAnalysisResult, ChangeCategory, Severity, Recommendation };
@@ -24,6 +26,7 @@ export interface AIAnalysisOptions {
   apiKey?: string;
   authToken?: string;
   model?: string;
+  baseUrl?: string;
   scenarioName?: string;
   url?: string;
   pixelDiff?: number;
@@ -35,6 +38,8 @@ export interface AIAnalysisOptions {
 const DEFAULT_MODELS: Record<AIProviderName, string> = {
   anthropic: 'claude-haiku-4-5-20241022',
   openai: 'gpt-4o-mini',
+  openrouter: 'google/gemini-3-flash-preview',
+  google: 'gemini-3-flash',
 };
 
 function ensureFileExists(path: string, label: string): void {
@@ -53,6 +58,10 @@ function getProvider(options: AIAnalysisOptions): AIProvider {
       return createAnthropicProvider({ apiKey: options.apiKey, authToken: options.authToken });
     case 'openai':
       return createOpenAIProvider({ apiKey: options.apiKey });
+    case 'openrouter':
+      return createOpenRouterProvider({ apiKey: options.apiKey, baseUrl: options.baseUrl });
+    case 'google':
+      return createGoogleProvider({ apiKey: options.apiKey });
     default:
       throw new Error(`Unsupported AI provider: ${options.provider}`);
   }

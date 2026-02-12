@@ -1,6 +1,6 @@
 {
   "name": "vrtini",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Visual Regression Testing tool using Playwright and Docker",
   "main": "dist/src/index.js",
   "bin": {

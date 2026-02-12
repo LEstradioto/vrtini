@@ -179,7 +179,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 16px;
-    background: #0A0A0A;
+    background: var(--bg);
     border-top: 1px solid var(--border);
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
   }
@@ -273,7 +273,7 @@
 
   .action-btn.approve:hover:not(:disabled) {
     background: #22c55e;
-    color: #0A0A0A;
+    color: var(--bg);
   }
 
   .action-btn.reject {
@@ -283,7 +283,7 @@
 
   .action-btn.reject:hover:not(:disabled) {
     background: #ef4444;
-    color: #0A0A0A;
+    color: var(--bg);
   }
 
   .action-btn.rerun {
@@ -293,7 +293,7 @@
 
   .action-btn.rerun:hover:not(:disabled) {
     background: var(--accent);
-    color: #0A0A0A;
+    color: var(--bg);
   }
 
   .action-btn.ai {
@@ -303,7 +303,7 @@
 
   .action-btn.ai:hover:not(:disabled) {
     background: #0ea5e9;
-    color: #0A0A0A;
+    color: var(--bg);
   }
 
   .action-btn.accept {
@@ -313,7 +313,7 @@
 
   .action-btn.accept:hover:not(:disabled) {
     background: #22c55e;
-    color: #0A0A0A;
+    color: var(--bg);
   }
 
   .action-btn.revoke {
@@ -323,7 +323,7 @@
 
   .action-btn.revoke:hover:not(:disabled) {
     background: #ef4444;
-    color: #0A0A0A;
+    color: var(--bg);
   }
 
   .action-btn:disabled {

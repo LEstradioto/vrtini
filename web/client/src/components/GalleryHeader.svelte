@@ -100,6 +100,18 @@
     if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleString();
   }
+
+  function getDiffColor(pct: number): string {
+    if (pct < 1) return '#22c55e';
+    if (pct <= 5) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  function getSsimColor(pct: number): string {
+    if (pct > 98) return '#22c55e';
+    if (pct >= 95) return '#f59e0b';
+    return '#ef4444';
+  }
 </script>
 
 <div class="gallery-header">
@@ -123,20 +135,20 @@
 
           {#if effectiveCompareMetrics}
             <div class="metrics-display compare-inline">
-              <span class="metric" title="Number of pixels that differ between baseline and test.">
-                <span class="metric-label">Px</span>
-                <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
-              </span>
               <span class="metric" title="Percentage of differing pixels (pixel diff ÷ total pixels).">
                 <span class="metric-label">Diff</span>
-                <span class="metric-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
+                <span class="metric-value" style="color: {getDiffColor(effectiveCompareMetrics.diffPercentage)}">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
               </span>
               {#if effectiveCompareMetrics.ssimScore !== undefined}
                 <span class="metric" title="SSIM (Structural Similarity Index). Higher is more similar.">
                   <span class="metric-label">SSIM</span>
-                  <span class="metric-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
+                  <span class="metric-value" style="color: {getSsimColor(effectiveCompareMetrics.ssimScore * 100)}">{(effectiveCompareMetrics.ssimScore * 100).toFixed(1)}%</span>
                 </span>
               {/if}
+              <span class="metric" title="Number of pixels that differ between baseline and test.">
+                <span class="metric-label">Px</span>
+                <span class="metric-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
+              </span>
               {#if effectiveCompareMetrics.phash}
                 <span class="metric" title="Perceptual hash similarity. Higher is more similar.">
                   <span class="metric-label">pHash</span>
@@ -183,20 +195,24 @@
             {/if}
             {#if currentImage.metrics}
               <div class="metrics-display compact">
-                <span
-                  class="metric"
-                  title="Percentage of differing pixels (pixel diff ÷ total pixels)."
-                >
+                <span class="metric" title="Percentage of differing pixels (pixel diff ÷ total pixels).">
                   <span class="metric-label">Diff</span>
-                  <span class="metric-value">{currentImage.metrics.diffPercentage.toFixed(2)}%</span>
+                  <span class="metric-value" style="color: {getDiffColor(currentImage.metrics.diffPercentage)}">{currentImage.metrics.diffPercentage.toFixed(2)}%</span>
                 </span>
                 {#if currentImage.metrics.ssimScore !== undefined}
-                  <span
-                    class="metric"
-                    title="SSIM (Structural Similarity Index). Higher is more similar."
-                  >
+                  <span class="metric" title="SSIM (Structural Similarity Index). Higher is more similar.">
                     <span class="metric-label">SSIM</span>
-                    <span class="metric-value">{(currentImage.metrics.ssimScore * 100).toFixed(1)}%</span>
+                    <span class="metric-value" style="color: {getSsimColor(currentImage.metrics.ssimScore * 100)}">{(currentImage.metrics.ssimScore * 100).toFixed(1)}%</span>
+                  </span>
+                {/if}
+                <span class="metric" title="Number of pixels that differ between baseline and test.">
+                  <span class="metric-label">Px</span>
+                  <span class="metric-value">{currentImage.metrics.pixelDiff.toLocaleString()}</span>
+                </span>
+                {#if currentImage.metrics.phash}
+                  <span class="metric" title="Perceptual hash similarity. Higher is more similar.">
+                    <span class="metric-label">pHash</span>
+                    <span class="metric-value">{(currentImage.metrics.phash.similarity * 100).toFixed(1)}%</span>
                   </span>
                 {/if}
               </div>
@@ -357,7 +373,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 16px;
-    background: #0A0A0A;
+    background: var(--bg);
     border-bottom: 1px solid var(--border);
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
     flex-wrap: wrap;
@@ -787,7 +803,7 @@
 
   .close-btn:hover {
     background: #ef4444;
-    color: #0A0A0A;
+    color: var(--bg);
   }
 
   .close-btn kbd {
@@ -907,6 +923,6 @@
 
   .action-btn.recompare:hover:not(:disabled) {
     background: var(--accent);
-    color: #0A0A0A;
+    color: var(--bg);
   }
 </style>

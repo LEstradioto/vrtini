@@ -285,7 +285,7 @@
 
   .column {
     position: relative;
-    background: #0a0a0a;
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 0;
     overflow: hidden;

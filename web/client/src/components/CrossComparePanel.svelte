@@ -61,6 +61,19 @@
   let crossPrefsApplying = $state(false);
   let selectedCrossItems = $state<Set<string>>(new Set());
 
+  type ViewMode = 'grid' | 'list';
+  const CROSS_VIEW_KEY = 'vrt-cross-view-mode';
+  let crossViewMode = $state<ViewMode>((localStorage.getItem(CROSS_VIEW_KEY) as ViewMode) || 'grid');
+  function setCrossViewMode(mode: ViewMode) {
+    crossViewMode = mode;
+    localStorage.setItem(CROSS_VIEW_KEY, mode);
+  }
+  function getDiffColor(pct: number): string {
+    if (pct < 1) return '#22c55e';
+    if (pct <= 5) return '#f59e0b';
+    return '#ef4444';
+  }
+
   // Preferences persistence
   function getCrossPrefsKey(): string {
     return `vrt:cross-prefs:${projectId}`;
@@ -286,6 +299,15 @@
       }
     } catch (err) {
       crossResultsError = getErrorMessage(err, 'Failed to clear cross compare results');
+    }
+  }
+
+  async function approveSelectedCrossItems() {
+    if (!selectedCrossKey || !crossResults || selectedCrossItems.size === 0) return;
+    const wanted = selectedCrossItems;
+    const items = crossResults.items.filter((item) => wanted.has(getItemKey(item)) && !item.accepted);
+    for (const item of items) {
+      await approveCrossItem(item);
     }
   }
 
@@ -582,8 +604,14 @@
       crossResults,
       selectedCrossKey,
       crossCompareRunning,
+      crossTestRunning,
+      selectedCrossItems,
+      selectedCrossCount,
     };
   }
+
+  /** Exposed actions for parent BulkActionBar */
+  export { approveSelectedCrossItems, rerunSelectedCrossItems, rerunSelectedCrossItemTests, deleteCrossItems, selectAllCross, deselectAllCross };
 
   /** Called from parent after approve/revoke in fullscreen modal */
   export async function approveCrossFromModal(item: CrossResultItem) {
@@ -612,8 +640,8 @@
     <button class="btn" onclick={runSelectedCrossPair} disabled={!selectedCrossKey || crossCompareRunning}>
       {crossCompareRunning ? 'Cross Comparing...' : 'Run Pair'}
     </button>
-    <button class="btn danger" onclick={clearCrossPair} disabled={!selectedCrossKey || crossCompareRunning}>
-      Delete Pair
+    <button class="btn danger" onclick={clearCrossPair} disabled={!selectedCrossKey || crossCompareRunning} title="Re-run pair to regenerate">
+      Clear Results
     </button>
   </div>
 
@@ -649,15 +677,7 @@
       <button class="tag-filter" class:active={crossHideApproved} onclick={() => crossHideApproved = !crossHideApproved} title="Hide approved items from results">Hide Approved</button>
     </div>
     <div class="cross-selection-controls">
-      {#if selectedCrossCount > 0}
-        <span class="selected-count">{selectedCrossCount} selected</span>
-        <button class="btn small rerun" onclick={rerunSelectedCrossItems} disabled={crossCompareRunning || crossTestRunning}>
-          {crossCompareRunning ? 'Running...' : `Rerun Compare (${selectedCrossCount})`}
-        </button>
-        <button class="btn small rerun-tests" onclick={rerunSelectedCrossItemTests} disabled={crossCompareRunning || crossTestRunning}>
-          {crossTestRunning ? 'Rerunning...' : `Rerun Tests (${selectedCrossCount})`}
-        </button>
-      {:else}
+      {#if selectedCrossCount === 0}
         <button
           class="btn small rerun"
           onclick={rerunFilteredCrossItems}
@@ -673,17 +693,13 @@
           {crossTestRunning ? 'Rerunning...' : `Rerun Tests Filtered (${crossFilteredItems.length})`}
         </button>
       {/if}
-      <button
-        class="btn small"
-        class:expanded={allCrossPageSelected && !allCrossFilteredSelected && crossTotalPages > 1}
-        class:all-selected={allCrossFilteredSelected}
-        onclick={selectAllCross}
-        disabled={crossFilteredItems.length === 0 || allCrossFilteredSelected}
-      >
-        {selectAllCrossLabel}
+      <span class="view-divider"></span>
+      <button class="view-toggle" class:active={crossViewMode === 'grid'} onclick={() => setCrossViewMode('grid')} title="Grid view">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       </button>
-      <button class="btn small" onclick={deselectAllCross} disabled={selectedCrossCount === 0}>Deselect</button>
-      <button class="btn small danger" onclick={deleteCrossItems} disabled={selectedCrossCount === 0}>Delete Selected</button>
+      <button class="view-toggle" class:active={crossViewMode === 'list'} onclick={() => setCrossViewMode('list')} title="List view">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
     </div>
   </div>
 
@@ -735,72 +751,116 @@
           <button class="btn small" onclick={() => crossCurrentPage = Math.min(crossTotalPages - 1, crossCurrentPage + 1)} disabled={crossCurrentPage >= crossTotalPages - 1}>Next</button>
         </div>
       {/if}
-      <div class="cross-grid">
-        {#each crossCurrentList as item}
-          {@const smartPass = item.match && item.diffPercentage > 0}
-          {@const crossTag = item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
-          {@const lastUpdated = getCrossItemLastUpdatedAt(item)}
-          <div class="cross-card tag-{crossTag}">
-            <div class="cross-card-header">
-              <label class="cross-select-box">
+      {#if crossViewMode === 'grid'}
+        <div class="cross-grid">
+          {#each crossCurrentList as item}
+            {@const smartPass = item.match && item.diffPercentage > 0}
+            {@const crossTag = item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
+            {@const lastUpdated = getCrossItemLastUpdatedAt(item)}
+            <div class="cross-card tag-{crossTag}">
+              <div class="cross-card-header">
+                <label class="cross-select-box">
+                  <input
+                    type="checkbox"
+                    checked={selectedCrossItems.has(getItemKey(item))}
+                    onchange={() => toggleCrossSelected(item)}
+                  />
+                </label>
+                <div>
+                  <div class="cross-title">{item.scenario}</div>
+                  <div class="cross-meta">{item.viewport}</div>
+                  {#if lastUpdated}
+                    <div class="cross-updated" title={lastUpdated}>
+                      Last updated: {formatUpdatedAt(lastUpdated)}
+                    </div>
+                  {/if}
+                </div>
+                <div class="cross-badge tag-{crossTag}">
+                  {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
+                </div>
+              </div>
+              <div class="cross-stats">
+                <span>{item.diffPercentage.toFixed(2)}%</span>
+                <span>{item.pixelDiff.toLocaleString()} px</span>
+                {#if item.ssimScore !== undefined}
+                  <span>SSIM {(item.ssimScore * 100).toFixed(1)}%</span>
+                {/if}
+              </div>
+              <div class="cross-images">
+                <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
+                  <img src={getFileThumbUrl(item.baseline)} alt="Baseline" loading="lazy" decoding="async" fetchpriority="low" />
+                </button>
+                {#if item.diff}
+                  <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
+                    <img src={getFileThumbUrl(item.diff)} alt="Diff" loading="lazy" decoding="async" fetchpriority="low" />
+                  </button>
+                {/if}
+                <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
+                  <img src={getFileThumbUrl(item.test)} alt="Test" loading="lazy" decoding="async" fetchpriority="low" />
+                </button>
+              </div>
+              <div class="cross-actions">
+                {#if item.accepted}
+                  <button class="btn small ghost" onclick={() => revokeCrossItem(item)}>Approved · Undo</button>
+                {:else}
+                  <button class="btn small" onclick={() => approveCrossItem(item)}>Approve Diff</button>
+                {/if}
+                <button
+                  class="btn small rerun-tests"
+                  onclick={() => rerunTestsForItems([item])}
+                  disabled={crossCompareRunning || crossTestRunning}
+                  title="Rerun screenshots for both browsers in this card, then refresh cross-compare for this item"
+                >
+                  {crossTestRunning ? 'Rerunning...' : 'Rerun Tests'}
+                </button>
+                <button class="btn small danger" onclick={() => deleteCrossItem(item)}>Delete</button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="cross-list">
+          {#each crossCurrentList as item}
+            {@const smartPass = item.match && item.diffPercentage > 0}
+            {@const crossTag = item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
+            <div
+              class="cross-list-row"
+              class:multi-selected={selectedCrossItems.has(getItemKey(item))}
+              onclick={() => openCrossCompare(item)}
+              onkeydown={(e) => e.key === 'Enter' && openCrossCompare(item)}
+              role="button"
+              tabindex="0"
+            >
+              <label class="list-checkbox" onclick={(e) => e.stopPropagation()}>
                 <input
                   type="checkbox"
                   checked={selectedCrossItems.has(getItemKey(item))}
                   onchange={() => toggleCrossSelected(item)}
                 />
+                <span class="checkmark"></span>
               </label>
-              <div>
-                <div class="cross-title">{item.scenario}</div>
-                <div class="cross-meta">{item.viewport}</div>
-                {#if lastUpdated}
-                  <div class="cross-updated" title={lastUpdated}>
-                    Last updated: {formatUpdatedAt(lastUpdated)}
-                  </div>
-                {/if}
+              <div class="cross-list-thumb">
+                <img src={getFileThumbUrl(item.baseline)} alt="Baseline" loading="lazy" decoding="async" fetchpriority="low" />
               </div>
+              <div class="cross-list-info">
+                <span class="cross-list-scenario">{item.scenario}</span>
+                <span class="cross-list-detail">{item.viewport}</span>
+              </div>
+              <span class="cross-list-diff" style="color: {getDiffColor(item.diffPercentage)}">
+                {item.diffPercentage.toFixed(2)}%
+              </span>
+              {#if item.ssimScore !== undefined}
+                <span class="cross-list-ssim">
+                  SSIM {(item.ssimScore * 100).toFixed(1)}%
+                </span>
+              {/if}
               <div class="cross-badge tag-{crossTag}">
                 {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
               </div>
             </div>
-            <div class="cross-stats">
-              <span>{item.diffPercentage.toFixed(2)}%</span>
-              <span>{item.pixelDiff.toLocaleString()} px</span>
-              {#if item.ssimScore !== undefined}
-                <span>SSIM {(item.ssimScore * 100).toFixed(1)}%</span>
-              {/if}
-            </div>
-            <div class="cross-images">
-              <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
-                <img src={getFileThumbUrl(item.baseline)} alt="Baseline" loading="lazy" decoding="async" fetchpriority="low" />
-              </button>
-              {#if item.diff}
-                <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
-                  <img src={getFileThumbUrl(item.diff)} alt="Diff" loading="lazy" decoding="async" fetchpriority="low" />
-                </button>
-              {/if}
-              <button class="cross-image" onclick={() => openCrossCompare(item)} title="Open fullscreen compare">
-                <img src={getFileThumbUrl(item.test)} alt="Test" loading="lazy" decoding="async" fetchpriority="low" />
-              </button>
-            </div>
-            <div class="cross-actions">
-              {#if item.accepted}
-                <button class="btn small ghost" onclick={() => revokeCrossItem(item)}>Approved · Undo</button>
-              {:else}
-                <button class="btn small" onclick={() => approveCrossItem(item)}>Approve Diff</button>
-              {/if}
-              <button
-                class="btn small rerun-tests"
-                onclick={() => rerunTestsForItems([item])}
-                disabled={crossCompareRunning || crossTestRunning}
-                title="Rerun screenshots for both browsers in this card, then refresh cross-compare for this item"
-              >
-                {crossTestRunning ? 'Rerunning...' : 'Rerun Tests'}
-              </button>
-              <button class="btn small danger" onclick={() => deleteCrossItem(item)}>Delete</button>
-            </div>
-          </div>
-        {/each}
-      </div>
+          {/each}
+        </div>
+      {/if}
     {/if}
   {:else}
     <div class="compare-hint">
@@ -1133,5 +1193,69 @@
   .page-info {
     font-size: 0.8rem;
     color: var(--text-muted);
+  }
+
+  /* View toggle */
+  .view-divider { width: 1px; height: 16px; background: var(--border); }
+  .view-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+  }
+  .view-toggle:hover { color: var(--text-strong); border-color: var(--text-muted); }
+  .view-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+
+  /* Cross list view */
+  .cross-list { display: flex; flex-direction: column; }
+
+  .cross-list-row {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-soft);
+    cursor: pointer; transition: background 0.1s;
+  }
+  .cross-list-row:hover { background: var(--panel-soft); }
+  .cross-list-row.multi-selected { background: rgba(99, 102, 241, 0.08); }
+
+  .list-checkbox {
+    display: flex; align-items: center; flex-shrink: 0;
+    position: relative; cursor: pointer;
+  }
+  .list-checkbox input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
+  .list-checkbox .checkmark {
+    display: block; width: 16px; height: 16px; background: var(--panel-strong);
+    border: 2px solid var(--text-muted); border-radius: 0; cursor: pointer; transition: all 0.15s;
+  }
+  .list-checkbox:hover .checkmark { border-color: var(--accent); }
+  .list-checkbox input:checked ~ .checkmark { background: var(--accent); border-color: var(--accent); }
+  .list-checkbox input:checked ~ .checkmark::after {
+    content: ''; position: absolute; left: 5px; top: 1px;
+    width: 4px; height: 8px; border: solid var(--text-strong);
+    border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+
+  .cross-list-thumb {
+    width: 40px; height: 40px; flex-shrink: 0;
+    background: var(--panel-strong); border: 1px solid var(--border); overflow: hidden;
+  }
+  .cross-list-thumb img { width: 100%; height: 100%; object-fit: contain; }
+
+  .cross-list-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+  .cross-list-scenario {
+    font-size: 0.8rem; font-weight: 600; color: var(--text-strong);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cross-list-detail {
+    font-size: 0.7rem; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .cross-list-diff {
+    font-size: 0.8rem; font-weight: 700; font-family: var(--font-mono, monospace);
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .cross-list-ssim {
+    font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono, monospace);
+    white-space: nowrap; flex-shrink: 0;
   }
 </style>

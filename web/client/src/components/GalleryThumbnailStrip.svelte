@@ -50,7 +50,7 @@
     display: flex;
     gap: 8px;
     padding: 12px 20px;
-    background: #1a1a2e;
+    background: var(--panel);
     border-top: 1px solid var(--border);
     overflow-x: auto;
     overflow-y: hidden;
@@ -61,7 +61,7 @@
     flex-shrink: 0;
     width: 80px;
     height: 60px;
-    background: #0a0a0a;
+    background: var(--bg);
     border: 2px solid var(--border);
     border-radius: 0;
     font-family: var(--font-mono, monospace);

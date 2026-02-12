@@ -38,8 +38,8 @@
   });
 
   let projectTab = $derived.by(() => {
-    const match = route.match(/\/project\/[^/?]+\?tab=(baselines|tests|diffs|compare|cross)/);
-    return match ? match[1] as 'baselines' | 'tests' | 'diffs' | 'compare' | 'cross' : undefined;
+    const match = route.match(/\/project\/[^/?]+\?tab=(baselines|tests|diffs|cross)/);
+    return match ? match[1] as 'baselines' | 'tests' | 'diffs' | 'cross' : undefined;
   });
 
   // Theme state
@@ -283,19 +283,6 @@
           </div>
         </div>
 
-        <!-- Settings (always visible when viewing a project) -->
-        {#if projectId}
-          <a
-            href="#/config/{projectId}"
-            class="nav-item"
-            class:active={page === 'config'}
-            onclick={(e) => { e.preventDefault(); navigate(`/config/${projectId}`); }}
-            title="settings"
-          >
-            <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            <span class="nav-label">settings</span>
-          </a>
-        {/if}
       </nav>
     </div>
     <div class="sidebar-bottom">

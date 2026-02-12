@@ -1051,13 +1051,6 @@
       </button>
       <button
         class="tab"
-        class:active={activeTab === 'compare'}
-        onclick={() => { activeTab = 'compare'; setTagFilter('all'); }}
-      >
-        Compare Tool
-      </button>
-      <button
-        class="tab"
         class:active={activeTab === 'cross'}
         onclick={() => { activeTab = 'cross'; setTagFilter('all'); }}
       >
@@ -1125,8 +1118,8 @@
           {toggleTagFilter}
           {matchesTagSet}
           {metadataMap}
+          imageResults={store.imageResults}
           onOpenGallery={openGallery}
-          onBulkRerun={handleBulkRerun}
         />
       {/if}
 
@@ -1202,8 +1195,24 @@
     {bulkTotal}
     onApprove={handleBulkApprove}
     onReject={handleBulkReject}
+    onRerun={handleBulkRerun}
     onDelete={handleBulkDelete}
+    onSelectAll={() => { selectedImages = new Set(fullList); }}
     onCancel={deselectAll}
+  />
+{/if}
+{#if activeTab === 'cross' && (crossPanel?.getCrossState()?.selectedCrossCount ?? 0) > 0}
+  {@const crossState = crossPanel?.getCrossState()}
+  <BulkActionBar
+    selectedCount={crossState?.selectedCrossCount ?? 0}
+    mode="cross"
+    crossRunning={crossState?.crossCompareRunning || crossState?.crossTestRunning || false}
+    onApprove={() => crossPanel?.approveSelectedCrossItems()}
+    onRerun={() => crossPanel?.rerunSelectedCrossItems()}
+    onRerunTests={() => crossPanel?.rerunSelectedCrossItemTests()}
+    onDelete={() => crossPanel?.deleteCrossItems()}
+    onSelectAll={() => crossPanel?.selectAllCross()}
+    onCancel={() => crossPanel?.deselectAllCross()}
   />
 {/if}
 
@@ -2455,7 +2464,7 @@
   }
 
   .bulk-action-bar.operating {
-    background: #252525;
+    background: var(--panel-strong);
   }
 
   .bulk-info {

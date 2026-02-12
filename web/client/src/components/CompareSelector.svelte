@@ -597,7 +597,7 @@
 
   .dropdown-item:hover,
   .dropdown-item.highlighted {
-    background: #2a2a2a;
+    background: var(--border);
     color: var(--text-strong);
   }
 

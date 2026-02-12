@@ -4,7 +4,12 @@ export interface GalleryImage {
   filename: string;
   status: ImageStatus;
   confidence?: { score: number; pass: boolean; verdict: 'pass' | 'warn' | 'fail' };
-  metrics?: { pixelDiff: number; diffPercentage: number; ssimScore?: number };
+  metrics?: {
+    pixelDiff: number;
+    diffPercentage: number;
+    ssimScore?: number;
+    phash?: { similarity: number };
+  };
 }
 
 export interface ImageInfo {

@@ -1,25 +1,35 @@
 <script lang="ts">
   let {
     selectedCount,
-    selectedApprovableCount,
-    selectedRejectableCount,
-    bulkOperating,
-    bulkProgress,
-    bulkTotal,
+    selectedApprovableCount = 0,
+    selectedRejectableCount = 0,
+    bulkOperating = false,
+    bulkProgress = 0,
+    bulkTotal = 0,
+    mode = 'standard',
+    crossRunning = false,
     onApprove,
     onReject,
     onDelete,
+    onRerun,
+    onRerunTests,
+    onSelectAll,
     onCancel,
   } = $props<{
     selectedCount: number;
-    selectedApprovableCount: number;
-    selectedRejectableCount: number;
-    bulkOperating: boolean;
-    bulkProgress: number;
-    bulkTotal: number;
-    onApprove: () => void;
-    onReject: () => void;
-    onDelete: () => void;
+    selectedApprovableCount?: number;
+    selectedRejectableCount?: number;
+    bulkOperating?: boolean;
+    bulkProgress?: number;
+    bulkTotal?: number;
+    mode?: 'standard' | 'cross';
+    crossRunning?: boolean;
+    onApprove?: () => void;
+    onReject?: () => void;
+    onDelete?: () => void;
+    onRerun?: () => void;
+    onRerunTests?: () => void;
+    onSelectAll?: () => void;
     onCancel: () => void;
   }>();
 </script>
@@ -32,18 +42,47 @@
     {/if}
   </div>
   <div class="bulk-actions">
-    {#if selectedApprovableCount > 0}
-      <button class="btn primary" onclick={onApprove} disabled={bulkOperating}>
-        Approve All ({selectedApprovableCount})
-      </button>
+    {#if mode === 'cross'}
+      {#if onApprove}
+        <button class="btn primary" onclick={onApprove} disabled={crossRunning}>Approve ({selectedCount})</button>
+      {/if}
+      {#if onRerun}
+        <button class="btn accent" onclick={onRerun} disabled={crossRunning}>
+          {crossRunning ? 'Running...' : `Rerun Compare (${selectedCount})`}
+        </button>
+      {/if}
+      {#if onRerunTests}
+        <button class="btn warning" onclick={onRerunTests} disabled={crossRunning}>
+          {crossRunning ? 'Running...' : `Rerun Tests (${selectedCount})`}
+        </button>
+      {/if}
+      {#if onDelete}
+        <button class="btn danger" onclick={onDelete} disabled={crossRunning}>Delete ({selectedCount})</button>
+      {/if}
+    {:else}
+      {#if onApprove && selectedApprovableCount > 0}
+        <button class="btn primary" onclick={onApprove} disabled={bulkOperating}>
+          Approve ({selectedApprovableCount})
+        </button>
+      {/if}
+      {#if onReject && selectedRejectableCount > 0}
+        <button class="btn danger" onclick={onReject} disabled={bulkOperating}>
+          Reject ({selectedRejectableCount})
+        </button>
+      {/if}
+      {#if onRerun}
+        <button class="btn accent" onclick={onRerun} disabled={bulkOperating}>
+          Rerun ({selectedCount})
+        </button>
+      {/if}
+      {#if onDelete}
+        <button class="btn danger" onclick={onDelete} disabled={bulkOperating}>Delete ({selectedCount})</button>
+      {/if}
     {/if}
-    {#if selectedRejectableCount > 0}
-      <button class="btn danger" onclick={onReject} disabled={bulkOperating}>
-        Reject All ({selectedRejectableCount})
-      </button>
+    {#if onSelectAll}
+      <button class="btn" onclick={onSelectAll}>Select All</button>
     {/if}
-    <button class="btn danger" onclick={onDelete} disabled={bulkOperating}>Delete Selected</button>
-    <button class="btn" onclick={onCancel} disabled={bulkOperating}>Cancel</button>
+    <button class="btn" onclick={onCancel} disabled={bulkOperating}>Deselect</button>
   </div>
 </div>
 
@@ -69,11 +108,11 @@
     to { transform: translateY(0); opacity: 1; }
   }
 
-  .bulk-action-bar.operating { background: #252525; }
+  .bulk-action-bar.operating { background: var(--panel-strong); }
 
   .bulk-info { display: flex; align-items: center; gap: 1rem; }
-  .bulk-count { font-size: 1rem; font-weight: 600; color: var(--text-strong); }
-  .bulk-progress { font-size: 0.875rem; color: var(--accent); }
+  .bulk-count { font-size: 1rem; font-weight: 600; color: var(--text-strong); font-family: var(--font-mono, monospace); }
+  .bulk-progress { font-size: 0.875rem; color: var(--accent); font-family: var(--font-mono, monospace); }
   .bulk-actions { display: flex; gap: 0.75rem; }
 
   .btn {
@@ -89,10 +128,16 @@
     font-size: 0.875rem;
     cursor: pointer;
     transition: background 0.2s;
+    text-transform: lowercase;
   }
   .btn:hover { background: var(--border-soft); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn.primary { background: var(--accent); color: #fff; }
   .btn.primary:hover { background: var(--accent-strong); }
+  .btn.accent { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+  .btn.accent:hover:not(:disabled) { background: var(--accent); color: #fff; }
+  .btn.warning { background: transparent; border: 1px solid #f59e0b; color: #f59e0b; }
+  .btn.warning:hover:not(:disabled) { background: #f59e0b; color: var(--bg); }
   .btn.danger { background: #7f1d1d; color: #fff; }
   .btn.danger:hover { background: #ef4444; }
 </style>

@@ -93,11 +93,16 @@
 
 <div class="config-page">
   <div class="header">
-    <div>
-      <h1>Configuration</h1>
-      {#if project}
-        <p class="subtitle">{project.name}</p>
-      {/if}
+    <div class="header-title">
+      <button class="back-btn" onclick={() => navigate(`/project/${projectId}`)} title="Back to project">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <div>
+        <h1>Configuration</h1>
+        {#if project}
+          <p class="subtitle">{project.name}</p>
+        {/if}
+      </div>
     </div>
     <button class="btn primary" onclick={saveConfig} disabled={saving || loading}>
       {saving ? 'Saving...' : 'Save Config'}
@@ -269,6 +274,30 @@
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 1.5rem;
+  }
+
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .back-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   h1 {

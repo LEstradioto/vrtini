@@ -24,10 +24,12 @@
     "test": "npm run build && npm run test:unit",
     "full": "npm run build && npm run vrtini:build && npm run vrtini:test",
     "serve": "npm run build:all && npm run vrtini:serve",
+    "prepare": "husky",
     "postinstall": "cd web/client && npm install",
     "lint": "eslint src web/server",
     "lint:fix": "eslint src web/server --fix",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -67,9 +67,13 @@
   // CrossComparePanel component ref
   let crossPanel: ReturnType<typeof CrossComparePanel> | undefined = $state();
 
+  function getCrossItemKey(item: CrossResultItem): string {
+    return item.itemKey ?? `${item.scenario}__${item.viewport}`;
+  }
+
   async function approveCrossFromModal() {
     if (!currentCrossItem || !crossPanel) return;
-    const prevKey = currentCrossItem.itemKey;
+    const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
     await crossPanel.approveCrossFromModal(currentCrossItem);
     syncCrossModalSelection(prevKey, prevIndex);
@@ -77,7 +81,7 @@
 
   async function revokeCrossFromModal() {
     if (!currentCrossItem || !crossPanel) return;
-    const prevKey = currentCrossItem.itemKey;
+    const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
     await crossPanel.revokeCrossFromModal(currentCrossItem);
     syncCrossModalSelection(prevKey, prevIndex);
@@ -85,7 +89,7 @@
 
   async function flagCrossFromModal() {
     if (!currentCrossItem || !crossPanel) return;
-    const prevKey = currentCrossItem.itemKey;
+    const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
     await crossPanel.flagCrossFromModal(currentCrossItem);
     syncCrossModalSelection(prevKey, prevIndex);
@@ -93,10 +97,30 @@
 
   async function unflagCrossFromModal() {
     if (!currentCrossItem || !crossPanel) return;
-    const prevKey = currentCrossItem.itemKey;
+    const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
     await crossPanel.unflagCrossFromModal(currentCrossItem);
     syncCrossModalSelection(prevKey, prevIndex);
+  }
+
+  async function runCrossAITriageFromModal() {
+    if (!currentCrossItem || !crossPanel) return;
+    const prevKey = getCrossItemKey(currentCrossItem);
+    const prevIndex = crossQueueIndex;
+    await crossPanel.runAITriage([prevKey]);
+    syncCrossModalSelection(prevKey, prevIndex);
+  }
+
+  function handleCompareAnalyze() {
+    if (compareMode === 'manual') {
+      if (compareRight) {
+        void handleAnalyze([compareRight.filename]);
+      }
+      return;
+    }
+    if (compareMode === 'cross') {
+      void runCrossAITriageFromModal();
+    }
   }
 
   function syncCrossModalSelection(preferredKey?: string, fallbackIndex = crossQueueIndex) {
@@ -1302,7 +1326,7 @@
     compareThreshold={compareMode === 'manual' ? threshold : undefined}
     onThresholdChange={compareMode === 'manual' ? (t) => (threshold = t) : undefined}
     onRecompare={compareMode === 'manual' ? recompareWithThreshold : undefined}
-    onAnalyze={compareMode === 'manual' ? () => compareRight && handleAnalyze([compareRight.filename]) : undefined}
+    onAnalyze={compareMode ? handleCompareAnalyze : undefined}
     onFlag={
       compareMode === 'manual'
         ? () => compareRight && setImageFlag(compareRight.filename)
@@ -1345,7 +1369,13 @@
           ? !!currentCrossItem?.flagged
           : false
     }
-    analyzing={compareMode === 'manual' ? analyzing : false}
+    analyzing={
+      compareMode === 'manual'
+        ? analyzing
+        : compareMode === 'cross'
+          ? (crossPanel?.getCrossState()?.aiTriageRunning ?? false)
+          : false
+    }
     recomparing={compareMode === 'manual' ? comparing : false}
     onClose={closeCompareFullscreen}
   />

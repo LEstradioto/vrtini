@@ -582,6 +582,10 @@
     }, timeout);
   }
 
+  function notifySidebarRefresh() {
+    window.dispatchEvent(new CustomEvent('vrt:sidebar-refresh'));
+  }
+
   async function handleBulkApprove() {
     const filenames = selectedApprovable;
     if (filenames.length === 0) return;
@@ -593,20 +597,32 @@
     const originalBaselines = [...store.baselines];
     const originalTests = [...store.tests];
     const originalDiffs = [...store.diffs];
-
-    store.baselines = [...new Set([...store.baselines, ...filenames])];
+    const approvedSet = new Set<string>();
+    const failedSet = new Set<string>();
 
     try {
-      const result = await images.bulkApprove(projectId, filenames);
+      for (const filename of filenames) {
+        try {
+          await images.approve(projectId, filename);
+          approvedSet.add(filename);
+          store.baselines = [...new Set([...store.baselines, filename])];
+          store.diffs = store.diffs.filter((d) => d !== filename);
+        } catch {
+          failedSet.add(filename);
+        } finally {
+          bulkProgress = approvedSet.size + failedSet.size;
+        }
+      }
 
-      if (result.failed.length > 0) {
+      if (failedSet.size > 0) {
         await loadProject();
-        showToast(`Approved ${result.approved.length}, failed ${result.failed.length}`, 'error');
+        showToast(`Approved ${approvedSet.size}, failed ${failedSet.size}`, 'error');
       } else {
-        showToast(`Approved ${result.approved.length} images`, 'success');
+        showToast(`Approved ${approvedSet.size} images`, 'success');
       }
 
       deselectAll();
+      notifySidebarRefresh();
     } catch (err) {
       store.baselines = originalBaselines;
       store.tests = originalTests;
@@ -655,6 +671,7 @@
       }
 
       deselectAll();
+      notifySidebarRefresh();
     } catch (err) {
       store.tests = originalTests;
       store.diffs = originalDiffs;
@@ -716,6 +733,7 @@
       }
 
       deselectAll();
+      notifySidebarRefresh();
     } catch (err) {
       store.baselines = originalBaselines;
       store.tests = originalTests;
@@ -770,11 +788,16 @@
     store.baselines = [...new Set([...store.baselines, filename])];
     store.diffs = store.diffs.filter((d) => d !== filename);
 
-    images.approve(projectId, filename).catch((err) => {
-      store.baselines = originalBaselines;
-      store.diffs = originalDiffs;
-      showToast(getErrorMessage(err, 'Approve failed'), 'error');
-    });
+    images
+      .approve(projectId, filename)
+      .then(() => {
+        notifySidebarRefresh();
+      })
+      .catch((err) => {
+        store.baselines = originalBaselines;
+        store.diffs = originalDiffs;
+        showToast(getErrorMessage(err, 'Approve failed'), 'error');
+      });
   }
 
   function handleGalleryReject(filename: string) {
@@ -784,11 +807,16 @@
     store.tests = store.tests.filter((t) => t !== filename);
     store.diffs = store.diffs.filter((d) => d !== filename);
 
-    images.reject(projectId, filename).catch((err) => {
-      store.tests = originalTests;
-      store.diffs = originalDiffs;
-      showToast(getErrorMessage(err, 'Reject failed'), 'error');
-    });
+    images
+      .reject(projectId, filename)
+      .then(() => {
+        notifySidebarRefresh();
+      })
+      .catch((err) => {
+        store.tests = originalTests;
+        store.diffs = originalDiffs;
+        showToast(getErrorMessage(err, 'Reject failed'), 'error');
+      });
   }
 
   async function handleGalleryFlag(filename: string) {
@@ -1455,7 +1483,10 @@
   <BulkActionBar
     selectedCount={crossState?.selectedCrossCount ?? 0}
     mode="cross"
-    crossRunning={crossState?.crossCompareRunning || crossState?.crossTestRunning || false}
+    crossRunning={crossState?.crossCompareRunning || crossState?.crossTestRunning || crossState?.crossApproveRunning || false}
+    bulkOperating={crossState?.crossApproveRunning || false}
+    bulkProgress={crossState?.crossApproveProgress || 0}
+    bulkTotal={crossState?.crossApproveTotal || 0}
     onApprove={() => crossPanel?.approveSelectedCrossItems()}
     onRerun={() => crossPanel?.rerunSelectedCrossItems()}
     onRerunTests={() => crossPanel?.rerunSelectedCrossItemTests()}

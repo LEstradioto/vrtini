@@ -744,33 +744,65 @@ export async function listCrossResults(
   config: VRTConfig
 ): Promise<CrossResultsSummary[]> {
   const { outputDir } = getProjectDirs(projectPath, config);
+  const configuredPairs = buildCrossComparePairs(config.browsers);
   const root = resolve(outputDir, 'cross-reports');
-  if (!existsSync(root)) return [];
-
-  const entries = await readdir(root, { withFileTypes: true });
-  const summaries: CrossResultsSummary[] = [];
+  const summariesByKey = new Map<string, CrossResultsSummary>();
   const acceptances = await loadCrossAcceptances(projectPath);
   const flags = await loadCrossFlags(projectPath);
   const deletions = await loadCrossDeletions(projectPath);
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const resultsPath = resolve(root, entry.name, 'results.json');
-    if (!existsSync(resultsPath)) continue;
-    try {
-      const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
-      const key = data.key ?? entry.name;
-      const summary = summarizeCrossItems(data.items, acceptances[key], flags[key], deletions[key]);
-      summaries.push({
-        key,
-        title: data.title,
-        generatedAt: data.generatedAt,
-        baselineLabel: data.baselineLabel,
-        testLabel: data.testLabel,
-        ...summary,
-      });
-    } catch {
-      // ignore unreadable results
+  if (existsSync(root)) {
+    const entries = await readdir(root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const resultsPath = resolve(root, entry.name, 'results.json');
+      if (!existsSync(resultsPath)) continue;
+      try {
+        const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
+        const key = data.key ?? entry.name;
+        const summary = summarizeCrossItems(
+          data.items,
+          acceptances[key],
+          flags[key],
+          deletions[key]
+        );
+        summariesByKey.set(key, {
+          key,
+          title: data.title,
+          generatedAt: data.generatedAt,
+          baselineLabel: data.baselineLabel,
+          testLabel: data.testLabel,
+          ...summary,
+        });
+      } catch {
+        // ignore unreadable results
+      }
+    }
+  }
+
+  const summaries: CrossResultsSummary[] = configuredPairs.map((pair) => {
+    const existing = summariesByKey.get(pair.key);
+    if (existing) return existing;
+    return {
+      key: pair.key,
+      title: pair.title,
+      generatedAt: '',
+      baselineLabel: formatBrowser(pair.baseline),
+      testLabel: formatBrowser(pair.test),
+      itemCount: 0,
+      approvedCount: 0,
+      smartPassCount: 0,
+      matchCount: 0,
+      diffCount: 0,
+      issueCount: 0,
+      flaggedCount: 0,
+      outdatedCount: 0,
+    };
+  });
+
+  for (const [key, summary] of summariesByKey.entries()) {
+    if (!configuredPairs.some((pair) => pair.key === key)) {
+      summaries.push(summary);
     }
   }
 

@@ -62,6 +62,8 @@
 
   // Cross-compare state
   let crossCompareRunning = $state(false);
+  let crossRunProgress = $state(0);
+  let crossRunProgressLabel = $state('');
   let crossCompareError = $state<string | null>(null);
   let crossResults = $state<CrossResults | null>(null);
   let crossResultsLoading = $state(false);
@@ -77,6 +79,9 @@
   let crossPrefsLoaded = $state(false);
   let crossPrefsApplying = $state(false);
   let selectedCrossItems = $state<Set<string>>(new Set());
+  let crossApproveRunning = $state(false);
+  let crossApproveProgress = $state(0);
+  let crossApproveTotal = $state(0);
 
   let aiTriageRunning = $state(false);
   let aiTriageError = $state<string | null>(null);
@@ -130,6 +135,58 @@
     localStorage.setItem(getCrossPrefsKey(), JSON.stringify(payload));
   }
 
+  function hasCrossReportResults(report: CrossResultsSummary | null | undefined): boolean {
+    return !!report && !!report.generatedAt;
+  }
+
+  function getReportByKey(key: string | null): CrossResultsSummary | null {
+    if (!key) return null;
+    return crossReports.find((report) => report.key === key) ?? null;
+  }
+
+  let crossProgressTimer: ReturnType<typeof setInterval> | null = null;
+
+  function stopCrossProgressTimer() {
+    if (!crossProgressTimer) return;
+    clearInterval(crossProgressTimer);
+    crossProgressTimer = null;
+  }
+
+  function startCrossProgress(label: string) {
+    stopCrossProgressTimer();
+    crossRunProgress = 4;
+    crossRunProgressLabel = label;
+    crossProgressTimer = setInterval(() => {
+      crossRunProgress = Math.min(
+        92,
+        crossRunProgress + Math.max(1, Math.round((92 - crossRunProgress) * 0.1))
+      );
+    }, 320);
+  }
+
+  function advanceCrossProgress(minProgress: number, label?: string) {
+    crossRunProgress = Math.max(crossRunProgress, minProgress);
+    if (label) crossRunProgressLabel = label;
+  }
+
+  function finishCrossProgress() {
+    stopCrossProgressTimer();
+    crossRunProgress = 100;
+    crossRunProgressLabel = 'Cross-compare complete';
+    setTimeout(() => {
+      if (!crossCompareRunning) {
+        crossRunProgress = 0;
+        crossRunProgressLabel = '';
+      }
+    }, 700);
+  }
+
+  function resetCrossProgress() {
+    stopCrossProgressTimer();
+    crossRunProgress = 0;
+    crossRunProgressLabel = '';
+  }
+
   function applyCrossPrefs(reports: CrossResultsSummary[]): void {
     const prefs = loadCrossPrefs();
     if (!prefs) {
@@ -163,20 +220,34 @@
   }) {
     crossCompareRunning = true;
     crossCompareError = null;
+    startCrossProgress(options?.key ? 'Running selected pair...' : 'Running all pairs...');
+    let success = false;
     try {
       await crossCompare.run(projectId, options);
+      advanceCrossProgress(68, 'Refreshing pair list...');
       const list = await crossCompare.list(projectId);
       crossReports = list.results;
+      advanceCrossProgress(82, 'Loading results...');
       const nextKey = options?.key ?? crossReports[0]?.key ?? null;
       if (nextKey) {
         selectedCrossKey = nextKey;
-        await loadCrossResults(nextKey);
+        const nextReport = getReportByKey(nextKey);
+        if (hasCrossReportResults(nextReport)) {
+          await loadCrossResults(nextKey);
+        } else {
+          crossResults = null;
+          crossResultsError = null;
+        }
         onSetActiveTab('cross');
       }
+      advanceCrossProgress(96);
+      success = true;
     } catch (err) {
       crossCompareError = getErrorMessage(err, 'Cross compare failed');
     } finally {
       crossCompareRunning = false;
+      if (success) finishCrossProgress();
+      else resetCrossProgress();
     }
   }
 
@@ -303,6 +374,12 @@
 
   async function clearCrossPair() {
     if (!selectedCrossKey) return;
+    const selectedReport = getReportByKey(selectedCrossKey);
+    if (!hasCrossReportResults(selectedReport)) {
+      crossResults = null;
+      crossResultsError = null;
+      return;
+    }
     if (!confirm(`Delete cross compare results for "${selectedCrossKey}"? This will remove reports, diffs, and approvals.`)) {
       return;
     }
@@ -316,7 +393,13 @@
       if (crossReports.length > 0) {
         const nextKey = crossReports[0].key;
         selectedCrossKey = nextKey;
-        await loadCrossResults(nextKey);
+        const nextReport = getReportByKey(nextKey);
+        if (hasCrossReportResults(nextReport)) {
+          await loadCrossResults(nextKey);
+        } else {
+          crossResults = null;
+          crossResultsError = null;
+        }
       } else {
         selectedCrossKey = null;
         crossResults = null;
@@ -353,8 +436,32 @@
     if (!selectedCrossKey || !crossResults || selectedCrossItems.size === 0) return;
     const wanted = selectedCrossItems;
     const items = crossResults.items.filter((item) => wanted.has(getItemKey(item)) && !item.accepted);
-    for (const item of items) {
-      await approveCrossItem(item);
+    if (items.length === 0) return;
+
+    crossApproveRunning = true;
+    crossApproveProgress = 0;
+    crossApproveTotal = items.length;
+    const failed: string[] = [];
+
+    try {
+      for (const item of items) {
+        try {
+          await approveCrossItem(item, { refresh: false });
+        } catch {
+          failed.push(item.itemKey ?? `${item.scenario}__${item.viewport}`);
+        } finally {
+          crossApproveProgress += 1;
+        }
+      }
+
+      await loadCrossResults(selectedCrossKey);
+      await refreshCrossReports();
+
+      if (failed.length > 0) {
+        crossResultsError = `Approved ${items.length - failed.length} item(s), failed ${failed.length}.`;
+      }
+    } finally {
+      crossApproveRunning = false;
     }
   }
 
@@ -418,19 +525,30 @@
     const target = event.target as HTMLSelectElement;
     const key = target.value;
     selectedCrossKey = key;
-    if (key) {
+    const report = getReportByKey(key);
+    if (key && hasCrossReportResults(report)) {
       await loadCrossResults(key);
+    } else {
+      crossResults = null;
+      crossResultsError = null;
     }
   }
 
-  async function approveCrossItem(item: CrossResultItem) {
+  async function approveCrossItem(
+    item: CrossResultItem,
+    options: { refresh?: boolean } = {}
+  ) {
     if (!selectedCrossKey || !item.itemKey) return;
+    const shouldRefresh = options.refresh ?? true;
     try {
       await crossCompare.accept(projectId, selectedCrossKey, item.itemKey);
-      await loadCrossResults(selectedCrossKey);
-      await refreshCrossReports();
+      if (shouldRefresh) {
+        await loadCrossResults(selectedCrossKey);
+        await refreshCrossReports();
+      }
     } catch (err) {
       crossResultsError = getErrorMessage(err, 'Failed to approve cross item');
+      throw err;
     }
   }
 
@@ -568,6 +686,7 @@
   });
 
   let aiAnalyzedCount = $derived(crossResults?.items.filter((i) => i.aiAnalysis).length ?? 0);
+  let selectedCrossHasResults = $derived(hasCrossReportResults(getReportByKey(selectedCrossKey)));
 
   // Selection
   let selectedCrossCount = $derived(selectedCrossItems.size);
@@ -638,7 +757,16 @@
     const stillSelected = crossReports.some((report) => report.key === selectedCrossKey);
     if (!stillSelected) {
       selectedCrossKey = crossReports[0].key;
-      loadCrossResults(selectedCrossKey);
+    }
+
+    const selectedReport = getReportByKey(selectedCrossKey);
+    if (selectedCrossKey && hasCrossReportResults(selectedReport)) {
+      if (crossResults?.key !== selectedCrossKey) {
+        loadCrossResults(selectedCrossKey);
+      }
+    } else if (selectedCrossKey) {
+      crossResults = null;
+      crossResultsError = null;
     }
   });
 
@@ -653,8 +781,12 @@
     if (!selectedCrossKey && reports.length > 0) {
       selectedCrossKey = reports[0].key;
     }
-    if (selectedCrossKey) {
+    const selectedReport = getReportByKey(selectedCrossKey);
+    if (selectedCrossKey && hasCrossReportResults(selectedReport)) {
       loadCrossResults(selectedCrossKey);
+    } else {
+      crossResults = null;
+      crossResultsError = null;
     }
   }
 
@@ -672,6 +804,9 @@
       crossCompareRunning,
       crossTestRunning,
       aiTriageRunning,
+      crossApproveRunning,
+      crossApproveProgress,
+      crossApproveTotal,
       selectedCrossItems,
       selectedCrossCount,
     };
@@ -713,7 +848,14 @@
       <select id="cross-pair-select" onchange={handleCrossPairChange} bind:value={selectedCrossKey}>
         <option value="" disabled selected={!selectedCrossKey}>Select a cross compare pair</option>
         {#each crossReports as report}
-          <option value={report.key}>{report.title} · {formatCrossPairSummary(report)}</option>
+          <option value={report.key}>
+            {report.title}
+            {#if hasCrossReportResults(report)}
+              {' '}· {formatCrossPairSummary(report)}
+            {:else}
+              {' '}· Not generated yet
+            {/if}
+          </option>
         {/each}
       </select>
     </div>
@@ -723,10 +865,27 @@
     <button class="btn" onclick={runSelectedCrossPair} disabled={!selectedCrossKey || crossCompareRunning}>
       {crossCompareRunning ? 'Cross Comparing...' : 'Run Pair'}
     </button>
-    <button class="btn danger" onclick={clearCrossPair} disabled={!selectedCrossKey || crossCompareRunning} title="Re-run pair to regenerate">
+    <button
+      class="btn danger"
+      onclick={clearCrossPair}
+      disabled={!selectedCrossKey || !selectedCrossHasResults || crossCompareRunning}
+      title="Re-run pair to regenerate"
+    >
       Clear Results
     </button>
   </div>
+
+  {#if crossCompareRunning}
+    <div class="cross-run-progress" role="status" aria-live="polite">
+      <div class="cross-run-progress-head">
+        <span>{crossRunProgressLabel || 'Running cross compare...'}</span>
+        <span>{Math.round(crossRunProgress)}%</span>
+      </div>
+      <div class="cross-run-progress-track">
+        <div class="cross-run-progress-fill" style="width: {crossRunProgress}%"></div>
+      </div>
+    </div>
+  {/if}
 
   <div class="search-bar cross-search-bar">
     <input type="text" class="search-input" placeholder="Filter by scenario or viewport..." bind:value={crossSearchQuery} />
@@ -996,7 +1155,11 @@
     </div>
   {:else}
     <div class="compare-hint">
-      Run cross compare to generate results for browser pairs.
+      {#if selectedCrossKey}
+        Pair selected but no results yet. Click "Run Pair" or "Run All Pairs".
+      {:else}
+        Run cross compare to generate results for browser pairs.
+      {/if}
     </div>
   {/if}
 </div>
@@ -1042,6 +1205,33 @@
 
   .cross-search-bar {
     border-radius: 0;
+  }
+
+  .cross-run-progress {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 0.55rem 0.65rem;
+    border-radius: 0;
+  }
+
+  .cross-run-progress-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .cross-run-progress-track {
+    height: 6px;
+    background: var(--border-soft);
+    overflow: hidden;
+  }
+
+  .cross-run-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.25s ease;
   }
 
   .cross-search-bar .search-input {

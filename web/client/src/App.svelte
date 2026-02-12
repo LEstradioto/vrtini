@@ -2,7 +2,7 @@
   import Dashboard from './pages/Dashboard.svelte';
   import ProjectPage from './pages/Project.svelte';
   import Config from './pages/Config.svelte';
-  import { test, projects as projectsApi, type Project } from './lib/api';
+  import { test, projects as projectsApi, images as imagesApi, type Project } from './lib/api';
   import { SvelteMap } from 'svelte/reactivity';
   import { setAppContext, type TestState } from './lib/app-context';
   import { getErrorMessage } from './lib/errors';
@@ -206,13 +206,52 @@
 
   let sidebarCollapsed = $state(false);
 
+  type SidebarStatus = 'passed' | 'failed' | 'new' | 'not-run';
+  type SidebarProject = Project & { currentStatus: SidebarStatus };
+
   // Sidebar project list
-  let sidebarProjects = $state<Project[]>([]);
+  let sidebarProjects = $state<SidebarProject[]>([]);
+
+  function computeSidebarStatus(data: {
+    baselines: string[];
+    tests: string[];
+    diffs: string[];
+  }): SidebarStatus {
+    if (data.diffs.length > 0) return 'failed';
+    const baselines = new Set(data.baselines);
+    const hasNew = data.tests.some((filename) => !baselines.has(filename));
+    if (hasNew) return 'new';
+    if (data.tests.length === 0) return 'not-run';
+    return 'passed';
+  }
+
+  function fallbackSidebarStatus(project: Project): SidebarStatus {
+    if (project.lastStatus === 'failed') return 'failed';
+    if (project.lastStatus === 'new') return 'new';
+    if (project.lastStatus === 'passed') return 'passed';
+    return 'not-run';
+  }
 
   async function loadSidebarProjects() {
     try {
       const res = await projectsApi.list();
-      sidebarProjects = res.projects;
+      const enriched = await Promise.all(
+        res.projects.map(async (project): Promise<SidebarProject> => {
+          try {
+            const imageData = await imagesApi.list(project.id);
+            return {
+              ...project,
+              currentStatus: computeSidebarStatus(imageData),
+            };
+          } catch {
+            return {
+              ...project,
+              currentStatus: fallbackSidebarStatus(project),
+            };
+          }
+        })
+      );
+      sidebarProjects = enriched;
     } catch {
       // silent - sidebar projects are best-effort
     }
@@ -225,6 +264,15 @@
   // Reload sidebar projects when navigating or when tests finish
   $effect(() => {
     if (page === 'dashboard') loadSidebarProjects();
+  });
+
+  // Allow child pages/components to trigger sidebar status refresh after mutations.
+  $effect(() => {
+    const onSidebarRefresh = () => {
+      loadSidebarProjects();
+    };
+    window.addEventListener('vrt:sidebar-refresh', onSidebarRefresh);
+    return () => window.removeEventListener('vrt:sidebar-refresh', onSidebarRefresh);
   });
 
   // Refresh sidebar when running tests map changes (test completes)
@@ -268,13 +316,13 @@
             {#each sidebarProjects as proj}
               {@const isRunning = runningTests.has(proj.id)}
               {@const isActive = projectId === proj.id && (page === 'project' || page === 'config')}
-              {@const statusClass = isRunning ? 'running' : proj.lastStatus === 'failed' ? 'failed' : proj.lastStatus === 'passed' ? 'passed' : ''}
+              {@const statusClass = isRunning ? 'running' : proj.currentStatus === 'failed' ? 'failed' : proj.currentStatus === 'new' ? 'new' : proj.currentStatus === 'passed' ? 'passed' : ''}
               <a
                 href="#/project/{proj.id}"
                 class="nav-project"
                 class:active={isActive}
                 onclick={(e) => { e.preventDefault(); navigate(`/project/${proj.id}`); }}
-                title="{proj.name}{isRunning ? ' (running)' : proj.lastStatus ? ` [${proj.lastStatus}]` : ''}"
+                title="{proj.name}{isRunning ? ' (running)' : ` [${proj.currentStatus}]`}"
               >
                 <span class="nav-project-dot {statusClass}"></span>
                 <span class="nav-label">{proj.name}</span>
@@ -559,6 +607,10 @@
 
   .nav-project-dot.failed {
     background: var(--color-failed);
+  }
+
+  .nav-project-dot.new {
+    background: var(--color-new);
   }
 
   .nav-project-dot.running {

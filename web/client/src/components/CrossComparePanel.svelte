@@ -5,6 +5,7 @@
     type CrossResultItem,
     type CrossResults,
     type CrossResultsSummary,
+    type CrossReport,
     type AIAnalysisResult,
   } from '../lib/api';
   import { getErrorMessage } from '../lib/errors';
@@ -144,6 +145,35 @@
     return crossReports.find((report) => report.key === key) ?? null;
   }
 
+  function toSummaryFromCrossReport(report: CrossReport): CrossResultsSummary {
+    const pairMatch = report.title.match(/^Cross Compare:\s+(.+)\s+vs\s+(.+)$/i);
+    const baselineLabel = pairMatch?.[1] ?? '';
+    const testLabel = pairMatch?.[2] ?? '';
+    return {
+      key: report.key,
+      title: report.title,
+      generatedAt: '',
+      baselineLabel,
+      testLabel,
+      itemCount: 0,
+      approvedCount: 0,
+      smartPassCount: 0,
+      matchCount: 0,
+      diffCount: 0,
+      issueCount: 0,
+      flaggedCount: 0,
+      outdatedCount: 0,
+    };
+  }
+
+  function keepUniqueReports(reports: CrossResultsSummary[]): CrossResultsSummary[] {
+    const map = new Map<string, CrossResultsSummary>();
+    for (const report of reports) {
+      if (!map.has(report.key)) map.set(report.key, report);
+    }
+    return [...map.values()];
+  }
+
   let crossProgressTimer: ReturnType<typeof setInterval> | null = null;
 
   function stopCrossProgressTimer() {
@@ -158,8 +188,8 @@
     crossRunProgressLabel = label;
     crossProgressTimer = setInterval(() => {
       crossRunProgress = Math.min(
-        92,
-        crossRunProgress + Math.max(1, Math.round((92 - crossRunProgress) * 0.1))
+        99,
+        crossRunProgress + Math.max(1, Math.round((99 - crossRunProgress) * 0.08))
       );
     }, 320);
   }
@@ -223,16 +253,20 @@
     startCrossProgress(options?.key ? 'Running selected pair...' : 'Running all pairs...');
     let success = false;
     try {
-      await crossCompare.run(projectId, options);
+      const runResponse = await crossCompare.run(projectId, options);
       advanceCrossProgress(68, 'Refreshing pair list...');
       const list = await crossCompare.list(projectId);
-      crossReports = list.results;
+      const fallbackFromRun = (runResponse.reports ?? []).map(toSummaryFromCrossReport);
+      crossReports = keepUniqueReports(
+        list.results.length > 0 ? list.results : fallbackFromRun
+      );
       advanceCrossProgress(82, 'Loading results...');
       const nextKey = options?.key ?? crossReports[0]?.key ?? null;
+      const ranKeys = new Set((runResponse.reports ?? []).map((report) => report.key));
       if (nextKey) {
         selectedCrossKey = nextKey;
         const nextReport = getReportByKey(nextKey);
-        if (hasCrossReportResults(nextReport)) {
+        if (hasCrossReportResults(nextReport) || ranKeys.has(nextKey)) {
           await loadCrossResults(nextKey);
         } else {
           crossResults = null;
@@ -389,6 +423,23 @@
       await crossCompare.clear(projectId, selectedCrossKey);
       const list = await crossCompare.list(projectId);
       crossReports = list.results;
+
+      if (crossReports.length === 0 && selectedReport) {
+        crossReports = [
+          {
+            ...selectedReport,
+            generatedAt: '',
+            itemCount: 0,
+            approvedCount: 0,
+            smartPassCount: 0,
+            matchCount: 0,
+            diffCount: 0,
+            issueCount: 0,
+            flaggedCount: 0,
+            outdatedCount: 0,
+          },
+        ];
+      }
 
       if (crossReports.length > 0) {
         const nextKey = crossReports[0].key;
@@ -686,7 +737,10 @@
   });
 
   let aiAnalyzedCount = $derived(crossResults?.items.filter((i) => i.aiAnalysis).length ?? 0);
-  let selectedCrossHasResults = $derived(hasCrossReportResults(getReportByKey(selectedCrossKey)));
+  let selectedCrossHasResults = $derived(
+    hasCrossReportResults(getReportByKey(selectedCrossKey)) ||
+      (!!crossResults && crossResults.key === selectedCrossKey)
+  );
 
   // Selection
   let selectedCrossCount = $derived(selectedCrossItems.size);

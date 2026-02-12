@@ -156,6 +156,10 @@
     openCrossAIAnalysisModal();
   }
 
+  function handleOpenCrossAIAnalysis(item: CrossResultItem) {
+    openCrossAIAnalysisModal(item);
+  }
+
   function syncCrossModalSelection(preferredKey?: string, fallbackIndex = crossQueueIndex) {
     if (!showCompareFullscreen || compareMode !== 'cross') return;
     const state = crossPanel?.getCrossState();
@@ -1309,6 +1313,7 @@
           {getFileUrl}
           {getFileThumbUrl}
           onOpenCrossCompare={handleOpenCrossCompare}
+          onOpenAIAnalysis={handleOpenCrossAIAnalysis}
           onSetActiveTab={(tab) => activeTab = tab}
         />
       {:else}

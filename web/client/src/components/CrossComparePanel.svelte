@@ -22,12 +22,10 @@
     | 'ai-approved'
     | 'ai-review'
     | 'ai-rejected';
-  type CrossPairFilterValue = 'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches';
 
   type CrossPrefs = {
     searchQuery?: string;
     statusFilter?: CrossStatusFilter[];
-    pairFilter?: CrossPairFilterValue;
     hideApproved?: boolean;
     selectedKey?: string | null;
   };
@@ -44,16 +42,13 @@
     'ai-review',
     'ai-rejected',
   ];
-  const CROSS_PAIR_VALUES = new Set<CrossPairFilterValue>([
-    'all', 'diffs', 'issues', 'smart', 'approved', 'matches',
-  ]);
-
   let {
     projectId,
     crossReports = $bindable(),
     getFileUrl,
     getFileThumbUrl,
     onOpenCrossCompare,
+    onOpenAIAnalysis,
     onSetActiveTab,
   } = $props<{
     projectId: string;
@@ -61,6 +56,7 @@
     getFileUrl: (relativePath: string) => string;
     getFileThumbUrl: (relativePath: string) => string;
     onOpenCrossCompare: (item: CrossResultItem, index: number, filteredItems: CrossResultItem[], results: CrossResults) => void;
+    onOpenAIAnalysis?: (item: CrossResultItem) => void;
     onSetActiveTab: (tab: string) => void;
   }>();
 
@@ -76,7 +72,6 @@
   let selectedCrossKey = $state<string | null>(null);
   let crossSearchQuery = $state('');
   let crossStatusFilter = $state<Set<CrossStatusFilter>>(new Set(['all']));
-  let crossPairFilter = $state<CrossPairFilterValue>('all');
   let crossHideApproved = $state(false);
   let crossCurrentPage = $state(0);
   let crossPrefsLoaded = $state(false);
@@ -129,7 +124,6 @@
     const payload: CrossPrefs = {
       searchQuery: crossSearchQuery,
       statusFilter: [...crossStatusFilter],
-      pairFilter: crossPairFilter,
       hideApproved: crossHideApproved,
       selectedKey: selectedCrossKey ?? null,
     };
@@ -146,9 +140,6 @@
     crossPrefsApplying = true;
     crossSearchQuery = typeof prefs.searchQuery === 'string' ? prefs.searchQuery : '';
     crossHideApproved = !!prefs.hideApproved;
-    if (prefs.pairFilter && CROSS_PAIR_VALUES.has(prefs.pairFilter)) {
-      crossPairFilter = prefs.pairFilter;
-    }
 
     if (Array.isArray(prefs.statusFilter)) {
       const allowed = new Set(CROSS_STATUS_VALUES);
@@ -532,32 +523,6 @@
   }
 
   // Derived state
-  let filteredCrossReports = $derived.by(() => {
-    if (crossPairFilter === 'all') return crossReports;
-    return crossReports.filter((report) => {
-      switch (crossPairFilter) {
-        case 'diffs': return (report.diffCount ?? 0) > 0;
-        case 'issues': return (report.issueCount ?? 0) > 0;
-        case 'smart': return (report.smartPassCount ?? 0) > 0;
-        case 'approved': return (report.approvedCount ?? 0) > 0;
-        case 'matches': return (report.matchCount ?? 0) + (report.smartPassCount ?? 0) > 0;
-        default: return true;
-      }
-    });
-  });
-
-  let crossPairCounts = $derived.by(() => {
-    const counts = { all: crossReports.length, diffs: 0, issues: 0, smart: 0, approved: 0, matches: 0 };
-    for (const report of crossReports) {
-      if ((report.diffCount ?? 0) > 0) counts.diffs += 1;
-      if ((report.issueCount ?? 0) > 0) counts.issues += 1;
-      if ((report.smartPassCount ?? 0) > 0) counts.smart += 1;
-      if ((report.approvedCount ?? 0) > 0) counts.approved += 1;
-      if ((report.matchCount ?? 0) + (report.smartPassCount ?? 0) > 0) counts.matches += 1;
-    }
-    return counts;
-  });
-
   let crossFilteredItems = $derived.by((): CrossResultItem[] => {
     if (!crossResults) return [];
     const q = crossSearchQuery.trim().toLowerCase();
@@ -656,7 +621,7 @@
 
   $effect(() => {
     if (!crossPrefsLoaded || crossPrefsApplying) return;
-    crossSearchQuery; crossStatusFilter; crossPairFilter; crossHideApproved; selectedCrossKey;
+    crossSearchQuery; crossStatusFilter; crossHideApproved; selectedCrossKey;
     saveCrossPrefs();
   });
 
@@ -666,13 +631,13 @@
   });
 
   $effect(() => {
-    if (filteredCrossReports.length === 0) {
+    if (crossReports.length === 0) {
       if (selectedCrossKey) { selectedCrossKey = null; crossResults = null; }
       return;
     }
-    const stillSelected = filteredCrossReports.some((report) => report.key === selectedCrossKey);
+    const stillSelected = crossReports.some((report) => report.key === selectedCrossKey);
     if (!stillSelected) {
-      selectedCrossKey = filteredCrossReports[0].key;
+      selectedCrossKey = crossReports[0].key;
       loadCrossResults(selectedCrossKey);
     }
   });
@@ -747,7 +712,7 @@
       <label for="cross-pair-select">Pair</label>
       <select id="cross-pair-select" onchange={handleCrossPairChange} bind:value={selectedCrossKey}>
         <option value="" disabled selected={!selectedCrossKey}>Select a cross compare pair</option>
-        {#each filteredCrossReports as report}
+        {#each crossReports as report}
           <option value={report.key}>{report.title} · {formatCrossPairSummary(report)}</option>
         {/each}
       </select>
@@ -762,20 +727,6 @@
       Clear Results
     </button>
   </div>
-
-  {#if crossReports.length > 0}
-    <div class="cross-pair-filters">
-      <span class="pair-filter-label">Pair Filters</span>
-      <div class="tag-filters">
-        <button class="tag-filter tag-all" class:active={crossPairFilter === 'all'} onclick={() => crossPairFilter = 'all'} title="Show all cross-compare pairs">All ({crossPairCounts.all})</button>
-        <button class="tag-filter tag-diff" class:active={crossPairFilter === 'diffs'} onclick={() => crossPairFilter = 'diffs'} title="Pairs with at least one diff">Diffs ({crossPairCounts.diffs})</button>
-        <button class="tag-filter tag-unapproved" class:active={crossPairFilter === 'issues'} onclick={() => crossPairFilter = 'issues'} title="Pairs with issues (errors, missing images)">Issues ({crossPairCounts.issues})</button>
-        <button class="tag-filter tag-smart" class:active={crossPairFilter === 'smart'} onclick={() => crossPairFilter = 'smart'} title="Pairs with smart-pass items">Smart Pass ({crossPairCounts.smart})</button>
-        <button class="tag-filter tag-approved" class:active={crossPairFilter === 'approved'} onclick={() => crossPairFilter = 'approved'} title="Pairs with approved items">Approved ({crossPairCounts.approved})</button>
-        <button class="tag-filter tag-passed" class:active={crossPairFilter === 'matches'} onclick={() => crossPairFilter = 'matches'} title="Pairs with matches (including smart pass)">Matches ({crossPairCounts.matches})</button>
-      </div>
-    </div>
-  {/if}
 
   <div class="search-bar cross-search-bar">
     <input type="text" class="search-input" placeholder="Filter by scenario or viewport..." bind:value={crossSearchQuery} />
@@ -834,44 +785,7 @@
 
   {#if crossResultsLoading}
     <div class="compare-hint">Loading cross compare results...</div>
-  {:else if crossReports.length > 0 && filteredCrossReports.length === 0}
-    <div class="compare-hint">No cross-compare pairs match your filter.</div>
   {:else if crossResults}
-    <div class="cross-summary-line">
-      {#if crossPairSummary}
-        Pair: {crossResults.baselineLabel} vs {crossResults.testLabel}
-        · Generated: {new Date(crossResults.generatedAt).toLocaleString()}
-        {#if crossTestRunning && crossTestJob}
-          · Rerunning tests: {crossTestJob.progress} / {crossTestJob.total}
-        {/if}
-        · Items: {crossPairSummary.total}
-        · Approved: {crossPairSummary.approved}
-        · Smart Pass: {crossPairSummary.smart}
-        · Match: {crossPairSummary.match}
-        · Diff: {crossPairSummary.diff}
-        · Issue: {crossPairSummary.issue}
-        {#if crossPairSummary.flagged > 0}
-          · Flagged: {crossPairSummary.flagged}
-        {/if}
-        {#if crossPairSummary.outdated > 0}
-          · <span class="outdated-indicator">Outdated: {crossPairSummary.outdated}</span>
-          <button class="btn small rerun-tests" onclick={revalidateOutdated} disabled={crossCompareRunning} title="Re-compare outdated items">
-            Re-validate
-          </button>
-        {/if}
-        {#if aiTriageRunning}
-          · <span class="ai-running">AI Triage running...</span>
-        {/if}
-      {:else}
-        Pair: {crossResults.baselineLabel} vs {crossResults.testLabel}
-        · Generated: {new Date(crossResults.generatedAt).toLocaleString()}
-        {#if crossTestRunning && crossTestJob}
-          · Rerunning tests: {crossTestJob.progress} / {crossTestJob.total}
-        {/if}
-        · Items: {crossFilteredItems.length}
-      {/if}
-    </div>
-
     {#if crossFilteredItems.length === 0}
       <div class="compare-hint">No cross-compare items match your filter.</div>
     {:else}
@@ -915,9 +829,23 @@
                   {/if}
                   {#if item.aiAnalysis}
                     {@const rec = item.aiAnalysis.recommendation}
-                    <div class="cross-badge tag-ai-{rec}" title="AI: {item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)">
-                      AI: {item.aiAnalysis.category} {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'}
-                    </div>
+                    {#if onOpenAIAnalysis}
+                      <button
+                        type="button"
+                        class="cross-badge cross-badge-btn tag-ai-{rec}"
+                        title="Open AI analysis: {item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)"
+                        onclick={(event) => {
+                          event.stopPropagation();
+                          onOpenAIAnalysis(item);
+                        }}
+                      >
+                        AI: {item.aiAnalysis.category} {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'}
+                      </button>
+                    {:else}
+                      <div class="cross-badge tag-ai-{rec}" title="AI: {item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)">
+                        AI: {item.aiAnalysis.category} {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'}
+                      </div>
+                    {/if}
                   {/if}
                 </div>
               </div>
@@ -1009,15 +937,63 @@
               {/if}
               {#if item.aiAnalysis}
                 {@const rec = item.aiAnalysis.recommendation}
-                <div class="cross-badge tag-ai-{rec}" title="{item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)">
-                  AI {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'} {(item.aiAnalysis.confidence * 100).toFixed(0)}%
-                </div>
+                {#if onOpenAIAnalysis}
+                  <button
+                    type="button"
+                    class="cross-badge cross-badge-btn tag-ai-{rec}"
+                    title="Open AI analysis: {item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)"
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      onOpenAIAnalysis(item);
+                    }}
+                  >
+                    AI {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'} {(item.aiAnalysis.confidence * 100).toFixed(0)}%
+                  </button>
+                {:else}
+                  <div class="cross-badge tag-ai-{rec}" title="{item.aiAnalysis.category} ({(item.aiAnalysis.confidence * 100).toFixed(0)}%)">
+                    AI {rec === 'approve' ? '\u2713' : rec === 'review' ? '\u26A0' : '\u2717'} {(item.aiAnalysis.confidence * 100).toFixed(0)}%
+                  </div>
+                {/if}
               {/if}
             </div>
           {/each}
         </div>
       {/if}
     {/if}
+    <div class="cross-summary-line">
+      {#if crossPairSummary}
+        Pair: {crossResults.baselineLabel} vs {crossResults.testLabel}
+        · Generated: {new Date(crossResults.generatedAt).toLocaleString()}
+        {#if crossTestRunning && crossTestJob}
+          · Rerunning tests: {crossTestJob.progress} / {crossTestJob.total}
+        {/if}
+        · Items: {crossPairSummary.total}
+        · Approved: {crossPairSummary.approved}
+        · Smart Pass: {crossPairSummary.smart}
+        · Match: {crossPairSummary.match}
+        · Diff: {crossPairSummary.diff}
+        · Issue: {crossPairSummary.issue}
+        {#if crossPairSummary.flagged > 0}
+          · Flagged: {crossPairSummary.flagged}
+        {/if}
+        {#if crossPairSummary.outdated > 0}
+          · <span class="outdated-indicator">Outdated: {crossPairSummary.outdated}</span>
+          <button class="btn small rerun-tests" onclick={revalidateOutdated} disabled={crossCompareRunning} title="Re-compare outdated items">
+            Re-validate
+          </button>
+        {/if}
+        {#if aiTriageRunning}
+          · <span class="ai-running">AI Triage running...</span>
+        {/if}
+      {:else}
+        Pair: {crossResults.baselineLabel} vs {crossResults.testLabel}
+        · Generated: {new Date(crossResults.generatedAt).toLocaleString()}
+        {#if crossTestRunning && crossTestJob}
+          · Rerunning tests: {crossTestJob.progress} / {crossTestJob.total}
+        {/if}
+        · Items: {crossFilteredItems.length}
+      {/if}
+    </div>
   {:else}
     <div class="compare-hint">
       Run cross compare to generate results for browser pairs.
@@ -1038,20 +1014,6 @@
     flex-wrap: wrap;
     gap: 0.75rem;
     justify-content: space-between;
-  }
-
-  .cross-pair-filters {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-  }
-
-  .pair-filter-label {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
   }
 
   .cross-select label {
@@ -1192,6 +1154,12 @@
   .cross-badge.tag-new { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.45); color: var(--tag-new); }
   .cross-badge.tag-diff { background: rgba(249, 115, 22, 0.12); border-color: rgba(249, 115, 22, 0.45); color: var(--tag-diff); }
   .cross-badge.tag-passed { background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.45); color: var(--tag-passed); }
+
+  .cross-badge.cross-badge-btn {
+    cursor: pointer;
+    font-family: inherit;
+    line-height: inherit;
+  }
 
   .cross-stats {
     display: flex;

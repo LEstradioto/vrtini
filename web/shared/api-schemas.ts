@@ -303,10 +303,10 @@ export const ProjectResponseSchema = z.object({ project: ProjectSchema });
 export const SuccessResponseSchema = z.object({ success: z.boolean() });
 
 export const ConfigGetResponseSchema = z.object({
-  config: VRTConfigSchema,
+  config: z.unknown().nullable(),
   raw: z.unknown(),
   valid: z.boolean(),
-  errors: z.array(z.unknown()).nullable(),
+  errors: z.array(z.object({ path: z.string(), message: z.string() })).nullable(),
 });
 
 export const ConfigSaveResponseSchema = z.object({

@@ -35,9 +35,125 @@
   let saveRevision = $state(0);
 
   const AUTO_SAVE_DEBOUNCE_MS = 700;
+  const VALID_AI_PROVIDERS = new Set(['anthropic', 'openai', 'openrouter', 'google']);
+  const DEFAULT_AI = {
+    enabled: false,
+    provider: 'anthropic',
+    manualOnly: false,
+    analyzeThreshold: { maxPHashSimilarity: 0.95, maxSSIM: 0.98, minPixelDiff: 0.1 },
+    autoApprove: { enabled: false, rules: [] as unknown[] },
+  } as const;
 
   function cloneConfig<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
+  }
+
+  function normalizeConfigForEditor(input: unknown): VRTConfig | null {
+    if (!input || typeof input !== 'object') return null;
+    const source = cloneConfig(input as Record<string, unknown>) as Record<string, unknown>;
+
+    if (typeof source.baselineDir !== 'string') source.baselineDir = '.vrt/baselines';
+    if (typeof source.outputDir !== 'string') source.outputDir = '.vrt/output';
+    if (typeof source.threshold !== 'number' || !Number.isFinite(source.threshold)) source.threshold = 0.1;
+    if (typeof source.disableAnimations !== 'boolean') source.disableAnimations = true;
+    if (typeof source.diffColor !== 'string') source.diffColor = '#ff00ff';
+
+    const browsers = Array.isArray(source.browsers) ? source.browsers : [];
+    source.browsers = browsers.filter((browser) => {
+      if (browser === 'chromium' || browser === 'webkit') return true;
+      if (!browser || typeof browser !== 'object') return false;
+      const name = (browser as { name?: unknown }).name;
+      return name === 'chromium' || name === 'webkit';
+    });
+    if ((source.browsers as unknown[]).length === 0) {
+      source.browsers = ['chromium', 'webkit'];
+    }
+
+    const viewports = Array.isArray(source.viewports) ? source.viewports : [];
+    source.viewports = viewports
+      .filter((viewport): viewport is { name: string; width: number; height: number } => {
+        if (!viewport || typeof viewport !== 'object') return false;
+        const rec = viewport as { name?: unknown; width?: unknown; height?: unknown };
+        return (
+          typeof rec.name === 'string' &&
+          typeof rec.width === 'number' &&
+          Number.isFinite(rec.width) &&
+          typeof rec.height === 'number' &&
+          Number.isFinite(rec.height)
+        );
+      })
+      .map((viewport) => ({
+        name: viewport.name,
+        width: viewport.width,
+        height: viewport.height,
+      }));
+    if ((source.viewports as unknown[]).length === 0) {
+      source.viewports = [
+        { name: 'desktop', width: 1920, height: 1080 },
+        { name: 'tablet', width: 1024, height: 768 },
+        { name: 'mobile', width: 375, height: 667 },
+      ];
+    }
+
+    const scenarios = Array.isArray(source.scenarios) ? source.scenarios : [];
+    source.scenarios = scenarios.filter((scenario) => {
+      if (!scenario || typeof scenario !== 'object') return false;
+      const rec = scenario as { name?: unknown; url?: unknown };
+      return typeof rec.name === 'string' && typeof rec.url === 'string';
+    });
+
+    const aiRaw = source.ai;
+    if (aiRaw && typeof aiRaw === 'object') {
+      const ai = aiRaw as Record<string, unknown>;
+      const thresholdRaw =
+        ai.analyzeThreshold && typeof ai.analyzeThreshold === 'object'
+          ? (ai.analyzeThreshold as Record<string, unknown>)
+          : {};
+      const autoApproveRaw =
+        ai.autoApprove && typeof ai.autoApprove === 'object'
+          ? (ai.autoApprove as Record<string, unknown>)
+          : {};
+      const provider =
+        typeof ai.provider === 'string' && VALID_AI_PROVIDERS.has(ai.provider)
+          ? ai.provider
+          : DEFAULT_AI.provider;
+
+      source.ai = {
+        enabled: ai.enabled === true,
+        provider,
+        apiKey: typeof ai.apiKey === 'string' ? ai.apiKey : undefined,
+        authToken: typeof ai.authToken === 'string' ? ai.authToken : undefined,
+        model: typeof ai.model === 'string' ? ai.model : undefined,
+        baseUrl: typeof ai.baseUrl === 'string' ? ai.baseUrl : undefined,
+        manualOnly: ai.manualOnly === true,
+        analyzeThreshold: {
+          maxPHashSimilarity:
+            typeof thresholdRaw.maxPHashSimilarity === 'number'
+              ? thresholdRaw.maxPHashSimilarity
+              : DEFAULT_AI.analyzeThreshold.maxPHashSimilarity,
+          maxSSIM:
+            typeof thresholdRaw.maxSSIM === 'number'
+              ? thresholdRaw.maxSSIM
+              : DEFAULT_AI.analyzeThreshold.maxSSIM,
+          minPixelDiff:
+            typeof thresholdRaw.minPixelDiff === 'number'
+              ? thresholdRaw.minPixelDiff
+              : DEFAULT_AI.analyzeThreshold.minPixelDiff,
+        },
+        autoApprove: {
+          enabled: autoApproveRaw.enabled === true,
+          rules: Array.isArray(autoApproveRaw.rules) ? autoApproveRaw.rules : [],
+        },
+      };
+    } else if (aiRaw !== undefined) {
+      source.ai = cloneConfig(DEFAULT_AI);
+    }
+
+    if (!source.scenarioDefaults || typeof source.scenarioDefaults !== 'object') {
+      source.scenarioDefaults = {};
+    }
+
+    return source as unknown as VRTConfig;
   }
 
   function applyServerConfig(next: VRTConfig): void {
@@ -110,11 +226,28 @@
         analyze.providerStatus(projectId).catch(() => null),
       ]);
       project = projRes.project;
-      applyServerConfig(configRes.config);
+      const editableConfig = normalizeConfigForEditor(configRes.valid ? configRes.config : configRes.raw);
+      if (!editableConfig) {
+        configData = null;
+        lastSavedSnapshot = null;
+        saveState = 'error';
+        configIssues = configRes.errors ?? [];
+        error =
+          'Config file is invalid JSON or has unsupported structure. Fix the file manually, then reload.';
+        return;
+      }
+
+      applyServerConfig(editableConfig);
       providerStatuses = providerStatusRes?.providers ?? null;
       saveRevision = 0;
-      saveState = 'saved';
-      success = null;
+      if (configRes.valid) {
+        saveState = 'saved';
+        success = null;
+      } else {
+        saveState = 'error';
+        configIssues = configRes.errors ?? [];
+        error = 'Config has validation issues. Fix highlighted fields and save to recover.';
+      }
 
       if (configData.scenarioDefaults && Object.keys(configData.scenarioDefaults).length > 0) {
         showScenarioDefaults = true;
@@ -377,6 +510,15 @@
         </button>
       </div>
     </div>
+  {:else}
+    <div class="invalid-config">
+      Config cannot be loaded into the form editor.
+      {#if configIssues.length > 0}
+        Check the validation errors above, fix the JSON file, and reload.
+      {:else}
+        The config file may be invalid JSON.
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -535,6 +677,15 @@
     padding: 3rem;
     color: var(--text-muted);
     font-family: var(--font-mono);
+  }
+
+  .invalid-config {
+    padding: 1rem;
+    border: 1px solid #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+    color: #fecaca;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
   }
 
   .sections {

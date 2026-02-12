@@ -10,6 +10,7 @@ import type {
   AIProviderStatusResponse,
   AIProviderValidationResponse,
   CompareResult,
+  ConfigGetResponse,
   ImageResult,
   ImageFlag,
   ProjectTiming,
@@ -74,6 +75,7 @@ export type {
   AIProviderStatusResponse,
   AIProviderValidationResponse,
   CompareResult,
+  ConfigGetResponse,
   ImageResult,
   ImageFlag,
   ProjectTiming,
@@ -211,7 +213,7 @@ export const projects = {
 // Config API
 export const config = {
   get: (projectId: string) =>
-    request(`${projectPath(projectId)}/config`, {}, ConfigGetResponseSchema),
+    request<ConfigGetResponse>(`${projectPath(projectId)}/config`, {}, ConfigGetResponseSchema),
   save: (projectId: string, config: VRTConfig) =>
     request(
       `${projectPath(projectId)}/config`,

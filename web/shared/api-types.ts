@@ -158,6 +158,18 @@ export interface Project {
   lastTiming?: ProjectTiming;
 }
 
+export interface ConfigValidationIssue {
+  path: string;
+  message: string;
+}
+
+export interface ConfigGetResponse {
+  config: unknown;
+  raw: unknown;
+  valid: boolean;
+  errors: ConfigValidationIssue[] | null;
+}
+
 export interface CrossReport {
   key: string;
   title: string;

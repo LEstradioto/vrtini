@@ -47,8 +47,9 @@
     width: 220px;
     padding: 0;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
+    border-radius: 0;
     background: rgba(255, 255, 255, 0.03);
+    font-family: var(--font-mono, monospace);
     cursor: pointer;
     overflow: hidden;
     text-align: left;

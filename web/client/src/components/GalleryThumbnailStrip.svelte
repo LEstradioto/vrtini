@@ -63,7 +63,8 @@
     height: 60px;
     background: #0a0a0a;
     border: 2px solid var(--border);
-    border-radius: 4px;
+    border-radius: 0;
+    font-family: var(--font-mono, monospace);
     overflow: hidden;
     cursor: pointer;
     transition: all 0.15s;
@@ -91,7 +92,7 @@
     right: 2px;
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: 0;
     border: 1px solid rgba(0, 0, 0, 0.5);
   }
 </style>

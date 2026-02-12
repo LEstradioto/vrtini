@@ -82,9 +82,10 @@
     gap: 0.5rem;
     padding: 0.5rem 1rem;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--border);
     color: var(--text-strong);
+    font-family: var(--font-mono, monospace);
     font-size: 0.875rem;
     cursor: pointer;
     transition: background 0.2s;

@@ -261,6 +261,7 @@
   .config-page {
     max-width: 900px;
     margin: 0 auto;
+    font-family: var(--font-body);
   }
 
   .header {
@@ -271,13 +272,15 @@
   }
 
   h1 {
-    font-size: 1.5rem;
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
     font-weight: 600;
   }
 
   .subtitle {
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
     margin-top: 0.25rem;
   }
 
@@ -286,35 +289,41 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 6px;
-    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--panel-strong);
     color: var(--text-strong);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, border-color 0.2s;
+    text-transform: lowercase;
   }
 
   .btn:hover {
-    background: var(--border-soft);
+    border-color: var(--text-muted);
+    background: var(--border);
   }
 
   .btn.primary {
-    background: var(--accent);
-    color: #fff;
+    background: transparent;
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   .btn.primary:hover {
-    background: var(--accent-strong);
+    background: var(--accent);
+    color: var(--bg);
   }
 
   .btn.small {
     padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
 
   .btn.danger:hover {
-    background: #ef4444;
+    border-color: #ef4444;
+    color: #ef4444;
   }
 
   .btn:disabled {
@@ -323,25 +332,30 @@
   }
 
   .error {
-    background: #7f1d1d;
+    background: rgba(239, 68, 68, 0.08);
     border: 1px solid #ef4444;
+    border-left: 3px solid #ef4444;
     padding: 0.75rem 1rem;
-    border-radius: 6px;
+    border-radius: 0;
     margin-bottom: 1rem;
+    font-family: var(--font-mono);
   }
 
   .success {
-    background: #14532d;
+    background: rgba(34, 197, 94, 0.08);
     border: 1px solid #22c55e;
+    border-left: 3px solid #22c55e;
     padding: 0.75rem 1rem;
-    border-radius: 6px;
+    border-radius: 0;
     margin-bottom: 1rem;
+    font-family: var(--font-mono);
   }
 
   .loading {
     text-align: center;
     padding: 3rem;
     color: var(--text-muted);
+    font-family: var(--font-mono);
   }
 
   .sections {
@@ -353,17 +367,21 @@
   .section {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 1rem;
   }
 
   .section h2 {
-    font-size: 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
     font-weight: 600;
     margin-bottom: 1rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    text-transform: lowercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
   }
 
   .form-row {
@@ -374,8 +392,10 @@
 
   label {
     display: block;
-    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
     color: var(--text-muted);
+    text-transform: lowercase;
   }
 
   input[type="text"],
@@ -387,9 +407,10 @@
     padding: 0.5rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
   }
 
   input:focus,
@@ -409,12 +430,12 @@
     padding: 0;
     margin-top: 0.25rem;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 0;
     cursor: pointer;
   }
 
   .value {
-    font-family: monospace;
+    font-family: var(--font-mono);
     font-size: 0.75rem;
     color: var(--accent);
   }
@@ -457,16 +478,19 @@
 
   .viewport-item span {
     color: var(--text-muted);
+    font-family: var(--font-mono);
   }
 
   .hint {
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
     color: var(--text-muted);
     margin-top: -0.5rem;
   }
 
   .hint-inline {
-    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
     color: var(--text-muted);
     display: block;
     margin-top: 0.25rem;
@@ -489,10 +513,12 @@
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
     cursor: pointer;
     padding: 0.5rem;
     transition: color 0.2s;
+    text-transform: lowercase;
   }
 
   .btn-text-danger:hover {

@@ -857,13 +857,13 @@
     padding: 0.6rem 0.75rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     color: var(--text);
     font-size: 0.9rem;
   }
 
   .cross-search-bar {
-    border-radius: 8px;
+    border-radius: 0;
   }
 
   .cross-search-bar .search-input {
@@ -883,7 +883,7 @@
     font-size: 0.75rem;
     color: var(--text-muted);
     padding: 0.45rem 0.65rem;
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px solid var(--border);
     background: var(--panel);
   }
@@ -897,7 +897,7 @@
   .cross-card {
     background: var(--panel-soft);
     border: 2px solid var(--border-soft);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 0.8rem;
     display: flex;
     flex-direction: column;
@@ -927,7 +927,7 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px solid var(--border);
     background: var(--panel-strong);
   }
@@ -960,7 +960,7 @@
     font-size: 0.7rem;
     font-weight: 600;
     padding: 0.2rem 0.5rem;
-    border-radius: 999px;
+    border-radius: 0;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     border: 1px solid var(--border);
@@ -1001,7 +1001,7 @@
   .cross-image {
     background: var(--panel-strong);
     border: 1px solid var(--border-soft);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 0;
     overflow: hidden;
     cursor: pointer;
@@ -1021,10 +1021,12 @@
     gap: 0.5rem;
     padding: 0.5rem 1rem;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--border);
     color: var(--text-strong);
     font-size: 0.875rem;
+    font-family: var(--font-mono, monospace);
+    text-transform: lowercase;
     cursor: pointer;
     transition: background 0.2s;
   }
@@ -1045,7 +1047,7 @@
     background: #7f1d1d;
     border: 1px solid #ef4444;
     padding: 0.75rem 1rem;
-    border-radius: 6px;
+    border-radius: 0;
     margin-bottom: 1rem;
   }
 
@@ -1055,7 +1057,7 @@
     color: var(--text-muted);
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
   }
 
   .search-bar {
@@ -1074,7 +1076,7 @@
     padding: 0.5rem 0.75rem;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text-strong);
     font-size: 0.875rem;
   }
@@ -1093,7 +1095,7 @@
 
   .tag-filter {
     padding: 0.28rem 0.6rem;
-    border-radius: 999px;
+    border-radius: 0;
     border: 1px solid transparent;
     background: var(--panel-strong);
     color: var(--text-muted);

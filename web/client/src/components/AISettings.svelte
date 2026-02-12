@@ -74,11 +74,12 @@
   .section {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 1rem;
   }
 
   .section h2 {
+    font-family: var(--font-mono, monospace);
     font-size: 1rem;
     font-weight: 600;
     margin-bottom: 1rem;
@@ -89,6 +90,7 @@
 
   label {
     display: block;
+    font-family: var(--font-mono, monospace);
     font-size: 0.8rem;
     color: var(--text-muted);
   }
@@ -103,7 +105,7 @@
     padding: 0.5rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text);
     font-size: 0.875rem;
   }
@@ -142,6 +144,7 @@
 
   .ai-settings h3 {
     grid-column: 1 / -1;
+    font-family: var(--font-mono, monospace);
     font-size: 0.9rem;
     font-weight: 500;
     margin-top: 1rem;
@@ -162,7 +165,7 @@
   }
 
   .value {
-    font-family: monospace;
+    font-family: var(--font-mono, monospace);
     font-size: 0.75rem;
     color: var(--accent);
   }

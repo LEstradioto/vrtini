@@ -197,12 +197,12 @@
 
   .nav-arrow.left {
     left: 0;
-    border-radius: 0 8px 8px 0;
+    border-radius: 0;
   }
 
   .nav-arrow.right {
     right: 0;
-    border-radius: 8px 0 0 8px;
+    border-radius: 0;
   }
 
   .nav-arrow:hover:not(:disabled) {
@@ -287,7 +287,7 @@
     position: relative;
     background: #0a0a0a;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     overflow: hidden;
   }
 

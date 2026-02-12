@@ -75,7 +75,7 @@
   .compare-results {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     padding: 1rem;
   }
 
@@ -103,7 +103,7 @@
     padding: 0.375rem 0.5rem;
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 0;
     color: var(--text);
     font-size: 0.875rem;
     text-align: center;
@@ -116,18 +116,18 @@
     -webkit-appearance: none;
     appearance: none;
     background: var(--border);
-    border-radius: 3px;
+    border-radius: 0;
     outline: none;
     cursor: pointer;
   }
   .threshold-slider::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none;
-    width: 16px; height: 16px; border-radius: 50%;
+    width: 16px; height: 16px; border-radius: 0;
     background: var(--accent); cursor: pointer; transition: background 0.15s;
   }
   .threshold-slider::-webkit-slider-thumb:hover { background: var(--accent-strong); }
   .threshold-slider::-moz-range-thumb {
-    width: 16px; height: 16px; border-radius: 50%;
+    width: 16px; height: 16px; border-radius: 0;
     background: var(--accent); cursor: pointer; border: none;
   }
 
@@ -153,7 +153,7 @@
     position: relative;
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     overflow: hidden;
   }
   .compare-image-card img { width: 100%; display: block; }
@@ -166,10 +166,12 @@
     gap: 0.5rem;
     padding: 0.5rem 1rem;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--border);
     color: var(--text-strong);
     font-size: 0.875rem;
+    font-family: var(--font-mono, monospace);
+    text-transform: lowercase;
     cursor: pointer;
     transition: background 0.2s;
   }

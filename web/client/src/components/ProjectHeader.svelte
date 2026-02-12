@@ -28,59 +28,68 @@
 
 <div class="project-header">
   <div class="header-left">
-    <h1>{title}</h1>
+    <div class="title-line">
+      <span class="prompt">&gt;</span>
+      <h1>{title}</h1>
+    </div>
     {#if path}
-      <p class="path">{path}</p>
+      <p class="path">// {path}</p>
     {/if}
   </div>
   <div class="header-actions">
     {#if testState}
       <div class="progress-inline">
         <span class="progress-phase">{testState.phase}</span>
-        <div class="progress-bar">
+        <div class="progress-track">
           <div
             class="progress-fill"
             style="width: {testState.total > 0 ? (testState.progress / testState.total) * 100 : 0}%"
           ></div>
-          <span>{testState.progress}/{testState.total}</span>
         </div>
-        <button class="btn small stop" onclick={onAbortTests} disabled={testState.aborting}>
-          {testState.aborting ? '...' : 'Stop'}
+        <span class="progress-text">{testState.progress}/{testState.total}</span>
+        <button class="btn stop" onclick={onAbortTests} disabled={testState.aborting}>
+          {testState.aborting ? '...' : 'stop'}
         </button>
       </div>
     {:else}
-      <button class="btn primary" onclick={onRunTests}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="5 3 19 12 5 21 5 3" />
-        </svg>
-        Run Tests
-      </button>
+      <button class="btn primary" onclick={onRunTests}>$ vrt test</button>
     {/if}
-    <button class="btn" onclick={onOpenConfig}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82V9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-      </svg>
-      Config
-    </button>
+    <button class="btn" onclick={onOpenConfig}>config</button>
   </div>
 </div>
 
 <style>
   .project-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
+  }
+
+  .title-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .prompt {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 24px;
+    color: var(--accent);
   }
 
   .header-left h1 {
     margin: 0;
+    font-family: var(--font-mono);
     font-size: 24px;
+    font-weight: 700;
+    color: var(--text-strong);
   }
 
   .path {
+    font-family: var(--font-body);
     font-size: 13px;
     color: var(--text-muted);
     margin-top: 4px;
@@ -96,88 +105,73 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 6px 10px;
-    border-radius: 8px;
-    background: var(--panel-strong);
-    border: 1px solid var(--border);
   }
 
   .progress-phase {
+    font-family: var(--font-mono);
     font-size: 12px;
     color: var(--text-muted);
-    text-transform: uppercase;
   }
 
-  .progress-bar {
-    position: relative;
-    width: 140px;
-    height: 8px;
+  .progress-track {
+    width: 120px;
+    height: 4px;
     background: var(--border);
-    border-radius: 6px;
     overflow: hidden;
-  }
-
-  .progress-bar span {
-    position: absolute;
-    right: 6px;
-    top: -18px;
-    font-size: 11px;
-    color: var(--text-muted);
   }
 
   .progress-fill {
     height: 100%;
     background: var(--accent);
+    transition: width 0.3s;
+  }
+
+  .progress-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
   }
 
   .btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    border-radius: 8px;
+    height: 36px;
+    padding: 0 16px;
     border: 1px solid var(--border);
-    background: var(--panel-strong);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
+    background: none;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition: border-color 0.15s, color 0.15s;
   }
 
   .btn:hover {
-    background: var(--panel);
-    border-color: var(--border-soft);
+    border-color: var(--accent);
+    color: var(--text-strong);
   }
 
   .btn.primary {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
   }
 
   .btn.primary:hover {
-    background: #1d4ed8;
-    border-color: #1d4ed8;
-  }
-
-  .btn.small {
-    padding: 6px 10px;
-    font-size: 12px;
+    opacity: 0.85;
   }
 
   .btn.stop {
-    background: #ef4444;
-    border-color: #ef4444;
+    border-color: var(--color-failed);
+    color: var(--color-failed);
   }
 
   .btn.stop:hover {
-    background: #dc2626;
-    border-color: #dc2626;
+    background: rgba(239, 68, 68, 0.1);
   }
 
   .btn.stop:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 </style>

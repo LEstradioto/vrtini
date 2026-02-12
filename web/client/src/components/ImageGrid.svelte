@@ -248,7 +248,7 @@
     flex-direction: column;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -267,7 +267,7 @@
     padding: 0.5rem 0.75rem;
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     color: var(--text-strong);
     font-size: 0.875rem;
   }
@@ -286,7 +286,7 @@
 
   .tag-filter {
     padding: 0.28rem 0.6rem;
-    border-radius: 999px;
+    border-radius: 0;
     border: 1px solid transparent;
     background: var(--panel-strong);
     color: var(--text-muted);
@@ -316,7 +316,7 @@
 
   .selected-count { font-size: 0.8rem; color: var(--accent); font-weight: 500; }
 
-  .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: none; border-radius: 6px; background: var(--border); color: var(--text-strong); font-size: 0.875rem; cursor: pointer; transition: background 0.2s; }
+  .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: none; border-radius: 0; background: var(--border); color: var(--text-strong); font-size: 0.875rem; font-family: var(--font-mono, monospace); text-transform: lowercase; cursor: pointer; transition: background 0.2s; }
   .btn:hover { background: var(--border-soft); }
   .btn.small { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
   .btn.small.expanded { background: var(--accent); color: #fff; }
@@ -362,7 +362,7 @@
   .image-card {
     background: var(--panel-soft);
     border: 2px solid var(--border-soft);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 0.6rem;
     display: flex;
     flex-direction: column;
@@ -389,7 +389,7 @@
 
   .image-tag {
     font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
-    padding: 0.18rem 0.5rem; border-radius: 999px; border: 1px solid var(--border);
+    padding: 0.18rem 0.5rem; border-radius: 0; border: 1px solid var(--border);
     background: var(--panel-strong); color: var(--text-muted); white-space: nowrap;
   }
   .image-tag.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
@@ -401,7 +401,7 @@
 
   .image-thumb {
     position: relative; height: 120px; background: var(--panel-strong);
-    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border); border-radius: 0; overflow: hidden;
   }
 
   .checkbox-wrapper {
@@ -412,7 +412,7 @@
   .checkbox-wrapper input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
   .checkmark {
     display: block; width: 18px; height: 18px; background: rgba(0, 0, 0, 0.6);
-    border: 2px solid var(--text-muted); border-radius: 4px; cursor: pointer;
+    border: 2px solid var(--text-muted); border-radius: 0; cursor: pointer;
     transition: all 0.15s;
   }
   .checkbox-wrapper:hover .checkmark { border-color: var(--accent); }

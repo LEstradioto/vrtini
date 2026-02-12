@@ -71,6 +71,29 @@
     return item.itemKey ?? `${item.scenario}__${item.viewport}`;
   }
 
+  function getActiveCrossModalItem(): CrossResultItem | null {
+    const state = crossPanel?.getCrossState();
+    const filteredItems = state?.crossFilteredItems ?? [];
+    if (filteredItems.length === 0) return null;
+    const bounded = Math.max(0, Math.min(filteredItems.length - 1, crossQueueIndex));
+    return filteredItems[bounded] ?? null;
+  }
+
+  function openCrossAIAnalysisModal(item?: CrossResultItem | null) {
+    const target = item ?? currentCrossItem ?? getActiveCrossModalItem();
+    if (!target?.aiAnalysis) {
+      showToast('No AI analysis for this item yet. Run AI Triage first.', 'error');
+      return;
+    }
+    analysisResults = [
+      {
+        filename: `${target.scenario} · ${target.viewport}`,
+        analysis: target.aiAnalysis,
+      },
+    ];
+    showAnalysisModal = true;
+  }
+
   async function approveCrossFromModal() {
     if (!currentCrossItem || !crossPanel) return;
     const prevKey = getCrossItemKey(currentCrossItem);
@@ -109,6 +132,11 @@
     const prevIndex = crossQueueIndex;
     await crossPanel.runAITriage([prevKey]);
     syncCrossModalSelection(prevKey, prevIndex);
+    const refreshed = getActiveCrossModalItem();
+    if (refreshed?.aiAnalysis) {
+      currentCrossItem = refreshed;
+      openCrossAIAnalysisModal(refreshed);
+    }
   }
 
   function handleCompareAnalyze() {
@@ -121,6 +149,11 @@
     if (compareMode === 'cross') {
       void runCrossAITriageFromModal();
     }
+  }
+
+  function handleCompareOpenAIAnalysis() {
+    if (compareMode !== 'cross') return;
+    openCrossAIAnalysisModal();
   }
 
   function syncCrossModalSelection(preferredKey?: string, fallbackIndex = crossQueueIndex) {
@@ -959,6 +992,14 @@
     analysisResults = [];
   }
 
+  function handleAnalysisAccept(filename: string) {
+    if (compareMode === 'cross') {
+      void approveCrossFromModal();
+      return;
+    }
+    void handleAcceptForBrowser(filename);
+  }
+
   function openFullscreenCompare() {
     if (!compareLeft || !compareRight || !compareResult) return;
 
@@ -1312,7 +1353,7 @@
   <AIAnalysisModal
     results={analysisResults}
     onClose={closeAnalysisModal}
-    onAccept={handleAcceptForBrowser}
+    onAccept={handleAnalysisAccept}
   />
 {/if}
 
@@ -1330,6 +1371,7 @@
     onThresholdChange={compareMode === 'manual' ? (t) => (threshold = t) : undefined}
     onRecompare={compareMode === 'manual' ? recompareWithThreshold : undefined}
     onAnalyze={compareMode ? handleCompareAnalyze : undefined}
+    onOpenAIAnalysis={compareMode === 'cross' ? handleCompareOpenAIAnalysis : undefined}
     onFlag={
       compareMode === 'manual'
         ? () => compareRight && setImageFlag(compareRight.filename)

@@ -35,6 +35,7 @@
     onThresholdChange?: (threshold: number) => void;
     onRecompare?: () => Promise<void>;
     onAnalyze?: (filename?: string) => void;
+    onOpenAIAnalysis?: () => void;
     onFlag?: (filename?: string) => void;
     onUnflag?: (filename?: string) => void;
     onAcceptForBrowser?: () => void;
@@ -74,6 +75,7 @@
     onThresholdChange,
     onRecompare,
     onAnalyze,
+    onOpenAIAnalysis,
     onFlag,
     onUnflag,
     onAcceptForBrowser,
@@ -122,6 +124,20 @@
   });
   let hasCompareQueue = $derived(compareQueue.length > 1 && !!onCompareNavigate);
   let isCompareMode = $derived(!!effectiveCompareImages);
+  let aiBadgePulsing = $state(false);
+  let lastAIBadgeKey = '';
+
+  $effect(() => {
+    const signature = [
+      compareIndexValue,
+      effectiveCompareAIBadge?.label ?? '',
+      effectiveCompareAIBadge?.detail ?? '',
+      !!onOpenAIAnalysis,
+    ].join('|');
+    if (signature === lastAIBadgeKey) return;
+    lastAIBadgeKey = signature;
+    aiBadgePulsing = !!effectiveCompareAIBadge && !!onOpenAIAnalysis;
+  });
 
   // Session storage keys
   const ZOOM_KEY = 'vrt-gallery-zoom';
@@ -981,6 +997,11 @@
       columnMode = '1';
     }
   }
+
+  function handleOpenAIAnalysis() {
+    aiBadgePulsing = false;
+    onOpenAIAnalysis?.();
+  }
 </script>
 
 <svelte:window
@@ -1002,6 +1023,8 @@
     {displayTitle}
     {effectiveCompareBadge}
     {effectiveCompareAIBadge}
+    {aiBadgePulsing}
+    onOpenAIAnalysis={onOpenAIAnalysis ? handleOpenAIAnalysis : undefined}
     effectiveCompareUpdatedAt={effectiveCompareUpdatedAt}
     {queueUpdatedAt}
     {hasCompareQueue}

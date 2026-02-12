@@ -12,6 +12,8 @@
       category?: string;
       confidence?: number;
     } | null;
+    aiBadgePulsing?: boolean;
+    onOpenAIAnalysis?: () => void;
     effectiveCompareUpdatedAt?: { left?: string; right?: string; diff?: string } | null;
     queueUpdatedAt?: { label: string; iso: string } | null;
     hasCompareQueue: boolean;
@@ -54,6 +56,8 @@
     displayTitle,
     effectiveCompareBadge,
     effectiveCompareAIBadge,
+    aiBadgePulsing = false,
+    onOpenAIAnalysis,
     effectiveCompareUpdatedAt = null,
     queueUpdatedAt = null,
     hasCompareQueue,
@@ -148,9 +152,22 @@
               </span>
             {/if}
             {#if effectiveCompareAIBadge}
-              <span class="compare-badge {`tone-${effectiveCompareAIBadge.tone}`.trim()}">
-                {effectiveCompareAIBadge.label}
-              </span>
+              {#if onOpenAIAnalysis}
+                <button
+                  type="button"
+                  class="compare-badge compare-badge--action {`tone-${effectiveCompareAIBadge.tone}`.trim()}"
+                  class:pulsing={aiBadgePulsing}
+                  onclick={onOpenAIAnalysis}
+                  title="Open AI analysis details"
+                >
+                  <span class="badge-dot" aria-hidden="true"></span>
+                  {effectiveCompareAIBadge.label}
+                </button>
+              {:else}
+                <span class="compare-badge {`tone-${effectiveCompareAIBadge.tone}`.trim()}">
+                  {effectiveCompareAIBadge.label}
+                </span>
+              {/if}
             {/if}
             {#if hasCompareQueue}
               <span class="position-indicator compare-count">
@@ -528,6 +545,30 @@
     color: var(--text-muted);
   }
 
+  .compare-badge--action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .compare-badge--action:hover {
+    filter: brightness(1.08);
+  }
+
+  .compare-badge--action .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.45;
+    flex: 0 0 auto;
+  }
+
+  .compare-badge--action.pulsing .badge-dot {
+    animation: ai-badge-pulse 1.8s ease-in-out infinite;
+  }
+
   .compare-badge.tone-approved {
     border-color: rgba(34, 197, 94, 0.5);
     color: #22c55e;
@@ -572,6 +613,17 @@
   .compare-badge.tone-ai-rejected {
     border-color: rgba(244, 63, 94, 0.65);
     color: #fb7185;
+  }
+
+  @keyframes ai-badge-pulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.3;
+    }
+    50% {
+      transform: scale(1.45);
+      opacity: 0.8;
+    }
   }
 
   .status-badge {

@@ -1427,7 +1427,7 @@
     min-height: calc(100vh - 100px);
     font-family: var(--font-body);
     --tag-approved: #22c55e;
-    --tag-flagged: #f59e0b;
+    --tag-flagged: #ff6b00;
     --tag-unapproved: #ef4444;
     --tag-new: #f59e0b;
     --tag-diff: #f97316;

@@ -409,12 +409,12 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
-    opacity: 0.55;
+    opacity: 0.24;
     transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s;
   }
   .tag-filter.active { opacity: 1; color: var(--text-strong); }
   .tag-filter.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
-  .tag-filter.tag-flagged { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-flagged); }
+  .tag-filter.tag-flagged { border-color: rgba(255, 107, 0, 0.6); background: rgba(255, 107, 0, 0.16); color: var(--tag-flagged); }
   .tag-filter.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .tag-filter.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }
   .tag-filter.tag-diff { border-color: rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.12); color: var(--tag-diff); }
@@ -488,7 +488,7 @@
   .image-card:hover { border-color: var(--text-muted); transform: translateY(-2px); }
   .image-card.multi-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
   .image-card.tag-approved { border-color: rgba(34, 197, 94, 0.6); }
-  .image-card.tag-flagged { border-color: rgba(245, 158, 11, 0.7); }
+  .image-card.tag-flagged { border-color: rgba(255, 107, 0, 0.85); box-shadow: inset 0 0 0 1px rgba(255, 107, 0, 0.28); }
   .image-card.tag-unapproved { border-color: rgba(239, 68, 68, 0.6); }
   .image-card.tag-new { border-color: rgba(245, 158, 11, 0.7); }
   .image-card.tag-diff { border-color: rgba(249, 115, 22, 0.7); }
@@ -508,7 +508,7 @@
     background: var(--panel-strong); color: var(--text-muted); white-space: nowrap;
   }
   .image-tag.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
-  .image-tag.tag-flagged { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-flagged); }
+  .image-tag.tag-flagged { border-color: rgba(255, 107, 0, 0.65); background: rgba(255, 107, 0, 0.14); color: var(--tag-flagged); }
   .image-tag.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .image-tag.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }
   .image-tag.tag-diff { border-color: rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.12); color: var(--tag-diff); }

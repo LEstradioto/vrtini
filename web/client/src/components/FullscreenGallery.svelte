@@ -1118,17 +1118,17 @@
   }
 
   .gallery-overlay.flagged {
-    border-color: rgba(245, 158, 11, 0.85);
-    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.45);
+    border-color: rgba(255, 107, 0, 0.95);
+    box-shadow: inset 0 0 0 1px rgba(255, 107, 0, 0.5);
   }
 
   .flagged-banner {
     margin: 0 16px;
     padding: 5px 10px;
-    border: 1px solid rgba(245, 158, 11, 0.65);
+    border: 1px solid rgba(255, 107, 0, 0.85);
     border-bottom: 0;
-    color: #f59e0b;
-    background: rgba(245, 158, 11, 0.08);
+    color: #ff6b00;
+    background: rgba(255, 107, 0, 0.12);
     font-family: var(--font-mono, monospace);
     font-size: 11px;
     letter-spacing: 0.1em;

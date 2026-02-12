@@ -1124,7 +1124,7 @@
   }
 
   .cross-card.tag-approved { border-color: rgba(34, 197, 94, 0.6); }
-  .cross-card.tag-flagged { border-color: rgba(245, 158, 11, 0.75); }
+  .cross-card.tag-flagged { border-color: rgba(255, 107, 0, 0.9); box-shadow: inset 0 0 0 1px rgba(255, 107, 0, 0.28); }
   .cross-card.tag-smart { border-color: rgba(20, 184, 166, 0.6); }
   .cross-card.tag-unapproved { border-color: rgba(239, 68, 68, 0.6); }
   .cross-card.tag-new { border-color: rgba(245, 158, 11, 0.7); }
@@ -1186,7 +1186,7 @@
   }
 
   .cross-badge.tag-approved { background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.4); color: var(--tag-approved); }
-  .cross-badge.tag-flagged { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.45); color: var(--tag-flagged); }
+  .cross-badge.tag-flagged { background: rgba(255, 107, 0, 0.14); border-color: rgba(255, 107, 0, 0.65); color: var(--tag-flagged); }
   .cross-badge.tag-smart { background: rgba(20, 184, 166, 0.12); border-color: rgba(20, 184, 166, 0.4); color: var(--tag-smart); }
   .cross-badge.tag-unapproved { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.4); color: var(--tag-unapproved); }
   .cross-badge.tag-new { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.45); color: var(--tag-new); }
@@ -1258,8 +1258,8 @@
   .btn.small.all-selected { background: #22c55e; color: #fff; }
   .btn.small.rerun { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
   .btn.small.rerun:hover:not(:disabled) { background: var(--accent); color: #fff; }
-  .btn.small.flag { background: transparent; border: 1px solid #f59e0b; color: #f59e0b; }
-  .btn.small.flag:hover:not(:disabled) { background: #f59e0b; color: #111827; }
+  .btn.small.flag { background: transparent; border: 1px solid #ff6b00; color: #ff6b00; }
+  .btn.small.flag:hover:not(:disabled) { background: #ff6b00; color: #111827; }
   .btn.small.rerun-tests { background: transparent; border: 1px solid #f59e0b; color: #f59e0b; }
   .btn.small.rerun-tests:hover:not(:disabled) { background: #f59e0b; color: #111827; }
 
@@ -1323,12 +1323,12 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
-    opacity: 0.55;
+    opacity: 0.24;
     transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s;
   }
   .tag-filter.active { opacity: 1; color: var(--text-strong); }
   .tag-filter.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
-  .tag-filter.tag-flagged { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-flagged); }
+  .tag-filter.tag-flagged { border-color: rgba(255, 107, 0, 0.6); background: rgba(255, 107, 0, 0.16); color: var(--tag-flagged); }
   .tag-filter.tag-smart { border-color: rgba(20, 184, 166, 0.4); background: rgba(20, 184, 166, 0.12); color: var(--tag-smart); }
   .tag-filter.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .tag-filter.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }

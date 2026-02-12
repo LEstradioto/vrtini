@@ -346,12 +346,12 @@
   }
 
   .action-btn.flagged {
-    border-color: #f59e0b;
-    color: #f59e0b;
+    border-color: #ff6b00;
+    color: #ff6b00;
   }
 
   .action-btn.flagged:hover:not(:disabled) {
-    background: #f59e0b;
+    background: #ff6b00;
     color: var(--bg);
   }
 

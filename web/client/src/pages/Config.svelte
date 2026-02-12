@@ -31,12 +31,23 @@
   let providerStatuses = $state<AIProviderStatus[] | null>(null);
   let lastSavedSnapshot = $state<string | null>(null);
   let autosaveEnabled = $state(false);
+  let suppressAutosave = $state(false);
   let saveRevision = $state(0);
 
   const AUTO_SAVE_DEBOUNCE_MS = 700;
 
   function cloneConfig<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
+  }
+
+  function applyServerConfig(next: VRTConfig): void {
+    suppressAutosave = true;
+    const cloned = cloneConfig(next);
+    configData = cloned;
+    lastSavedSnapshot = JSON.stringify(cloned);
+    queueMicrotask(() => {
+      suppressAutosave = false;
+    });
   }
 
   function readConfigIssues(err: unknown): Array<{ path: string; message: string }> {
@@ -61,8 +72,13 @@
 
       if (opts.revision !== saveRevision && !opts.manual) return;
 
-      configData = cloneConfig(result.config);
-      lastSavedSnapshot = JSON.stringify(configData);
+      if (opts.manual) {
+        applyServerConfig(result.config);
+      } else {
+        // Keep autosave stable: treat exactly what was sent as the saved snapshot.
+        // Avoid rewriting form state here, which can trigger another autosave pass.
+        lastSavedSnapshot = snapshot;
+      }
       saveState = 'saved';
       success = opts.manual ? 'Config saved successfully' : 'Autosaved';
       setTimeout(() => {
@@ -94,9 +110,8 @@
         analyze.providerStatus(projectId).catch(() => null),
       ]);
       project = projRes.project;
-      configData = cloneConfig(configRes.config);
+      applyServerConfig(configRes.config);
       providerStatuses = providerStatusRes?.providers ?? null;
-      lastSavedSnapshot = JSON.stringify(configData);
       saveRevision = 0;
       saveState = 'saved';
       success = null;
@@ -155,7 +170,7 @@
   });
 
   $effect(() => {
-    if (!autosaveEnabled || loading || !configData || !lastSavedSnapshot) return;
+    if (!autosaveEnabled || suppressAutosave || loading || !configData || !lastSavedSnapshot) return;
     const snapshot = JSON.stringify(configData);
     if (snapshot === lastSavedSnapshot) return;
 

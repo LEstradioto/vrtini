@@ -107,6 +107,8 @@
       label: rec === 'approve' ? 'AI Approve' : rec === 'review' ? 'AI Review' : 'AI Reject',
       tone: rec === 'approve' ? 'ai-approved' : rec === 'review' ? 'ai-review' : 'ai-rejected',
       detail,
+      category,
+      confidence,
     };
   });
   let effectiveCompareViewport = $derived(activeCompareItem?.viewport ?? compareViewport ?? null);

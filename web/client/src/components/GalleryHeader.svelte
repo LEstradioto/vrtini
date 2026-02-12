@@ -5,7 +5,13 @@
     isCompareMode: boolean;
     displayTitle: string;
     effectiveCompareBadge: { label: string; tone: string } | null;
-    effectiveCompareAIBadge: { label: string; tone: string; detail?: string } | null;
+    effectiveCompareAIBadge: {
+      label: string;
+      tone: string;
+      detail?: string;
+      category?: string;
+      confidence?: number;
+    } | null;
     effectiveCompareUpdatedAt?: { left?: string; right?: string; diff?: string } | null;
     queueUpdatedAt?: { label: string; iso: string } | null;
     hasCompareQueue: boolean;
@@ -114,6 +120,19 @@
     if (pct >= 95) return '#f59e0b';
     return '#ef4444';
   }
+
+  function getPHashColor(pct: number): string {
+    if (pct > 98) return '#22c55e';
+    if (pct >= 95) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  function getAIMetricColor(tone?: string): string {
+    if (tone === 'ai-approved') return '#4ade80';
+    if (tone === 'ai-review') return '#facc15';
+    if (tone === 'ai-rejected') return '#fb7185';
+    return 'var(--text-strong)';
+  }
 </script>
 
 <div class="gallery-header">
@@ -159,7 +178,24 @@
               {#if effectiveCompareMetrics.phash}
                 <span class="metric" title="Perceptual hash similarity. Higher is more similar.">
                   <span class="metric-label">pHash</span>
-                  <span class="metric-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%</span>
+                  <span class="metric-value" style="color: {getPHashColor(effectiveCompareMetrics.phash.similarity * 100)}">
+                    {(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%
+                  </span>
+                </span>
+              {/if}
+              {#if effectiveCompareAIBadge}
+                <span
+                  class="metric"
+                  title={effectiveCompareAIBadge.detail
+                    ? `AI triage confidence (${effectiveCompareAIBadge.detail})`
+                    : 'AI triage recommendation'}
+                >
+                  <span class="metric-label">AI</span>
+                  <span class="metric-value" style="color: {getAIMetricColor(effectiveCompareAIBadge.tone)}">
+                    {typeof effectiveCompareAIBadge.confidence === 'number'
+                      ? `${(effectiveCompareAIBadge.confidence * 100).toFixed(0)}%`
+                      : effectiveCompareAIBadge.label.replace('AI ', '')}
+                  </span>
                 </span>
               {/if}
             </div>
@@ -183,11 +219,6 @@
                 {diffLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.diff)}
               </span>
             {/if}
-          </div>
-        {/if}
-        {#if effectiveCompareAIBadge?.detail}
-          <div class="updated-at updated-at--plain">
-            <span class="updated-at-item">AI: {effectiveCompareAIBadge.detail}</span>
           </div>
         {/if}
       </div>
@@ -224,7 +255,9 @@
                 {#if currentImage.metrics.phash}
                   <span class="metric" title="Perceptual hash similarity. Higher is more similar.">
                     <span class="metric-label">pHash</span>
-                    <span class="metric-value">{(currentImage.metrics.phash.similarity * 100).toFixed(1)}%</span>
+                    <span class="metric-value" style="color: {getPHashColor(currentImage.metrics.phash.similarity * 100)}">
+                      {(currentImage.metrics.phash.similarity * 100).toFixed(1)}%
+                    </span>
                   </span>
                 {/if}
               </div>

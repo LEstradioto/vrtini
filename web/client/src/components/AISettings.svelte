@@ -1,10 +1,12 @@
 <script lang="ts">
-  import type { AIProviderStatus, VRTConfig } from '../lib/api';
+  import { analyze, type AIProviderStatus, type AIProviderValidationResponse, type VRTConfig } from '../lib/api';
 
   let {
+    projectId,
     config,
     providerStatuses = null,
   } = $props<{
+    projectId: string;
     config: VRTConfig;
     providerStatuses?: AIProviderStatus[] | null;
   }>();
@@ -56,6 +58,78 @@
   let statusByProvider = $derived(
     new Map((providerStatuses ?? []).map((status) => [status.provider, status]))
   );
+
+  let providerValidation = $state<{
+    state: 'idle' | 'checking' | 'valid' | 'invalid';
+    message: string;
+  }>({
+    state: 'idle',
+    message: 'Enter a credential to validate.',
+  });
+  let validationRevision = $state(0);
+  const VALIDATION_DEBOUNCE_MS = 500;
+
+  function buildValidationPayload() {
+    return {
+      provider: currentProvider,
+      apiKey: config.ai?.apiKey?.trim() || undefined,
+      authToken: config.ai?.authToken?.trim() || undefined,
+      baseUrl: config.ai?.baseUrl?.trim() || undefined,
+      model: config.ai?.model?.trim() || undefined,
+    } as const;
+  }
+
+  function getValidationClass(): string {
+    if (providerValidation.state === 'valid') return 'input-valid';
+    if (providerValidation.state === 'invalid') return 'input-invalid';
+    if (providerValidation.state === 'checking') return 'input-checking';
+    return '';
+  }
+
+  $effect(() => {
+    if (!config.ai?.enabled) {
+      providerValidation = { state: 'idle', message: 'Enable AI analysis to validate credentials.' };
+      return;
+    }
+
+    currentProvider;
+    config.ai?.apiKey;
+    config.ai?.authToken;
+    config.ai?.baseUrl;
+    config.ai?.model;
+
+    const payload = buildValidationPayload();
+    if (!payload.apiKey && !(payload.provider === 'anthropic' && payload.authToken)) {
+      providerValidation = {
+        state: 'idle',
+        message: `Enter ${currentProvider === 'anthropic' ? 'API key or auth token' : 'API key'} to validate.`,
+      };
+      return;
+    }
+
+    const revision = validationRevision + 1;
+    validationRevision = revision;
+    providerValidation = { state: 'checking', message: 'Validating credential...' };
+
+    const handle = setTimeout(async () => {
+      try {
+        const result: AIProviderValidationResponse = await analyze.validateProvider(projectId, payload);
+        if (revision !== validationRevision) return;
+        providerValidation = {
+          state: result.valid ? 'valid' : 'invalid',
+          message: result.message,
+        };
+      } catch (err) {
+        if (revision !== validationRevision) return;
+        providerValidation = {
+          state: 'invalid',
+          message: err instanceof Error ? err.message : 'Credential validation failed.',
+        };
+      }
+    }, VALIDATION_DEBOUNCE_MS);
+
+    return () => clearTimeout(handle);
+  });
 </script>
 
 <section class="section">
@@ -117,13 +191,23 @@
 
       <label>
         API Key
-        <input type="password" bind:value={config.ai.apiKey} placeholder="Set via {envHint} env var" />
+        <input
+          type="password"
+          class={getValidationClass()}
+          bind:value={config.ai.apiKey}
+          placeholder="Set via {envHint} env var"
+        />
       </label>
 
       {#if currentProvider === 'anthropic'}
         <label>
           Auth Token (Claude Max)
-          <input type="password" bind:value={config.ai.authToken} placeholder="Set via ANTHROPIC_AUTH_TOKEN env var" />
+          <input
+            type="password"
+            class={getValidationClass()}
+            bind:value={config.ai.authToken}
+            placeholder="Set via ANTHROPIC_AUTH_TOKEN env var"
+          />
         </label>
         <p class="hint">Use either API Key (standard) or Auth Token (Claude Max subscription). Auth Token takes effect when no API Key is set.</p>
       {/if}
@@ -144,6 +228,9 @@
       {/if}
 
       <p class="hint env-hint">Env var fallback: {envHint}</p>
+      <p class="hint key-status key-status-{providerValidation.state}">
+        {providerValidation.message}
+      </p>
 
       {#if providerStatuses}
         <div class="provider-status-grid">
@@ -245,6 +332,21 @@
     border-color: var(--accent);
   }
 
+  input.input-valid {
+    border-color: rgba(34, 197, 94, 0.75);
+    box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.35);
+  }
+
+  input.input-invalid {
+    border-color: rgba(239, 68, 68, 0.75);
+    box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.35);
+  }
+
+  input.input-checking {
+    border-color: rgba(14, 165, 233, 0.75);
+    box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.35);
+  }
+
   input[type="range"] {
     width: 100%;
     margin-top: 0.25rem;
@@ -289,6 +391,22 @@
   .env-hint {
     font-size: 0.65rem;
     opacity: 0.7;
+  }
+
+  .key-status {
+    margin-top: -0.7rem;
+  }
+
+  .key-status-checking {
+    color: #38bdf8;
+  }
+
+  .key-status-valid {
+    color: #22c55e;
+  }
+
+  .key-status-invalid {
+    color: #ef4444;
   }
 
   .provider-status-grid {

@@ -9,6 +9,7 @@
 import type {
   ImageMetadata,
   Acceptance,
+  ImageFlag,
   ImageResult,
   AutoThresholdCaps,
   VRTConfig,
@@ -22,6 +23,7 @@ export type ImageTag =
   | 'passed'
   | 'failed'
   | 'new'
+  | 'flagged'
   | 'approved'
   | 'unapproved'
   | 'diff'
@@ -45,6 +47,7 @@ export type AutoThresholdReviewItem = {
 export type GalleryImage = {
   filename: string;
   status: ImageStatus;
+  flagged?: boolean;
   confidence?: { score: number; pass: boolean; verdict: 'pass' | 'warn' | 'fail' };
   metrics?: { pixelDiff: number; diffPercentage: number; ssimScore?: number };
 };
@@ -76,6 +79,7 @@ export class ProjectStore {
   testsMetadata = $state<ImageMetadata[]>([]);
   diffsMetadata = $state<ImageMetadata[]>([]);
   acceptances = $state<Record<string, Acceptance>>({});
+  flags = $state<Record<string, ImageFlag>>({});
   imageResults = $state<Record<string, ImageResult>>({});
   autoThresholdCaps = $state<AutoThresholdCaps | null>(null);
   configData = $state<VRTConfig | null>(null);
@@ -225,6 +229,7 @@ export class ProjectStore {
       const item: GalleryImage = {
         filename,
         status: status || 'passed',
+        flagged: !!this.flags[filename],
         confidence: result?.confidence,
         metrics: result?.metrics,
       };
@@ -246,6 +251,7 @@ export class ProjectStore {
   }
 
   getTagFor(filename: string, activeTab: string): ImageTag {
+    if (this.flags[filename]) return 'flagged';
     if (activeTab === 'diffs') {
       return this.autoThresholdReviewSet.has(filename) ? 'auto-review' : 'diff';
     }
@@ -259,13 +265,34 @@ export class ProjectStore {
 
   matchesTag(filename: string, tag: ImageTag, activeTab: string): boolean {
     if (tag === 'all') return true;
-    const fileTag = this.getTagFor(filename, activeTab);
-    if (tag === 'failed') {
-      return fileTag === 'unapproved' || fileTag === 'diff' || fileTag === 'auto-review';
+    if (tag === 'flagged') {
+      return !!this.flags[filename];
+    }
+    if (tag === 'approved') {
+      return !!this.acceptances[filename];
+    }
+    if (tag === 'auto-review') {
+      return this.autoThresholdReviewSet.has(filename);
     }
     if (tag === 'diff') {
-      return fileTag === 'diff' || fileTag === 'auto-review';
+      return this.diffsSet.has(filename);
     }
+
+    const status = this.getImageStatus(filename);
+    if (tag === 'failed') {
+      return status === 'failed';
+    }
+    if (tag === 'unapproved') {
+      return status === 'failed';
+    }
+    if (tag === 'new') {
+      return status === 'new';
+    }
+    if (tag === 'passed') {
+      return status === 'passed';
+    }
+
+    const fileTag = this.getTagFor(filename, activeTab);
     return fileTag === tag;
   }
 

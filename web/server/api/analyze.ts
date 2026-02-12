@@ -45,6 +45,21 @@ interface ProviderStatus {
   detail: string;
 }
 
+interface ValidateProviderBody {
+  provider: AIProvider;
+  apiKey?: string;
+  authToken?: string;
+  baseUrl?: string;
+  model?: string;
+}
+
+interface ProviderValidationResponse {
+  provider: AIProvider;
+  valid: boolean;
+  source: 'input' | 'env' | 'none';
+  message: string;
+}
+
 const PROVIDERS: AIProvider[] = ['anthropic', 'openai', 'openrouter', 'google'];
 
 function hasEnvCredential(provider: AIProvider): boolean {
@@ -119,6 +134,132 @@ function resolveProvider(): AIProvider | null {
   return null;
 }
 
+function resolveProviderCredential(body: ValidateProviderBody): {
+  source: 'input' | 'env' | 'none';
+  apiKey?: string;
+  authToken?: string;
+} {
+  const hasInputApiKey = !!body.apiKey?.trim();
+  const hasInputAuthToken = !!body.authToken?.trim();
+
+  if (body.provider === 'anthropic') {
+    const apiKey = body.apiKey?.trim() || process.env.ANTHROPIC_API_KEY;
+    const authToken = body.authToken?.trim() || process.env.ANTHROPIC_AUTH_TOKEN;
+    const source: 'input' | 'env' | 'none' =
+      hasInputApiKey || hasInputAuthToken ? 'input' : apiKey || authToken ? 'env' : 'none';
+    return { source, apiKey, authToken };
+  }
+
+  const envKey =
+    body.provider === 'openai'
+      ? process.env.OPENAI_API_KEY
+      : body.provider === 'openrouter'
+        ? process.env.OPENROUTER_API_KEY
+        : process.env.GOOGLE_API_KEY;
+
+  const apiKey = body.apiKey?.trim() || envKey;
+  const source: 'input' | 'env' | 'none' = hasInputApiKey ? 'input' : apiKey ? 'env' : 'none';
+  return { source, apiKey };
+}
+
+async function validateProviderCredential(
+  body: ValidateProviderBody
+): Promise<ProviderValidationResponse> {
+  const provider = body.provider;
+  const credential = resolveProviderCredential(body);
+  const baseMessage = `Unable to validate ${provider} credentials`;
+
+  if (credential.source === 'none') {
+    return {
+      provider,
+      valid: false,
+      source: 'none',
+      message: 'No credential provided. Enter a key/token or set the provider env variable.',
+    };
+  }
+
+  const requestInit: RequestInit = {
+    method: 'GET',
+    headers: {},
+    signal: AbortSignal.timeout(8000),
+  };
+  let url = '';
+
+  if (provider === 'anthropic') {
+    url = 'https://api.anthropic.com/v1/models';
+    requestInit.headers = {
+      'anthropic-version': '2023-06-01',
+    };
+    if (credential.apiKey) {
+      (requestInit.headers as Record<string, string>)['x-api-key'] = credential.apiKey;
+    } else if (credential.authToken) {
+      (requestInit.headers as Record<string, string>).Authorization =
+        `Bearer ${credential.authToken}`;
+    }
+  } else if (provider === 'openai') {
+    url = 'https://api.openai.com/v1/models';
+    requestInit.headers = {
+      Authorization: `Bearer ${credential.apiKey}`,
+    };
+  } else if (provider === 'openrouter') {
+    const baseUrl = (body.baseUrl?.trim() || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    url = `${baseUrl}/models`;
+    requestInit.headers = {
+      Authorization: `Bearer ${credential.apiKey}`,
+    };
+  } else {
+    url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(
+      credential.apiKey ?? ''
+    )}`;
+  }
+
+  try {
+    const response = await fetch(url, requestInit);
+
+    if (response.ok) {
+      return {
+        provider,
+        valid: true,
+        source: credential.source,
+        message: 'Credential is valid and reachable.',
+      };
+    }
+
+    if (response.status === 429) {
+      return {
+        provider,
+        valid: true,
+        source: credential.source,
+        message: 'Credential appears valid (rate limited).',
+      };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return {
+        provider,
+        valid: false,
+        source: credential.source,
+        message: 'Credential was rejected by provider (401/403).',
+      };
+    }
+
+    return {
+      provider,
+      valid: false,
+      source: credential.source,
+      message: `${baseMessage}. Provider returned ${response.status}.`,
+    };
+  } catch (err) {
+    const message = getErrorMessage(err);
+    return {
+      provider,
+      valid: false,
+      source: credential.source,
+      message: `${baseMessage}. ${message}`,
+    };
+  }
+}
+
 export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
     Params: { id: string };
@@ -150,6 +291,30 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
       providers: getProviderStatuses(aiConfig),
     };
   });
+
+  fastify.post<{
+    Params: { id: string };
+    Body: ValidateProviderBody;
+  }>(
+    '/projects/:id/analyze/validate-provider',
+    { preHandler: requireProject },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
+      }
+
+      const provider = request.body?.provider;
+      if (!provider || !PROVIDERS.includes(provider)) {
+        reply.code(400);
+        return { error: `provider must be one of: ${PROVIDERS.join(', ')}` };
+      }
+
+      const result = await validateProviderCredential(request.body);
+      return reply.send(result);
+    }
+  );
 
   // Analyze images using AI
   fastify.post<{

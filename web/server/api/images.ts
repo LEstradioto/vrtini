@@ -11,6 +11,8 @@ import {
   rejectImage,
   bulkApproveImages,
   revertImage,
+  setImageFlag,
+  revokeImageFlag,
   loadConfig,
 } from '../services/project-service.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
@@ -223,11 +225,58 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
         filename,
         config as { baselineDir: string; outputDir: string }
       );
+      await revokeImageFlag(project.path, filename);
       return { success: true, rejected: filename };
     } catch (err) {
       reply.code(500);
       return { error: 'Failed to reject', details: getErrorMessage(err) };
     }
+  });
+
+  // Flag an image for later review
+  fastify.post<{
+    Params: { id: string };
+    Body: { filename: string; reason?: string };
+  }>('/projects/:id/flag', { preHandler: requireProject }, async (request, reply) => {
+    const project = request.project;
+    if (!project) {
+      reply.code(404);
+      return { error: 'Project not found' };
+    }
+
+    const { filename, reason } = request.body;
+    if (!filename) {
+      reply.code(400);
+      return { error: 'Filename is required' };
+    }
+
+    try {
+      const flag = await setImageFlag(project.path, { filename, reason });
+      return { success: true, flag };
+    } catch (err) {
+      reply.code(500);
+      return { error: 'Failed to flag image', details: getErrorMessage(err) };
+    }
+  });
+
+  // Remove image flag
+  fastify.delete<{
+    Params: { id: string; filename: string };
+  }>('/projects/:id/flag/:filename', { preHandler: requireProject }, async (request, reply) => {
+    const project = request.project;
+    if (!project) {
+      reply.code(404);
+      return { error: 'Project not found' };
+    }
+
+    const filename = decodeURIComponent(request.params.filename);
+    const revoked = await revokeImageFlag(project.path, filename);
+    if (!revoked) {
+      reply.code(404);
+      return { error: 'Flag not found' };
+    }
+
+    return { success: true, revoked: filename };
   });
 
   // Bulk approve multiple test images

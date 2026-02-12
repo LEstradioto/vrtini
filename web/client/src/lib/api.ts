@@ -8,8 +8,10 @@ import type {
   AIAnalysisResult,
   AIProviderStatus,
   AIProviderStatusResponse,
+  AIProviderValidationResponse,
   CompareResult,
   ImageResult,
+  ImageFlag,
   ProjectTiming,
   Project,
   CrossReport,
@@ -17,6 +19,7 @@ import type {
   CrossResults,
   CrossResultsSummary,
   CrossAcceptance,
+  CrossFlag,
   VRTConfig,
   Scenario,
   ScenarioOptions,
@@ -42,11 +45,14 @@ import {
   CrossResultsListResponseSchema,
   CrossDeleteResponseSchema,
   CrossAcceptResponseSchema,
+  CrossFlagResponseSchema,
   AcceptanceListResponseSchema,
   AcceptanceCreateResponseSchema,
   RevokeResponseSchema,
   AnalyzeResponseSchema,
+  ImageFlagResponseSchema,
   AIProviderStatusResponseSchema,
+  AIProviderValidationResponseSchema,
   TestRunResponseSchema,
   TestStatusResponseSchema,
   TestAbortResponseSchema,
@@ -66,8 +72,10 @@ export type {
   AIAnalysisResult,
   AIProviderStatus,
   AIProviderStatusResponse,
+  AIProviderValidationResponse,
   CompareResult,
   ImageResult,
+  ImageFlag,
   ProjectTiming,
   Project,
   CrossReport,
@@ -75,11 +83,36 @@ export type {
   CrossResults,
   CrossResultsSummary,
   CrossAcceptance,
+  CrossFlag,
   VRTConfig,
   Scenario,
   ScenarioOptions,
   BrowserConfig,
 };
+
+export class APIError extends Error {
+  status: number;
+  details?: string;
+  issues?: Array<{ path: string; message: string }>;
+  payload?: unknown;
+
+  constructor(
+    message: string,
+    options: {
+      status: number;
+      details?: string;
+      issues?: Array<{ path: string; message: string }>;
+      payload?: unknown;
+    }
+  ) {
+    super(message);
+    this.name = 'APIError';
+    this.status = options.status;
+    this.details = options.details;
+    this.issues = options.issues;
+    this.payload = options.payload;
+  }
+}
 
 async function request<T>(
   endpoint: string,
@@ -99,10 +132,36 @@ async function request<T>(
     headers,
   });
 
-  const data = await res.json();
+  let data: unknown = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
 
   if (!res.ok) {
-    throw new Error(data.error || 'Request failed');
+    const payload = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+    const issues = Array.isArray(payload.issues)
+      ? (payload.issues as Array<{ path: string; message: string }>)
+      : undefined;
+    const details = typeof payload.details === 'string' ? payload.details : undefined;
+    const base =
+      typeof payload.error === 'string' ? payload.error : `Request failed (${res.status})`;
+    const issueMessage =
+      issues && issues.length > 0
+        ? issues.map((issue) => `${issue.path || '<root>'}: ${issue.message}`).join('; ')
+        : null;
+    const message = issueMessage
+      ? `${base}. ${issueMessage}`
+      : details
+        ? `${base}. ${details}`
+        : base;
+    throw new APIError(message, {
+      status: res.status,
+      details,
+      issues,
+      payload,
+    });
   }
 
   if (schema) {
@@ -193,6 +252,21 @@ export const images = {
         body: JSON.stringify({ filename }),
       },
       RejectResponseSchema
+    ),
+  flag: (projectId: string, filename: string, reason?: string) =>
+    request(
+      `${projectPath(projectId)}/flag`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ filename, reason }),
+      },
+      ImageFlagResponseSchema
+    ),
+  unflag: (projectId: string, filename: string) =>
+    request(
+      `${projectPath(projectId)}/flag/${encodeURIComponent(filename)}`,
+      { method: 'DELETE' },
+      RevokeResponseSchema
     ),
   bulkApprove: (projectId: string, filenames: string[]) =>
     request(
@@ -289,6 +363,23 @@ export const crossCompare = {
       },
       SuccessResponseSchema
     ),
+  flag: (projectId: string, key: string, itemKey: string, reason?: string) =>
+    request(
+      `${projectPath(projectId)}/cross-flag`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ key, itemKey, reason }),
+      },
+      CrossFlagResponseSchema
+    ),
+  unflag: (projectId: string, key: string, itemKey: string) =>
+    request(
+      `${projectPath(projectId)}/cross-flag/${key}/${encodeURIComponent(itemKey)}`,
+      {
+        method: 'DELETE',
+      },
+      SuccessResponseSchema
+    ),
   aiTriage: (projectId: string, key: string, itemKeys?: string[]) =>
     request<{ results: Array<{ itemKey: string; analysis?: AIAnalysisResult; error?: string }> }>(
       `${projectPath(projectId)}/cross-compare/${key}/ai-triage`,
@@ -350,6 +441,24 @@ export const analyze = {
     ),
   providerStatus: (projectId: string) =>
     request(`/projects/${projectId}/analyze/providers`, {}, AIProviderStatusResponseSchema),
+  validateProvider: (
+    projectId: string,
+    payload: {
+      provider: 'anthropic' | 'openai' | 'openrouter' | 'google';
+      apiKey?: string;
+      authToken?: string;
+      baseUrl?: string;
+      model?: string;
+    }
+  ) =>
+    request(
+      `/projects/${projectId}/analyze/validate-provider`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      AIProviderValidationResponseSchema
+    ),
 };
 
 // Test API

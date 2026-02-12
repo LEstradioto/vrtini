@@ -23,6 +23,9 @@
     analyzing: boolean;
     canAnalyze?: boolean;
     isAccepted: boolean;
+    isFlagged: boolean;
+    onFlag?: () => void;
+    onUnflag?: () => void;
     onRevokeAcceptance?: () => void;
     onAcceptForBrowser?: () => void;
   }
@@ -49,6 +52,9 @@
     analyzing,
     canAnalyze = true,
     isAccepted,
+    isFlagged,
+    onFlag,
+    onUnflag,
     onRevokeAcceptance,
     onAcceptForBrowser,
   }: Props = $props();
@@ -82,6 +88,9 @@
       {/if}
       <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Views
       <kbd>+</kbd><kbd>-</kbd> Zoom
+      {#if onFlag || onUnflag}
+        <kbd>G</kbd> Flag
+      {/if}
       {#if isCompareMode}
         <kbd>A</kbd> Approve
         <kbd>U</kbd> Undo
@@ -132,6 +141,15 @@
           {analyzing ? 'Analyzing...' : 'Analyze with AI'}
         </button>
       {/if}
+      {#if isFlagged && onUnflag}
+        <button class="action-btn flagged" onclick={onUnflag}>
+          Unflag
+        </button>
+      {:else if onFlag}
+        <button class="action-btn flagged" onclick={onFlag}>
+          Flag It
+        </button>
+      {/if}
       {#if isAccepted && onRevokeAcceptance}
         <button class="action-btn revoke" onclick={onRevokeAcceptance}>
           Revoke Acceptance
@@ -146,6 +164,15 @@
       {#if onAnalyze}
         <button class="action-btn ai" onclick={onAnalyze} disabled={analyzing || !canAnalyze}>
           {analyzing ? 'Analyzing...' : 'AI Triage'}
+        </button>
+      {/if}
+      {#if isFlagged && onUnflag}
+        <button class="action-btn flagged" onclick={onUnflag}>
+          Unflag
+        </button>
+      {:else if onFlag}
+        <button class="action-btn flagged" onclick={onFlag}>
+          Flag It <kbd>G</kbd>
         </button>
       {/if}
       <button class="action-btn approve" onclick={handleApprove} disabled={!canAct}>
@@ -316,6 +343,16 @@
   .action-btn.accept {
     border-color: #22c55e;
     color: #22c55e;
+  }
+
+  .action-btn.flagged {
+    border-color: #f59e0b;
+    color: #f59e0b;
+  }
+
+  .action-btn.flagged:hover:not(:disabled) {
+    background: #f59e0b;
+    color: var(--bg);
   }
 
   .action-btn.accept:hover:not(:disabled) {

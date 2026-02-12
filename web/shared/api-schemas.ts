@@ -45,6 +45,12 @@ export const AcceptanceSchema = z.object({
   signals: AcceptanceSignalsSchema.optional(),
 });
 
+export const ImageFlagSchema = z.object({
+  filename: z.string(),
+  flaggedAt: z.string(),
+  reason: z.string().optional(),
+});
+
 export const AutoThresholdCapSchema = z.object({
   scenario: z.string(),
   viewport: z.string(),
@@ -168,6 +174,8 @@ export const CrossResultItemSchema = z.object({
   error: z.string().optional(),
   accepted: z.boolean().optional(),
   acceptedAt: z.string().optional(),
+  flagged: z.boolean().optional(),
+  flaggedAt: z.string().optional(),
   aiAnalysis: AIAnalysisResultSchema.optional(),
   outdated: z.boolean().optional(),
 });
@@ -193,12 +201,19 @@ export const CrossResultsSummarySchema = z.object({
   matchCount: z.number(),
   diffCount: z.number(),
   issueCount: z.number(),
+  flaggedCount: z.number(),
   outdatedCount: z.number().optional(),
 });
 
 export const CrossAcceptanceSchema = z.object({
   itemKey: z.string(),
   acceptedAt: z.string(),
+  reason: z.string().optional(),
+});
+
+export const CrossFlagSchema = z.object({
+  itemKey: z.string(),
+  flaggedAt: z.string(),
   reason: z.string().optional(),
 });
 
@@ -323,6 +338,7 @@ export const ImagesListResponseSchema = z.object({
     diffs: z.array(ImageMetadataSchema),
   }),
   acceptances: z.record(z.string(), AcceptanceSchema),
+  flags: z.record(z.string(), ImageFlagSchema),
   autoThresholdCaps: AutoThresholdCapsSchema,
 });
 
@@ -374,6 +390,16 @@ export const CrossAcceptResponseSchema = z.object({
   acceptance: CrossAcceptanceSchema,
 });
 
+export const ImageFlagResponseSchema = z.object({
+  success: z.boolean(),
+  flag: ImageFlagSchema,
+});
+
+export const CrossFlagResponseSchema = z.object({
+  success: z.boolean(),
+  flag: CrossFlagSchema,
+});
+
 export const AcceptanceListResponseSchema = z.object({
   acceptances: z.array(AcceptanceSchema),
   acceptanceMap: z.record(z.string(), AcceptanceSchema),
@@ -410,6 +436,13 @@ export const AIProviderStatusSchema = z.object({
 export const AIProviderStatusResponseSchema = z.object({
   activeProvider: AIProviderNameSchema.nullable(),
   providers: z.array(AIProviderStatusSchema),
+});
+
+export const AIProviderValidationResponseSchema = z.object({
+  provider: AIProviderNameSchema,
+  valid: z.boolean(),
+  source: z.enum(['input', 'env', 'none']),
+  message: z.string(),
 });
 
 export const TestRunResponseSchema = z.object({

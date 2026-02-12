@@ -35,9 +35,12 @@
     onThresholdChange?: (threshold: number) => void;
     onRecompare?: () => Promise<void>;
     onAnalyze?: (filename?: string) => void;
+    onFlag?: (filename?: string) => void;
+    onUnflag?: (filename?: string) => void;
     onAcceptForBrowser?: () => void;
     onRevokeAcceptance?: () => void;
     isAccepted?: boolean;
+    isFlagged?: boolean;
     analyzing?: boolean;
     recomparing?: boolean;
     // Common
@@ -71,9 +74,12 @@
     onThresholdChange,
     onRecompare,
     onAnalyze,
+    onFlag,
+    onUnflag,
     onAcceptForBrowser,
     onRevokeAcceptance,
     isAccepted = false,
+    isFlagged = false,
     analyzing = false,
     recomparing = false,
     getImageMetadata,
@@ -220,6 +226,9 @@
 
   let canAct = $derived(
     !isCompareMode && currentImage && (currentImage.status === 'failed' || currentImage.status === 'new')
+  );
+  let effectiveIsFlagged = $derived(
+    isCompareMode ? (activeCompareItem?.flagged ?? isFlagged) : !!currentImage?.flagged
   );
 
   // Title for header
@@ -634,6 +643,28 @@
     }
   }
 
+  function handleFlagAction() {
+    if (!onFlag) return;
+    if (isCompareMode) {
+      onFlag();
+      return;
+    }
+    if (currentImage) {
+      onFlag(currentImage.filename);
+    }
+  }
+
+  function handleUnflagAction() {
+    if (!onUnflag) return;
+    if (isCompareMode) {
+      onUnflag();
+      return;
+    }
+    if (currentImage) {
+      onUnflag(currentImage.filename);
+    }
+  }
+
   function autoAdvance() {
     if (currentIndex < queue.length - 1) {
       // Don't increment - the queue will update and shift
@@ -647,6 +678,7 @@
       'Escape', 'ArrowLeft', 'ArrowRight',
       '1', '2', '3',
       'a', 'A', 'u', 'U', 'r', 'R', 't', 'T',
+      'g', 'G',
       '+', '=', '-',
       'w', 'W', 'h', 'H', 'f', 'F', 'c', 'C', 'p', 'P',
     ];
@@ -699,6 +731,14 @@
       case 't':
       case 'T':
         showThumbnails = !showThumbnails;
+        break;
+      case 'g':
+      case 'G':
+        if (effectiveIsFlagged) {
+          handleUnflagAction();
+        } else {
+          handleFlagAction();
+        }
         break;
       case '+':
       case '=':
@@ -933,7 +973,13 @@
   onresize={handleResize}
 />
 
-<div class="gallery-overlay" role="dialog" aria-modal="true" aria-label="Image Gallery">
+<div
+  class="gallery-overlay"
+  class:flagged={effectiveIsFlagged}
+  role="dialog"
+  aria-modal="true"
+  aria-label="Image Gallery"
+>
   <GalleryHeader
     {isCompareMode}
     {displayTitle}
@@ -1025,6 +1071,10 @@
     />
   {/if}
 
+  {#if effectiveIsFlagged}
+    <div class="flagged-banner">FLAGGED FOR REVIEW</div>
+  {/if}
+
   <FullscreenGalleryFooter
     {isCompareMode}
     {queue}
@@ -1044,9 +1094,12 @@
     {onRerun}
     {testRunning}
     onAnalyze={onAnalyze ? handleAnalyzeAction : undefined}
+    onFlag={onFlag ? handleFlagAction : undefined}
+    onUnflag={onUnflag ? handleUnflagAction : undefined}
     {analyzing}
     canAnalyze={isCompareMode || (!!currentImage && hasBaseline)}
     isAccepted={effectiveIsAccepted}
+    isFlagged={effectiveIsFlagged}
     {onRevokeAcceptance}
     {onAcceptForBrowser}
   />
@@ -1060,5 +1113,26 @@
     background: rgba(0, 0, 0, 0.98);
     display: flex;
     flex-direction: column;
+    border: 2px solid transparent;
+    box-sizing: border-box;
+  }
+
+  .gallery-overlay.flagged {
+    border-color: rgba(245, 158, 11, 0.85);
+    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.45);
+  }
+
+  .flagged-banner {
+    margin: 0 16px;
+    padding: 5px 10px;
+    border: 1px solid rgba(245, 158, 11, 0.65);
+    border-bottom: 0;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    text-transform: uppercase;
   }
 </style>

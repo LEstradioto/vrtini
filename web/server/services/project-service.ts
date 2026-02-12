@@ -174,6 +174,16 @@ interface AcceptancesFile {
   acceptances: Acceptance[];
 }
 
+export interface ImageFlag {
+  filename: string;
+  flaggedAt: string;
+  reason?: string;
+}
+
+interface ImageFlagsFile {
+  flags: ImageFlag[];
+}
+
 async function ensureAcceptancesDir(projectPath: string): Promise<string> {
   const filePath = getAcceptancesPath(projectPath);
   const dir = dirname(filePath);
@@ -244,6 +254,77 @@ export async function revokeAcceptance(projectPath: string, filename: string): P
   }
 
   await saveAcceptances(projectPath, filtered);
+  return true;
+}
+
+function getImageFlagsPath(projectPath: string): string {
+  return resolve(projectPath, '.vrt', 'acceptances', 'flags.json');
+}
+
+async function ensureImageFlagsPath(projectPath: string): Promise<string> {
+  const path = getImageFlagsPath(projectPath);
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
+  }
+  return path;
+}
+
+export async function loadImageFlags(projectPath: string): Promise<ImageFlag[]> {
+  const filePath = await ensureImageFlagsPath(projectPath);
+  if (!existsSync(filePath)) {
+    return [];
+  }
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    const data: ImageFlagsFile = JSON.parse(content);
+    return data.flags || [];
+  } catch (err) {
+    log.warn(`Failed to load image flags from ${filePath}:`, getErrorMessage(err));
+    return [];
+  }
+}
+
+export async function saveImageFlags(projectPath: string, flags: ImageFlag[]): Promise<void> {
+  const filePath = await ensureImageFlagsPath(projectPath);
+  const data: ImageFlagsFile = { flags };
+  await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+export function imageFlagsToMap(flags: ImageFlag[]): Record<string, ImageFlag> {
+  const map: Record<string, ImageFlag> = {};
+  for (const flag of flags) {
+    map[flag.filename] = flag;
+  }
+  return map;
+}
+
+export async function setImageFlag(
+  projectPath: string,
+  flag: Omit<ImageFlag, 'flaggedAt'>
+): Promise<ImageFlag> {
+  const flags = await loadImageFlags(projectPath);
+  const filtered = flags.filter((entry) => entry.filename !== flag.filename);
+
+  const next: ImageFlag = {
+    ...flag,
+    flaggedAt: new Date().toISOString(),
+  };
+
+  filtered.push(next);
+  await saveImageFlags(projectPath, filtered);
+  return next;
+}
+
+export async function revokeImageFlag(projectPath: string, filename: string): Promise<boolean> {
+  const flags = await loadImageFlags(projectPath);
+  const filtered = flags.filter((entry) => entry.filename !== filename);
+
+  if (filtered.length === flags.length) {
+    return false;
+  }
+
+  await saveImageFlags(projectPath, filtered);
   return true;
 }
 
@@ -511,6 +592,7 @@ export interface ProjectImages {
     diffs: ImageMetadata[];
   };
   acceptances: Record<string, Acceptance>;
+  flags: Record<string, ImageFlag>;
   autoThresholdCaps: AutoThresholdCaps;
 }
 
@@ -520,11 +602,12 @@ export async function getProjectImages(
 ): Promise<ProjectImages> {
   const { baselineDir, outputDir, diffDir } = getProjectDirs(projectPath, config);
 
-  const [baselines, tests, diffs, acceptancesList] = await Promise.all([
+  const [baselines, tests, diffs, acceptancesList, flagsList] = await Promise.all([
     listImages(baselineDir),
     listImages(outputDir),
     listImages(diffDir),
     loadAcceptances(projectPath),
+    loadImageFlags(projectPath),
   ]);
 
   const [baselinesWithMeta, testsWithMeta, diffsWithMeta] = await Promise.all([
@@ -544,6 +627,7 @@ export async function getProjectImages(
       diffs: diffsWithMeta,
     },
     acceptances: acceptancesToMap(acceptancesList),
+    flags: imageFlagsToMap(flagsList),
     autoThresholdCaps: computeAutoThresholdCaps(acceptancesList),
   };
 }

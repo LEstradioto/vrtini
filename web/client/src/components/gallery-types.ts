@@ -3,6 +3,7 @@ export type ImageStatus = 'passed' | 'failed' | 'new';
 export interface GalleryImage {
   filename: string;
   status: ImageStatus;
+  flagged?: boolean;
   confidence?: { score: number; pass: boolean; verdict: 'pass' | 'warn' | 'fail' };
   metrics?: {
     pixelDiff: number;
@@ -38,8 +39,9 @@ export interface CompareQueueItem {
   accepted?: boolean;
   badge?: {
     label: string;
-    tone: 'approved' | 'smart' | 'passed' | 'diff' | 'unapproved' | 'issue';
+    tone: 'approved' | 'smart' | 'passed' | 'diff' | 'unapproved' | 'issue' | 'flagged';
   };
+  flagged?: boolean;
   viewport?: string;
 }
 

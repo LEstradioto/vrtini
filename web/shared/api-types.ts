@@ -42,6 +42,12 @@ export interface Acceptance {
   signals?: AcceptanceSignals;
 }
 
+export interface ImageFlag {
+  filename: string;
+  flaggedAt: string;
+  reason?: string;
+}
+
 export interface AutoThresholdCap {
   scenario: string;
   viewport: string;
@@ -91,6 +97,13 @@ export interface AIProviderStatus {
 export interface AIProviderStatusResponse {
   activeProvider: AIProviderName | null;
   providers: AIProviderStatus[];
+}
+
+export interface AIProviderValidationResponse {
+  provider: AIProviderName;
+  valid: boolean;
+  source: 'input' | 'env' | 'none';
+  message: string;
 }
 
 export interface DomDiffSummary {
@@ -179,6 +192,8 @@ export interface CrossResultItem {
   error?: string;
   accepted?: boolean;
   acceptedAt?: string;
+  flagged?: boolean;
+  flaggedAt?: string;
   aiAnalysis?: AIAnalysisResult;
   outdated?: boolean;
 }
@@ -204,12 +219,19 @@ export interface CrossResultsSummary {
   matchCount: number;
   diffCount: number;
   issueCount: number;
+  flaggedCount: number;
   outdatedCount?: number;
 }
 
 export interface CrossAcceptance {
   itemKey: string;
   acceptedAt: string;
+  reason?: string;
+}
+
+export interface CrossFlag {
+  itemKey: string;
+  flaggedAt: string;
   reason?: string;
 }
 

@@ -503,6 +503,11 @@
     color: #f97316;
   }
 
+  .compare-badge.tone-flagged {
+    border-color: rgba(245, 158, 11, 0.6);
+    color: #f59e0b;
+  }
+
   .compare-badge.tone-unapproved,
   .compare-badge.tone-issue {
     border-color: rgba(239, 68, 68, 0.5);

@@ -83,6 +83,22 @@
     syncCrossModalSelection(prevKey, prevIndex);
   }
 
+  async function flagCrossFromModal() {
+    if (!currentCrossItem || !crossPanel) return;
+    const prevKey = currentCrossItem.itemKey;
+    const prevIndex = crossQueueIndex;
+    await crossPanel.flagCrossFromModal(currentCrossItem);
+    syncCrossModalSelection(prevKey, prevIndex);
+  }
+
+  async function unflagCrossFromModal() {
+    if (!currentCrossItem || !crossPanel) return;
+    const prevKey = currentCrossItem.itemKey;
+    const prevIndex = crossQueueIndex;
+    await crossPanel.unflagCrossFromModal(currentCrossItem);
+    syncCrossModalSelection(prevKey, prevIndex);
+  }
+
   function syncCrossModalSelection(preferredKey?: string, fallbackIndex = crossQueueIndex) {
     if (!showCompareFullscreen || compareMode !== 'cross') return;
     const state = crossPanel?.getCrossState();
@@ -199,6 +215,7 @@
       store.testsMetadata = imagesRes.metadata?.tests || [];
       store.diffsMetadata = imagesRes.metadata?.diffs || [];
       store.acceptances = imagesRes.acceptances || {};
+      store.flags = imagesRes.flags || {};
       store.autoThresholdCaps = imagesRes.autoThresholdCaps || null;
       store.imageResults = resultsRes.results;
       crossReports = crossRes.results;
@@ -348,26 +365,31 @@
       },
       viewport: item.viewport,
       badge: {
-        label: item.accepted
-          ? 'Approved'
-          : item.match
-            ? item.diffPercentage > 0
-              ? 'Smart Pass'
-              : 'Match'
-            : item.reason === 'diff'
-              ? 'Diff'
-              : 'Issue',
-        tone: item.accepted
-          ? 'approved'
-          : item.match
-            ? item.diffPercentage > 0
-              ? 'smart'
-              : 'passed'
-            : item.reason === 'diff'
-              ? 'diff'
-              : 'unapproved',
+        label: item.flagged
+          ? 'Flagged'
+          : item.accepted
+            ? 'Approved'
+            : item.match
+              ? item.diffPercentage > 0
+                ? 'Smart Pass'
+                : 'Match'
+              : item.reason === 'diff'
+                ? 'Diff'
+                : 'Issue',
+        tone: item.flagged
+          ? 'flagged'
+          : item.accepted
+            ? 'approved'
+            : item.match
+              ? item.diffPercentage > 0
+                ? 'smart'
+                : 'passed'
+              : item.reason === 'diff'
+                ? 'diff'
+                : 'unapproved',
       },
       accepted: item.accepted,
+      flagged: item.flagged,
     }));
   });
 
@@ -378,6 +400,65 @@
   // Delegate image status to store
   function getImageStatus(filename: string): ImageStatus | null {
     return store.getImageStatus(filename);
+  }
+
+  async function setImageFlag(filename: string) {
+    const previous = store.flags[filename];
+    store.flags = {
+      ...store.flags,
+      [filename]: {
+        filename,
+        flaggedAt: new Date().toISOString(),
+      },
+    };
+    try {
+      const result = await images.flag(projectId, filename);
+      store.flags = {
+        ...store.flags,
+        [filename]: result.flag,
+      };
+    } catch (err) {
+      if (previous) {
+        store.flags = { ...store.flags, [filename]: previous };
+      } else {
+        const { [filename]: _removed, ...rest } = store.flags;
+        store.flags = rest;
+      }
+      showToast(getErrorMessage(err, 'Failed to flag image'), 'error');
+    }
+  }
+
+  async function unsetImageFlag(filename: string) {
+    const previous = store.flags[filename];
+    if (!previous) return;
+    const { [filename]: _removed, ...rest } = store.flags;
+    store.flags = rest;
+    try {
+      await images.unflag(projectId, filename);
+    } catch (err) {
+      store.flags = { ...store.flags, [filename]: previous };
+      showToast(getErrorMessage(err, 'Failed to unflag image'), 'error');
+    }
+  }
+
+  async function handleCompareFlag() {
+    if (compareMode === 'manual' && compareRight) {
+      await setImageFlag(compareRight.filename);
+      return;
+    }
+    if (compareMode === 'cross') {
+      await flagCrossFromModal();
+    }
+  }
+
+  async function handleCompareUnflag() {
+    if (compareMode === 'manual' && compareRight) {
+      await unsetImageFlag(compareRight.filename);
+      return;
+    }
+    if (compareMode === 'cross') {
+      await unflagCrossFromModal();
+    }
   }
 
   // Check if selected images are approvable (must have test images)
@@ -644,6 +725,14 @@
       store.diffs = originalDiffs;
       showToast(getErrorMessage(err, 'Reject failed'), 'error');
     });
+  }
+
+  async function handleGalleryFlag(filename: string) {
+    await setImageFlag(filename);
+  }
+
+  async function handleGalleryUnflag(filename: string) {
+    await unsetImageFlag(filename);
   }
 
   async function handleRerun(filename: string) {
@@ -1214,6 +1303,20 @@
     onThresholdChange={compareMode === 'manual' ? (t) => (threshold = t) : undefined}
     onRecompare={compareMode === 'manual' ? recompareWithThreshold : undefined}
     onAnalyze={compareMode === 'manual' ? () => compareRight && handleAnalyze([compareRight.filename]) : undefined}
+    onFlag={
+      compareMode === 'manual'
+        ? () => compareRight && setImageFlag(compareRight.filename)
+        : compareMode === 'cross'
+          ? handleCompareFlag
+          : undefined
+    }
+    onUnflag={
+      compareMode === 'manual'
+        ? () => compareRight && unsetImageFlag(compareRight.filename)
+        : compareMode === 'cross'
+          ? handleCompareUnflag
+          : undefined
+    }
     onAcceptForBrowser={
       compareMode === 'manual'
         ? () => compareRight && handleAcceptForBrowser(compareRight.filename)
@@ -1233,6 +1336,13 @@
         ? !!store.acceptances[compareRight.filename]
         : compareMode === 'cross'
           ? !!currentCrossItem?.accepted
+          : false
+    }
+    isFlagged={
+      compareMode === 'manual' && compareRight
+        ? !!store.flags[compareRight.filename]
+        : compareMode === 'cross'
+          ? !!currentCrossItem?.flagged
           : false
     }
     analyzing={compareMode === 'manual' ? analyzing : false}
@@ -1297,6 +1407,8 @@
     onClose={closeGallery}
     onApprove={handleGalleryApprove}
     onReject={handleGalleryReject}
+    onFlag={handleGalleryFlag}
+    onUnflag={handleGalleryUnflag}
     onRerun={handleRerun}
     onAnalyze={(filename) => filename && handleAITriage([filename])}
     analyzing={analyzing}
@@ -1315,6 +1427,7 @@
     min-height: calc(100vh - 100px);
     font-family: var(--font-body);
     --tag-approved: #22c55e;
+    --tag-flagged: #f59e0b;
     --tag-unapproved: #ef4444;
     --tag-new: #f59e0b;
     --tag-diff: #f97316;

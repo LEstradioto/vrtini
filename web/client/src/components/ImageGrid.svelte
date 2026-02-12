@@ -2,7 +2,16 @@
   import type { ImageMetadata, ImageResult } from '../lib/api';
 
   type ImageStatus = 'passed' | 'failed' | 'new';
-  type ImageTag = 'all' | 'passed' | 'failed' | 'new' | 'approved' | 'unapproved' | 'diff' | 'auto-review';
+  type ImageTag =
+    | 'all'
+    | 'passed'
+    | 'failed'
+    | 'new'
+    | 'flagged'
+    | 'approved'
+    | 'unapproved'
+    | 'diff'
+    | 'auto-review';
   type ViewMode = 'grid' | 'list';
   type SortMode = 'name' | 'diff';
 
@@ -108,6 +117,7 @@
   function getTagLabel(tag: ImageTag): string {
     switch (tag) {
       case 'approved': return 'Approved';
+      case 'flagged': return 'Flagged';
       case 'unapproved': return 'Unapproved';
       case 'new': return 'New';
       case 'passed': return 'Passed';
@@ -185,6 +195,7 @@
       <button class="tag-filter tag-all" class:active={isTagActive('all')} onclick={(event) => toggleTagFilter('all', event)} title="Show all images">All</button>
       <button class="tag-filter tag-passed" class:active={isTagActive('passed')} onclick={(event) => toggleTagFilter('passed', event)} title="Baseline matches test">Passed</button>
       <button class="tag-filter tag-new" class:active={isTagActive('new')} onclick={(event) => toggleTagFilter('new', event)} title="Test exists without baseline">New</button>
+      <button class="tag-filter tag-flagged" class:active={isTagActive('flagged')} onclick={(event) => toggleTagFilter('flagged', event)} title="Items flagged for later review">Flagged</button>
       <button class="tag-filter tag-unapproved" class:active={isTagActive('unapproved')} onclick={(event) => toggleTagFilter('unapproved', event)} title="Diffs or new items not approved">Unapproved</button>
       <button class="tag-filter tag-approved" class:active={isTagActive('approved')} onclick={(event) => toggleTagFilter('approved', event)} title="Items you have approved">Approved</button>
       <button class="tag-filter tag-diff" class:active={isTagActive('diff')} onclick={(event) => toggleTagFilter('diff', event)} title="Images with visual diffs">Diff</button>
@@ -245,6 +256,7 @@
             class:tag-approved={tag === 'approved'}
             class:tag-unapproved={tag === 'unapproved'}
             class:tag-new={tag === 'new'}
+            class:tag-flagged={tag === 'flagged'}
             class:tag-passed={tag === 'passed'}
             class:tag-diff={tag === 'diff'}
             class:tag-auto-review={tag === 'auto-review'}
@@ -402,6 +414,7 @@
   }
   .tag-filter.active { opacity: 1; color: var(--text-strong); }
   .tag-filter.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
+  .tag-filter.tag-flagged { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-flagged); }
   .tag-filter.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .tag-filter.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }
   .tag-filter.tag-diff { border-color: rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.12); color: var(--tag-diff); }
@@ -475,6 +488,7 @@
   .image-card:hover { border-color: var(--text-muted); transform: translateY(-2px); }
   .image-card.multi-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
   .image-card.tag-approved { border-color: rgba(34, 197, 94, 0.6); }
+  .image-card.tag-flagged { border-color: rgba(245, 158, 11, 0.7); }
   .image-card.tag-unapproved { border-color: rgba(239, 68, 68, 0.6); }
   .image-card.tag-new { border-color: rgba(245, 158, 11, 0.7); }
   .image-card.tag-diff { border-color: rgba(249, 115, 22, 0.7); }
@@ -494,6 +508,7 @@
     background: var(--panel-strong); color: var(--text-muted); white-space: nowrap;
   }
   .image-tag.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
+  .image-tag.tag-flagged { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-flagged); }
   .image-tag.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .image-tag.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }
   .image-tag.tag-diff { border-color: rgba(249, 115, 22, 0.45); background: rgba(249, 115, 22, 0.12); color: var(--tag-diff); }

@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { analyze, config, projects, type AIProviderStatus, type Project, type VRTConfig } from '../lib/api';
+  import {
+    APIError,
+    analyze,
+    config,
+    projects,
+    type AIProviderStatus,
+    type Project,
+    type VRTConfig,
+  } from '../lib/api';
   import { getErrorMessage } from '../lib/errors';
   import { getAppContext } from '../lib/app-context';
   import BrowserList from '../components/BrowserList.svelte';
@@ -17,46 +25,99 @@
   let saving = $state(false);
   let error = $state<string | null>(null);
   let success = $state<string | null>(null);
+  let saveState = $state<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
+  let configIssues = $state<Array<{ path: string; message: string }>>([]);
   let showScenarioDefaults = $state(false);
   let providerStatuses = $state<AIProviderStatus[] | null>(null);
+  let lastSavedSnapshot = $state<string | null>(null);
+  let autosaveEnabled = $state(false);
+  let saveRevision = $state(0);
+
+  const AUTO_SAVE_DEBOUNCE_MS = 700;
+
+  function cloneConfig<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+
+  function readConfigIssues(err: unknown): Array<{ path: string; message: string }> {
+    if (err instanceof APIError && Array.isArray(err.issues)) {
+      return err.issues.filter(
+        (issue): issue is { path: string; message: string } =>
+          !!issue && typeof issue.path === 'string' && typeof issue.message === 'string'
+      );
+    }
+    return [];
+  }
+
+  async function saveSnapshot(snapshot: string, opts: { manual: boolean; revision: number }) {
+    try {
+      saving = true;
+      saveState = 'saving';
+      error = null;
+      configIssues = [];
+
+      const parsed = JSON.parse(snapshot) as VRTConfig;
+      const result = await config.save(projectId, parsed);
+
+      if (opts.revision !== saveRevision && !opts.manual) return;
+
+      configData = cloneConfig(result.config);
+      lastSavedSnapshot = JSON.stringify(configData);
+      saveState = 'saved';
+      success = opts.manual ? 'Config saved successfully' : 'Autosaved';
+      setTimeout(() => {
+        if (saveState === 'saved') success = null;
+      }, 1800);
+    } catch (err) {
+      if (opts.revision !== saveRevision && !opts.manual) return;
+      saveState = 'error';
+      configIssues = readConfigIssues(err);
+      error = getErrorMessage(err, 'Failed to save config');
+      success = null;
+    } finally {
+      if (opts.revision === saveRevision || opts.manual) {
+        saving = false;
+      }
+    }
+  }
 
   async function loadConfig() {
     try {
       loading = true;
+      autosaveEnabled = false;
+      error = null;
+      success = null;
+      configIssues = [];
       const [projRes, configRes, providerStatusRes] = await Promise.all([
         projects.get(projectId),
         config.get(projectId),
         analyze.providerStatus(projectId).catch(() => null),
       ]);
       project = projRes.project;
-      configData = JSON.parse(JSON.stringify(configRes.config));
+      configData = cloneConfig(configRes.config);
       providerStatuses = providerStatusRes?.providers ?? null;
+      lastSavedSnapshot = JSON.stringify(configData);
+      saveRevision = 0;
+      saveState = 'saved';
+      success = null;
 
       if (configData.scenarioDefaults && Object.keys(configData.scenarioDefaults).length > 0) {
         showScenarioDefaults = true;
       }
     } catch (err) {
+      saveState = 'error';
       error = getErrorMessage(err, 'Failed to load config');
     } finally {
       loading = false;
+      autosaveEnabled = true;
     }
   }
 
-  async function saveConfig() {
+  async function saveConfig(manual = true) {
     if (!configData) return;
-
-    try {
-      saving = true;
-      error = null;
-      success = null;
-      await config.save(projectId, configData);
-      success = 'Config saved successfully';
-      setTimeout(() => (success = null), 3000);
-    } catch (err) {
-      error = getErrorMessage(err, 'Failed to save config');
-    } finally {
-      saving = false;
-    }
+    const snapshot = JSON.stringify(configData);
+    saveRevision += 1;
+    await saveSnapshot(snapshot, { manual, revision: saveRevision });
   }
 
   function addViewport() {
@@ -92,6 +153,23 @@
   $effect(() => {
     loadConfig();
   });
+
+  $effect(() => {
+    if (!autosaveEnabled || loading || !configData || !lastSavedSnapshot) return;
+    const snapshot = JSON.stringify(configData);
+    if (snapshot === lastSavedSnapshot) return;
+
+    saveState = 'dirty';
+    success = null;
+    const revision = saveRevision + 1;
+    saveRevision = revision;
+
+    const handle = setTimeout(() => {
+      void saveSnapshot(snapshot, { manual: false, revision });
+    }, AUTO_SAVE_DEBOUNCE_MS);
+
+    return () => clearTimeout(handle);
+  });
 </script>
 
 <div class="config-page">
@@ -105,15 +183,37 @@
         {#if project}
           <p class="subtitle">{project.name}</p>
         {/if}
+        <p class="save-state save-state-{saveState}">
+          {#if saveState === 'saving'}
+            Saving changes...
+          {:else if saveState === 'dirty'}
+            Unsaved changes
+          {:else if saveState === 'saved'}
+            All changes saved
+          {:else if saveState === 'error'}
+            Save failed
+          {:else}
+            Ready
+          {/if}
+        </p>
       </div>
     </div>
-    <button class="btn primary" onclick={saveConfig} disabled={saving || loading}>
-      {saving ? 'Saving...' : 'Save Config'}
+    <button class="btn primary" onclick={() => saveConfig(true)} disabled={saving || loading}>
+      {saving ? 'Saving...' : 'Save Now'}
     </button>
   </div>
 
   {#if error}
-    <div class="error">{error}</div>
+    <div class="error">
+      <div>{error}</div>
+      {#if configIssues.length > 0}
+        <ul class="issue-list">
+          {#each configIssues as issue}
+            <li><code>{issue.path || '<root>'}</code>: {issue.message}</li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
   {/if}
 
   {#if success}
@@ -253,7 +353,7 @@
       <ScenarioList bind:scenarios={configData.scenarios} />
 
       <!-- AI Settings Section -->
-      <AISettings config={configData} providerStatuses={providerStatuses} />
+      <AISettings projectId={projectId} config={configData} providerStatuses={providerStatuses} />
 
       <!-- Remove Project -->
       <div class="danger-zone">
@@ -316,6 +416,31 @@
     margin-top: 0.25rem;
   }
 
+  .save-state {
+    margin-top: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .save-state-saving {
+    color: #0ea5e9;
+  }
+
+  .save-state-dirty {
+    color: #f59e0b;
+  }
+
+  .save-state-saved {
+    color: #22c55e;
+  }
+
+  .save-state-error {
+    color: #ef4444;
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;
@@ -371,6 +496,13 @@
     border-radius: 0;
     margin-bottom: 1rem;
     font-family: var(--font-mono);
+  }
+
+  .issue-list {
+    margin: 0.5rem 0 0 1rem;
+    padding: 0;
+    font-size: 0.78rem;
+    color: #fecaca;
   }
 
   .success {

@@ -10,7 +10,18 @@
   import { getErrorMessage } from '../lib/errors';
   import { CROSS_PAGE_SIZE } from '../../../shared/constants';
 
-  type CrossStatusFilter = 'all' | 'diffs' | 'matches' | 'smart' | 'approved' | 'unapproved' | 'outdated' | 'ai-approved' | 'ai-review' | 'ai-rejected';
+  type CrossStatusFilter =
+    | 'all'
+    | 'diffs'
+    | 'matches'
+    | 'smart'
+    | 'approved'
+    | 'unapproved'
+    | 'flagged'
+    | 'outdated'
+    | 'ai-approved'
+    | 'ai-review'
+    | 'ai-rejected';
   type CrossPairFilterValue = 'all' | 'diffs' | 'issues' | 'smart' | 'approved' | 'matches';
 
   type CrossPrefs = {
@@ -21,7 +32,17 @@
     selectedKey?: string | null;
   };
   const CROSS_STATUS_VALUES: CrossStatusFilter[] = [
-    'all', 'diffs', 'matches', 'smart', 'approved', 'unapproved', 'outdated', 'ai-approved', 'ai-review', 'ai-rejected',
+    'all',
+    'diffs',
+    'matches',
+    'smart',
+    'approved',
+    'unapproved',
+    'flagged',
+    'outdated',
+    'ai-approved',
+    'ai-review',
+    'ai-rejected',
   ];
   const CROSS_PAIR_VALUES = new Set<CrossPairFilterValue>([
     'all', 'diffs', 'issues', 'smart', 'approved', 'matches',
@@ -433,6 +454,28 @@
     }
   }
 
+  async function flagCrossItem(item: CrossResultItem) {
+    if (!selectedCrossKey || !item.itemKey) return;
+    try {
+      await crossCompare.flag(projectId, selectedCrossKey, item.itemKey);
+      await loadCrossResults(selectedCrossKey);
+      await refreshCrossReports();
+    } catch (err) {
+      crossResultsError = getErrorMessage(err, 'Failed to flag cross item');
+    }
+  }
+
+  async function unflagCrossItem(item: CrossResultItem) {
+    if (!selectedCrossKey || !item.itemKey) return;
+    try {
+      await crossCompare.unflag(projectId, selectedCrossKey, item.itemKey);
+      await loadCrossResults(selectedCrossKey);
+      await refreshCrossReports();
+    } catch (err) {
+      crossResultsError = getErrorMessage(err, 'Failed to unflag cross item');
+    }
+  }
+
   // Filter logic
   function matchesCrossStatus(item: CrossResultItem, status: CrossStatusFilter): boolean {
     switch (status) {
@@ -441,6 +484,7 @@
       case 'smart': return item.match && item.diffPercentage > 0;
       case 'approved': return !!item.accepted;
       case 'unapproved': return !item.accepted;
+      case 'flagged': return !!item.flagged;
       case 'outdated': return !!item.outdated;
       case 'ai-approved': return item.aiAnalysis?.recommendation === 'approve';
       case 'ai-review': return item.aiAnalysis?.recommendation === 'review';
@@ -479,11 +523,12 @@
 
   function formatCrossPairSummary(report: CrossResultsSummary): string {
     const approved = report.approvedCount ?? 0;
+    const flagged = report.flaggedCount ?? 0;
     const smart = report.smartPassCount ?? 0;
     const match = report.matchCount ?? 0;
     const diff = report.diffCount ?? 0;
     const issue = report.issueCount ?? 0;
-    return `A ${approved} · S ${smart} · M ${match} · D ${diff} · I ${issue}`;
+    return `A ${approved} · F ${flagged} · S ${smart} · M ${match} · D ${diff} · I ${issue}`;
   }
 
   // Derived state
@@ -535,9 +580,19 @@
 
   let crossPairSummary = $derived.by(() => {
     if (!crossResults) return null;
-    const summary = { total: 0, approved: 0, smart: 0, match: 0, diff: 0, issue: 0, outdated: 0 };
+    const summary = {
+      total: 0,
+      approved: 0,
+      smart: 0,
+      match: 0,
+      diff: 0,
+      issue: 0,
+      flagged: 0,
+      outdated: 0,
+    };
     for (const item of crossResults.items) {
       summary.total += 1;
+      if (item.flagged) summary.flagged += 1;
       if (item.outdated) summary.outdated += 1;
       if (item.accepted) { summary.approved += 1; continue; }
       const smartPass = item.match && item.diffPercentage > 0;
@@ -658,7 +713,15 @@
   }
 
   /** Exposed actions for parent BulkActionBar */
-  export { approveSelectedCrossItems, rerunSelectedCrossItems, rerunSelectedCrossItemTests, deleteCrossItems, selectAllCross, deselectAllCross, runAITriage };
+  export {
+    approveSelectedCrossItems,
+    rerunSelectedCrossItems,
+    rerunSelectedCrossItemTests,
+    deleteCrossItems,
+    selectAllCross,
+    deselectAllCross,
+    runAITriage,
+  };
 
   /** Called from parent after approve/revoke in fullscreen modal */
   export async function approveCrossFromModal(item: CrossResultItem) {
@@ -667,6 +730,14 @@
 
   export async function revokeCrossFromModal(item: CrossResultItem) {
     await revokeCrossItem(item);
+  }
+
+  export async function flagCrossFromModal(item: CrossResultItem) {
+    await flagCrossItem(item);
+  }
+
+  export async function unflagCrossFromModal(item: CrossResultItem) {
+    await unflagCrossItem(item);
   }
 </script>
 
@@ -720,6 +791,7 @@
       <button class="tag-filter tag-passed" class:active={isCrossStatusActive('matches')} onclick={(event) => toggleCrossStatusFilter('matches', event)} title="Items that match">Matches</button>
       <button class="tag-filter tag-smart" class:active={isCrossStatusActive('smart')} onclick={(event) => toggleCrossStatusFilter('smart', event)} title="Matches with non-zero diffs (smart pass)">Smart Pass</button>
       <button class="tag-filter tag-approved" class:active={isCrossStatusActive('approved')} onclick={(event) => toggleCrossStatusFilter('approved', event)} title="Items you have approved">Approved</button>
+      <button class="tag-filter tag-flagged" class:active={isCrossStatusActive('flagged')} onclick={(event) => toggleCrossStatusFilter('flagged', event)} title="Items flagged for later review">Flagged</button>
       <button class="tag-filter tag-unapproved" class:active={isCrossStatusActive('unapproved')} onclick={(event) => toggleCrossStatusFilter('unapproved', event)} title="Items not yet approved">Unapproved</button>
       {#if crossPairSummary && crossPairSummary.outdated > 0}
         <button class="tag-filter tag-outdated" class:active={isCrossStatusActive('outdated')} onclick={(event) => toggleCrossStatusFilter('outdated', event)} title="Items where screenshots changed after comparison ran">Outdated ({crossPairSummary.outdated})</button>
@@ -778,6 +850,9 @@
         · Match: {crossPairSummary.match}
         · Diff: {crossPairSummary.diff}
         · Issue: {crossPairSummary.issue}
+        {#if crossPairSummary.flagged > 0}
+          · Flagged: {crossPairSummary.flagged}
+        {/if}
         {#if crossPairSummary.outdated > 0}
           · <span class="outdated-indicator">Outdated: {crossPairSummary.outdated}</span>
           <button class="btn small rerun-tests" onclick={revalidateOutdated} disabled={crossCompareRunning} title="Re-compare outdated items">
@@ -811,7 +886,7 @@
         <div class="cross-grid">
           {#each crossCurrentList as item}
             {@const smartPass = item.match && item.diffPercentage > 0}
-            {@const crossTag = item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
+            {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
             {@const lastUpdated = getCrossItemLastUpdatedAt(item)}
             <div class="cross-card tag-{crossTag}">
               <div class="cross-card-header">
@@ -833,7 +908,7 @@
                 </div>
                 <div class="cross-badge-group">
                   <div class="cross-badge tag-{crossTag}">
-                    {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
+                    {item.flagged ? 'Flagged' : item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
                   </div>
                   {#if item.outdated}
                     <div class="cross-badge tag-outdated">Outdated</div>
@@ -872,6 +947,11 @@
                 {:else}
                   <button class="btn small" onclick={() => approveCrossItem(item)}>Approve Diff</button>
                 {/if}
+                {#if item.flagged}
+                  <button class="btn small flag" onclick={() => unflagCrossItem(item)}>Unflag</button>
+                {:else}
+                  <button class="btn small flag" onclick={() => flagCrossItem(item)}>Flag</button>
+                {/if}
                 <button
                   class="btn small rerun-tests"
                   onclick={() => rerunTestsForItems([item])}
@@ -889,7 +969,7 @@
         <div class="cross-list">
           {#each crossCurrentList as item}
             {@const smartPass = item.match && item.diffPercentage > 0}
-            {@const crossTag = item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
+            {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
             <div
               class="cross-list-row"
               class:multi-selected={selectedCrossItems.has(getItemKey(item))}
@@ -922,7 +1002,7 @@
                 </span>
               {/if}
               <div class="cross-badge tag-{crossTag}">
-                {item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
+                {item.flagged ? 'Flagged' : item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
               </div>
               {#if item.outdated}
                 <div class="cross-badge tag-outdated">Outdated</div>
@@ -1044,6 +1124,7 @@
   }
 
   .cross-card.tag-approved { border-color: rgba(34, 197, 94, 0.6); }
+  .cross-card.tag-flagged { border-color: rgba(245, 158, 11, 0.75); }
   .cross-card.tag-smart { border-color: rgba(20, 184, 166, 0.6); }
   .cross-card.tag-unapproved { border-color: rgba(239, 68, 68, 0.6); }
   .cross-card.tag-new { border-color: rgba(245, 158, 11, 0.7); }
@@ -1105,6 +1186,7 @@
   }
 
   .cross-badge.tag-approved { background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.4); color: var(--tag-approved); }
+  .cross-badge.tag-flagged { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.45); color: var(--tag-flagged); }
   .cross-badge.tag-smart { background: rgba(20, 184, 166, 0.12); border-color: rgba(20, 184, 166, 0.4); color: var(--tag-smart); }
   .cross-badge.tag-unapproved { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.4); color: var(--tag-unapproved); }
   .cross-badge.tag-new { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.45); color: var(--tag-new); }
@@ -1176,6 +1258,8 @@
   .btn.small.all-selected { background: #22c55e; color: #fff; }
   .btn.small.rerun { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
   .btn.small.rerun:hover:not(:disabled) { background: var(--accent); color: #fff; }
+  .btn.small.flag { background: transparent; border: 1px solid #f59e0b; color: #f59e0b; }
+  .btn.small.flag:hover:not(:disabled) { background: #f59e0b; color: #111827; }
   .btn.small.rerun-tests { background: transparent; border: 1px solid #f59e0b; color: #f59e0b; }
   .btn.small.rerun-tests:hover:not(:disabled) { background: #f59e0b; color: #111827; }
 
@@ -1244,6 +1328,7 @@
   }
   .tag-filter.active { opacity: 1; color: var(--text-strong); }
   .tag-filter.tag-approved { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); color: var(--tag-approved); }
+  .tag-filter.tag-flagged { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-flagged); }
   .tag-filter.tag-smart { border-color: rgba(20, 184, 166, 0.4); background: rgba(20, 184, 166, 0.12); color: var(--tag-smart); }
   .tag-filter.tag-unapproved { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: var(--tag-unapproved); }
   .tag-filter.tag-new { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.12); color: var(--tag-new); }

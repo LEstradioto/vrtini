@@ -11,6 +11,8 @@ import {
   listCrossResults,
   setCrossAcceptance,
   revokeCrossAcceptance,
+  setCrossFlag,
+  revokeCrossFlag,
   clearCrossResults,
   deleteCrossItems,
 } from '../services/cross-compare-service.js';
@@ -203,6 +205,41 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       const { key, itemKey } = request.params;
       const { config } = await loadConfig(project.path, project.configFile);
       const revoked = await revokeCrossAcceptance(project.path, key, itemKey, config as VRTConfig);
+      return reply.send({ success: revoked });
+    }
+  );
+
+  fastify.post<{
+    Params: { id: string };
+    Body: { key: string; itemKey: string; reason?: string };
+  }>('/projects/:id/cross-flag', { preHandler: requireProject }, async (request, reply) => {
+    const project = request.project;
+    if (!project) {
+      reply.code(404);
+      return { error: 'Project not found' };
+    }
+    const { key, itemKey, reason } = request.body;
+    if (!key || !itemKey) {
+      reply.code(400);
+      return { error: 'key and itemKey are required' };
+    }
+    const { config } = await loadConfig(project.path, project.configFile);
+    const record = await setCrossFlag(project.path, key, itemKey, reason, config as VRTConfig);
+    return reply.send({ success: true, flag: { itemKey, ...record } });
+  });
+
+  fastify.delete<{ Params: { id: string; key: string; itemKey: string } }>(
+    '/projects/:id/cross-flag/:key/:itemKey',
+    { preHandler: requireProject },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
+      }
+      const { key, itemKey } = request.params;
+      const { config } = await loadConfig(project.path, project.configFile);
+      const revoked = await revokeCrossFlag(project.path, key, itemKey, config as VRTConfig);
       return reply.send({ success: revoked });
     }
   );

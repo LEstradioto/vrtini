@@ -66,7 +66,8 @@
     state: 'idle',
     message: 'Enter a credential to validate.',
   });
-  let validationRevision = $state(0);
+  // Non-reactive request token to prevent self-triggering validation loops.
+  let validationRevision = 0;
   const VALIDATION_DEBOUNCE_MS = 500;
 
   function buildValidationPayload() {

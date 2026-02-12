@@ -5,6 +5,7 @@
     isCompareMode: boolean;
     displayTitle: string;
     effectiveCompareBadge: { label: string; tone: string } | null;
+    effectiveCompareAIBadge: { label: string; tone: string; detail?: string } | null;
     effectiveCompareUpdatedAt?: { left?: string; right?: string; diff?: string } | null;
     queueUpdatedAt?: { label: string; iso: string } | null;
     hasCompareQueue: boolean;
@@ -46,6 +47,7 @@
     isCompareMode,
     displayTitle,
     effectiveCompareBadge,
+    effectiveCompareAIBadge,
     effectiveCompareUpdatedAt = null,
     queueUpdatedAt = null,
     hasCompareQueue,
@@ -126,6 +128,11 @@
                 {effectiveCompareBadge.label}
               </span>
             {/if}
+            {#if effectiveCompareAIBadge}
+              <span class="compare-badge {`tone-${effectiveCompareAIBadge.tone}`.trim()}">
+                {effectiveCompareAIBadge.label}
+              </span>
+            {/if}
             {#if hasCompareQueue}
               <span class="position-indicator compare-count">
                 {compareIndexValue + 1} / {compareQueueLength}
@@ -176,6 +183,11 @@
                 {diffLabel}: {formatUpdatedAt(effectiveCompareUpdatedAt.diff)}
               </span>
             {/if}
+          </div>
+        {/if}
+        {#if effectiveCompareAIBadge?.detail}
+          <div class="updated-at updated-at--plain">
+            <span class="updated-at-item">AI: {effectiveCompareAIBadge.detail}</span>
           </div>
         {/if}
       </div>
@@ -512,6 +524,21 @@
   .compare-badge.tone-issue {
     border-color: rgba(239, 68, 68, 0.5);
     color: #ef4444;
+  }
+
+  .compare-badge.tone-ai-approved {
+    border-color: rgba(34, 197, 94, 0.65);
+    color: #4ade80;
+  }
+
+  .compare-badge.tone-ai-review {
+    border-color: rgba(234, 179, 8, 0.65);
+    color: #facc15;
+  }
+
+  .compare-badge.tone-ai-rejected {
+    border-color: rgba(244, 63, 94, 0.65);
+    color: #fb7185;
   }
 
   .status-badge {

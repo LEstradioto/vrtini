@@ -414,6 +414,9 @@
       },
       accepted: item.accepted,
       flagged: item.flagged,
+      aiRecommendation: item.aiAnalysis?.recommendation,
+      aiCategory: item.aiAnalysis?.category,
+      aiConfidence: item.aiAnalysis?.confidence,
     }));
   });
 

@@ -94,6 +94,21 @@
   let effectiveCompareMetrics = $derived(activeCompareItem?.metrics ?? compareMetrics);
   let effectiveIsAccepted = $derived(activeCompareItem?.accepted ?? isAccepted);
   let effectiveCompareBadge = $derived(activeCompareItem?.badge ?? null);
+  let effectiveCompareAIBadge = $derived.by(() => {
+    const rec = activeCompareItem?.aiRecommendation;
+    if (!rec) return null;
+    const category = activeCompareItem?.aiCategory;
+    const confidence = activeCompareItem?.aiConfidence;
+    const detail =
+      typeof confidence === 'number'
+        ? `${category ?? 'analysis'} · ${(confidence * 100).toFixed(0)}%`
+        : category ?? undefined;
+    return {
+      label: rec === 'approve' ? 'AI Approve' : rec === 'review' ? 'AI Review' : 'AI Reject',
+      tone: rec === 'approve' ? 'ai-approved' : rec === 'review' ? 'ai-review' : 'ai-rejected',
+      detail,
+    };
+  });
   let effectiveCompareViewport = $derived(activeCompareItem?.viewport ?? compareViewport ?? null);
   let effectiveCompareUpdatedAt = $derived.by(() => {
     if (!effectiveCompareImages) return null;
@@ -984,6 +999,7 @@
     {isCompareMode}
     {displayTitle}
     {effectiveCompareBadge}
+    {effectiveCompareAIBadge}
     effectiveCompareUpdatedAt={effectiveCompareUpdatedAt}
     {queueUpdatedAt}
     {hasCompareQueue}

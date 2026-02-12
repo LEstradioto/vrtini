@@ -43,6 +43,9 @@ export interface CompareQueueItem {
   };
   flagged?: boolean;
   viewport?: string;
+  aiRecommendation?: 'approve' | 'review' | 'reject';
+  aiCategory?: string;
+  aiConfidence?: number;
 }
 
 export type ColumnMode =

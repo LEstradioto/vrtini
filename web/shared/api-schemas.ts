@@ -371,6 +371,35 @@ export const CrossCompareRunResponseSchema = z.object({
   reports: z.array(CrossReportSchema),
 });
 
+export const CrossCompareStartResponseSchema = z.object({
+  jobId: z.string(),
+  status: z.literal('running'),
+  phase: z.enum(['preparing', 'running', 'done']),
+  progress: z.number(),
+  total: z.number(),
+  pairIndex: z.number(),
+  pairTotal: z.number(),
+  currentPairKey: z.string().optional(),
+  currentPairTitle: z.string().optional(),
+  startedAt: z.string(),
+});
+
+export const CrossCompareStatusResponseSchema = z.object({
+  id: z.string(),
+  status: z.enum(['running', 'completed', 'failed']),
+  phase: z.enum(['preparing', 'running', 'done']),
+  progress: z.number(),
+  total: z.number(),
+  pairIndex: z.number(),
+  pairTotal: z.number(),
+  currentPairKey: z.string().optional(),
+  currentPairTitle: z.string().optional(),
+  reports: z.array(CrossReportSchema),
+  error: z.string().optional(),
+  startedAt: z.string(),
+  completedAt: z.string().optional(),
+});
+
 export const CrossResultsResponseSchema = z.object({
   results: CrossResultsSchema,
 });

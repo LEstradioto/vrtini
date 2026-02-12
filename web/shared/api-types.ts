@@ -247,6 +247,35 @@ export interface CrossFlag {
   reason?: string;
 }
 
+export interface CrossCompareStartResponse {
+  jobId: string;
+  status: 'running';
+  phase: 'preparing' | 'running' | 'done';
+  progress: number;
+  total: number;
+  pairIndex: number;
+  pairTotal: number;
+  currentPairKey?: string;
+  currentPairTitle?: string;
+  startedAt: string;
+}
+
+export interface CrossCompareStatusResponse {
+  id: string;
+  status: 'running' | 'completed' | 'failed';
+  phase: 'preparing' | 'running' | 'done';
+  progress: number;
+  total: number;
+  pairIndex: number;
+  pairTotal: number;
+  currentPairKey?: string;
+  currentPairTitle?: string;
+  reports: CrossReport[];
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
+}
+
 // Scenario options (used in scenarios and scenarioDefaults)
 export interface ScenarioOptions {
   waitFor?: 'load' | 'networkidle' | 'domcontentloaded';

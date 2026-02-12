@@ -117,6 +117,18 @@ export interface CrossCompareRunOptions {
   resetAcceptances?: boolean;
 }
 
+export interface CrossCompareProgressUpdate {
+  phase: 'preparing' | 'running' | 'done';
+  pairKey?: string;
+  pairTitle?: string;
+  pairIndex: number;
+  pairTotal: number;
+  itemIndex: number;
+  itemTotal: number;
+  progress: number;
+  total: number;
+}
+
 interface CrossAcceptanceRecord {
   acceptedAt: string;
   reason?: string;
@@ -398,7 +410,8 @@ export async function runCrossCompare(
   projectId: string,
   projectPath: string,
   config: VRTConfig,
-  options: CrossCompareRunOptions = {}
+  options: CrossCompareRunOptions = {},
+  onProgress?: (update: CrossCompareProgressUpdate) => void
 ): Promise<CrossReport[]> {
   const { outputDir } = getProjectDirs(projectPath, config);
   const pairs = buildCrossComparePairs(config.browsers);
@@ -459,10 +472,41 @@ export async function runCrossCompare(
 
   const quickMode = config.quickMode ?? false;
   const enginesConfig = buildEnginesConfig(quickMode, config.engines);
+  const pairTotal = selectedPairs.length;
+  const itemTotalPerPair = scenariosToRun.reduce((acc, scenario) => {
+    for (const viewport of viewportsToRun) {
+      const itemKey = buildItemKey(scenario.name, viewport.name);
+      if (itemKeyFilter && !itemKeyFilter.has(itemKey)) continue;
+      acc += 1;
+    }
+    return acc;
+  }, 0);
+  const totalPlannedItems = pairTotal * itemTotalPerPair;
+
+  const emitProgress = (update: CrossCompareProgressUpdate): void => {
+    if (!onProgress) return;
+    try {
+      onProgress(update);
+    } catch {
+      // Do not fail the run due to progress callback issues.
+    }
+  };
 
   const reports: CrossReport[] = [];
+  let completedItems = 0;
 
-  for (const pair of selectedPairs) {
+  emitProgress({
+    phase: 'preparing',
+    pairIndex: 0,
+    pairTotal,
+    itemIndex: 0,
+    itemTotal: itemTotalPerPair,
+    progress: 0,
+    total: totalPlannedItems,
+  });
+
+  for (let pairIndex = 0; pairIndex < selectedPairs.length; pairIndex++) {
+    const pair = selectedPairs[pairIndex];
     const items: CrossResultItem[] = [];
     const updatedItemKeys: string[] = [];
     const diffDir = resolve(outputDir, 'cross-diffs', pair.key);
@@ -484,6 +528,19 @@ export async function runCrossCompare(
         existingItemsByKey.set(itemKey, { ...item, itemKey });
       }
     }
+
+    let pairItemIndex = 0;
+    emitProgress({
+      phase: 'running',
+      pairKey: pair.key,
+      pairTitle: pair.title,
+      pairIndex: pairIndex + 1,
+      pairTotal,
+      itemIndex: 0,
+      itemTotal: itemTotalPerPair,
+      progress: completedItems,
+      total: totalPlannedItems,
+    });
 
     for (const scenario of scenariosToRun) {
       for (const viewport of viewportsToRun) {
@@ -550,6 +607,19 @@ export async function runCrossCompare(
         if (isFilteredRun) {
           existingItemsByKey.set(itemKey, item);
         }
+        pairItemIndex += 1;
+        completedItems += 1;
+        emitProgress({
+          phase: 'running',
+          pairKey: pair.key,
+          pairTitle: pair.title,
+          pairIndex: pairIndex + 1,
+          pairTotal,
+          itemIndex: pairItemIndex,
+          itemTotal: itemTotalPerPair,
+          progress: completedItems,
+          total: totalPlannedItems,
+        });
       }
     }
 
@@ -627,6 +697,16 @@ export async function runCrossCompare(
       url: `/api/projects/${projectId}/cross-reports/${pair.key}`,
     });
   }
+
+  emitProgress({
+    phase: 'done',
+    pairIndex: pairTotal,
+    pairTotal,
+    itemIndex: itemTotalPerPair,
+    itemTotal: itemTotalPerPair,
+    progress: completedItems,
+    total: totalPlannedItems,
+  });
 
   return reports;
 }

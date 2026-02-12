@@ -6,6 +6,7 @@
     type CrossResults,
     type CrossResultsSummary,
     type CrossReport,
+    type CrossCompareStatusResponse,
     type AIAnalysisResult,
   } from '../lib/api';
   import { getErrorMessage } from '../lib/errors';
@@ -63,6 +64,7 @@
 
   // Cross-compare state
   let crossCompareRunning = $state(false);
+  let crossRunJobId = $state<string | null>(null);
   let crossRunProgress = $state(0);
   let crossRunProgressLabel = $state('');
   let crossCompareError = $state<string | null>(null);
@@ -174,24 +176,10 @@
     return [...map.values()];
   }
 
-  let crossProgressTimer: ReturnType<typeof setInterval> | null = null;
-
-  function stopCrossProgressTimer() {
-    if (!crossProgressTimer) return;
-    clearInterval(crossProgressTimer);
-    crossProgressTimer = null;
-  }
-
   function startCrossProgress(label: string) {
-    stopCrossProgressTimer();
+    crossRunJobId = null;
     crossRunProgress = 4;
     crossRunProgressLabel = label;
-    crossProgressTimer = setInterval(() => {
-      crossRunProgress = Math.min(
-        99,
-        crossRunProgress + Math.max(1, Math.round((99 - crossRunProgress) * 0.08))
-      );
-    }, 320);
   }
 
   function advanceCrossProgress(minProgress: number, label?: string) {
@@ -199,22 +187,54 @@
     if (label) crossRunProgressLabel = label;
   }
 
+  function applyCrossJobStatus(status: CrossCompareStatusResponse): void {
+    if (status.total > 0) {
+      const raw = (status.progress / status.total) * 100;
+      const percent = Math.max(4, Math.min(99, Math.round(raw)));
+      crossRunProgress = Math.max(crossRunProgress, percent);
+    } else {
+      crossRunProgress = Math.max(crossRunProgress, 6);
+    }
+
+    const pairLabel =
+      status.pairTotal > 0
+        ? `Pair ${Math.max(1, Math.min(status.pairIndex || 1, status.pairTotal))}/${status.pairTotal}`
+        : 'Preparing pair set';
+    const currentPair = status.currentPairTitle ? ` · ${status.currentPairTitle}` : '';
+    const itemLabel =
+      status.total > 0
+        ? status.progress >= status.total
+          ? 'Finalizing report files...'
+          : `${status.progress}/${status.total} items`
+        : 'Estimating workload...';
+    crossRunProgressLabel = `${pairLabel}${currentPair} · ${itemLabel}`;
+  }
+
+  async function waitForCrossCompareJob(jobId: string): Promise<CrossCompareStatusResponse> {
+    for (;;) {
+      const status = await crossCompare.status(projectId, jobId);
+      applyCrossJobStatus(status);
+      if (status.status !== 'running') return status;
+      await sleep(700);
+    }
+  }
+
   function finishCrossProgress() {
-    stopCrossProgressTimer();
     crossRunProgress = 100;
     crossRunProgressLabel = 'Cross-compare complete';
     setTimeout(() => {
       if (!crossCompareRunning) {
         crossRunProgress = 0;
         crossRunProgressLabel = '';
+        crossRunJobId = null;
       }
     }, 700);
   }
 
   function resetCrossProgress() {
-    stopCrossProgressTimer();
     crossRunProgress = 0;
     crossRunProgressLabel = '';
+    crossRunJobId = null;
   }
 
   function applyCrossPrefs(reports: CrossResultsSummary[]): void {
@@ -253,16 +273,22 @@
     startCrossProgress(options?.key ? 'Running selected pair...' : 'Running all pairs...');
     let success = false;
     try {
-      const runResponse = await crossCompare.run(projectId, options);
-      advanceCrossProgress(68, 'Refreshing pair list...');
+      const started = await crossCompare.start(projectId, options);
+      crossRunJobId = started.jobId;
+      const status = await waitForCrossCompareJob(started.jobId);
+      if (status.status === 'failed') {
+        throw new Error(status.error || 'Cross compare failed');
+      }
+
+      advanceCrossProgress(90, 'Refreshing pair list...');
       const list = await crossCompare.list(projectId);
-      const fallbackFromRun = (runResponse.reports ?? []).map(toSummaryFromCrossReport);
+      const fallbackFromRun = (status.reports ?? []).map(toSummaryFromCrossReport);
       crossReports = keepUniqueReports(
         list.results.length > 0 ? list.results : fallbackFromRun
       );
-      advanceCrossProgress(82, 'Loading results...');
+      advanceCrossProgress(95, 'Loading results...');
       const nextKey = options?.key ?? crossReports[0]?.key ?? null;
-      const ranKeys = new Set((runResponse.reports ?? []).map((report) => report.key));
+      const ranKeys = new Set((status.reports ?? []).map((report) => report.key));
       if (nextKey) {
         selectedCrossKey = nextKey;
         const nextReport = getReportByKey(nextKey);
@@ -274,7 +300,7 @@
         }
         onSetActiveTab('cross');
       }
-      advanceCrossProgress(96);
+      advanceCrossProgress(99);
       success = true;
     } catch (err) {
       crossCompareError = getErrorMessage(err, 'Cross compare failed');
@@ -936,8 +962,20 @@
         <span>{Math.round(crossRunProgress)}%</span>
       </div>
       <div class="cross-run-progress-track">
-        <div class="cross-run-progress-fill" style="width: {crossRunProgress}%"></div>
+        <div
+          class="cross-run-progress-fill"
+          class:running={crossCompareRunning}
+          style="width: {crossRunProgress}%"
+        ></div>
       </div>
+      <div class="cross-run-progress-meta">
+        <span>{crossRunJobId ? `Job ${crossRunJobId}` : 'Starting server job...'}</span>
+      </div>
+      {#if crossRunProgress >= 99}
+        <div class="cross-run-progress-note">
+          Finalizing output on server. This step can take longer on large projects.
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1286,6 +1324,40 @@
     height: 100%;
     background: var(--accent);
     transition: width 0.25s ease;
+  }
+
+  .cross-run-progress-fill.running {
+    background: linear-gradient(
+      110deg,
+      var(--accent) 0%,
+      var(--accent) 38%,
+      color-mix(in srgb, var(--accent) 70%, white 30%) 55%,
+      var(--accent) 72%,
+      var(--accent) 100%
+    );
+    background-size: 28px 100%;
+    animation: cross-progress-stripes 0.8s linear infinite;
+  }
+
+  @keyframes cross-progress-stripes {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 28px 0;
+    }
+  }
+
+  .cross-run-progress-meta {
+    margin-top: 0.35rem;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+  }
+
+  .cross-run-progress-note {
+    margin-top: 0.25rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
   }
 
   .cross-search-bar .search-input {

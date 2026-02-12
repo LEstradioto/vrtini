@@ -21,6 +21,8 @@ import type {
   CrossResultsSummary,
   CrossAcceptance,
   CrossFlag,
+  CrossCompareStartResponse,
+  CrossCompareStatusResponse,
   VRTConfig,
   Scenario,
   ScenarioOptions,
@@ -42,6 +44,8 @@ import {
   ImageResultsResponseSchema,
   CompareResultSchema,
   CrossCompareRunResponseSchema,
+  CrossCompareStartResponseSchema,
+  CrossCompareStatusResponseSchema,
   CrossResultsResponseSchema,
   CrossResultsListResponseSchema,
   CrossDeleteResponseSchema,
@@ -86,6 +90,8 @@ export type {
   CrossResultsSummary,
   CrossAcceptance,
   CrossFlag,
+  CrossCompareStartResponse,
+  CrossCompareStatusResponse,
   VRTConfig,
   Scenario,
   ScenarioOptions,
@@ -326,6 +332,30 @@ export const crossCompare = {
         body: options ? JSON.stringify(options) : undefined,
       },
       CrossCompareRunResponseSchema
+    ),
+  start: (
+    projectId: string,
+    options?: {
+      key?: string;
+      itemKeys?: string[];
+      scenarios?: string[];
+      viewports?: string[];
+      resetAcceptances?: boolean;
+    }
+  ) =>
+    request(
+      `${projectPath(projectId)}/cross-compare`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...(options ?? {}), async: true }),
+      },
+      CrossCompareStartResponseSchema
+    ),
+  status: (projectId: string, jobId: string) =>
+    request(
+      `${projectPath(projectId)}/cross-compare-jobs/${jobId}`,
+      {},
+      CrossCompareStatusResponseSchema
     ),
   getResults: (projectId: string, key: string) =>
     request(`${projectPath(projectId)}/cross-results/${key}`, {}, CrossResultsResponseSchema),

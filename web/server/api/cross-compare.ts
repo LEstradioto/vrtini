@@ -16,6 +16,12 @@ import {
   clearCrossResults,
   deleteCrossItems,
 } from '../services/cross-compare-service.js';
+import {
+  createCrossCompareJob,
+  getCrossCompareJob,
+  getCrossCompareJobStatus,
+  startCrossCompareRun,
+} from '../services/cross-compare-job-service.js';
 
 function rewriteReportImageSources(
   html: string,
@@ -45,6 +51,14 @@ function rewriteReportImageSources(
   });
 }
 
+function getJobForProject(jobId: string, projectId: string) {
+  const job = getCrossCompareJob(jobId);
+  if (!job || job.projectId !== projectId) {
+    return null;
+  }
+  return job;
+}
+
 export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
@@ -54,6 +68,7 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       scenarios?: string[];
       viewports?: string[];
       resetAcceptances?: boolean;
+      async?: boolean;
     };
   }>(
     '/projects/:id/cross-compare',
@@ -66,19 +81,78 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const { config } = await loadConfig(project.path, project.configFile);
       try {
-        const reports = await runCrossCompare(project.id, project.path, config as VRTConfig, {
+        const options = {
           key: request.body?.key,
           itemKeys: request.body?.itemKeys,
           scenarios: request.body?.scenarios,
           viewports: request.body?.viewports,
           resetAcceptances: request.body?.resetAcceptances,
-        });
+        };
+        if (request.body?.async) {
+          const job = createCrossCompareJob(project.id);
+          void startCrossCompareRun(job, project.path, config as VRTConfig, options);
+          reply.code(202);
+          return reply.send({
+            jobId: job.id,
+            status: job.status,
+            phase: job.phase,
+            progress: job.progress,
+            total: job.total,
+            pairIndex: job.pairIndex,
+            pairTotal: job.pairTotal,
+            currentPairKey: job.currentPairKey,
+            currentPairTitle: job.currentPairTitle,
+            startedAt: job.startedAt,
+          });
+        }
+
+        const reports = await runCrossCompare(
+          project.id,
+          project.path,
+          config as VRTConfig,
+          options
+        );
         return reply.send({ reports });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Cross compare failed';
         reply.code(400);
         return { error: message };
       }
+    }
+  );
+
+  fastify.get<{ Params: { id: string; jobId: string } }>(
+    '/projects/:id/cross-compare-jobs/:jobId',
+    { preHandler: requireProject },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
+      }
+
+      const job = getJobForProject(request.params.jobId, request.params.id);
+      if (!job) {
+        reply.code(404);
+        return { error: 'Job not found' };
+      }
+
+      const status = getCrossCompareJobStatus(job);
+      return reply.send({
+        id: status.id,
+        status: status.status,
+        phase: status.phase,
+        progress: status.progress,
+        total: status.total,
+        pairIndex: status.pairIndex,
+        pairTotal: status.pairTotal,
+        currentPairKey: status.currentPairKey,
+        currentPairTitle: status.currentPairTitle,
+        reports: status.reports,
+        error: status.error,
+        startedAt: status.startedAt,
+        completedAt: status.completedAt,
+      });
     }
   );
 

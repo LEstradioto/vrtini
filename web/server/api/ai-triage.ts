@@ -3,10 +3,7 @@ import { resolve } from 'path';
 import { requireProject } from '../plugins/project.js';
 import { loadConfig } from '../services/project-service.js';
 import type { VRTConfig } from '../../../src/core/config.js';
-import {
-  loadCrossResults,
-  saveCrossItemAIResults,
-} from '../services/cross-compare-service.js';
+import { loadCrossResults, saveCrossItemAIResults } from '../services/cross-compare-service.js';
 import { analyzeWithAI, type AIAnalysisOptions } from '../../../src/ai-analysis.js';
 import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
 
@@ -37,8 +34,8 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
       const crossResults = await loadCrossResults(project.path, vrtConfig, key);
       const requestedKeys = request.body?.itemKeys;
       const targetItems = requestedKeys?.length
-        ? crossResults.items.filter(
-            (item) => requestedKeys.includes(item.itemKey ?? `${item.scenario}__${item.viewport}`)
+        ? crossResults.items.filter((item) =>
+            requestedKeys.includes(item.itemKey ?? `${item.scenario}__${item.viewport}`)
           )
         : crossResults.items;
 

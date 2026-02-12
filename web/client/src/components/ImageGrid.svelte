@@ -4,14 +4,16 @@
   type ImageStatus = 'passed' | 'failed' | 'new';
   type ImageTag = 'all' | 'passed' | 'failed' | 'new' | 'approved' | 'unapproved' | 'diff' | 'auto-review';
   type ViewMode = 'grid' | 'list';
+  type SortMode = 'name' | 'diff';
 
   const VIEW_MODE_KEY = 'vrt-image-view-mode';
+  const SORT_MODE_KEY = 'vrt-image-sort-mode';
 
   let {
-    currentList,
-    fullList,
+    currentList: currentListProp,
+    fullList: fullListProp,
     rawList,
-    totalPages,
+    totalPages: totalPagesProp,
     currentPage = $bindable(),
     searchQuery = $bindable(),
     tagFilter = $bindable(),
@@ -52,6 +54,31 @@
     metadataMap: Map<string, ImageMetadata>;
     onOpenGallery: (filename: string) => void;
   }>();
+
+  let sortMode = $state<SortMode>((localStorage.getItem(SORT_MODE_KEY) as SortMode) || 'name');
+
+  function setSortMode(mode: SortMode) {
+    sortMode = mode;
+    localStorage.setItem(SORT_MODE_KEY, mode);
+  }
+
+  // Sort fullList by diff % descending when sortMode is 'diff'
+  let fullList = $derived.by(() => {
+    if (sortMode !== 'diff' || !imageResults) return fullListProp;
+    return [...fullListProp].sort((a, b) => {
+      const aDiff = imageResults[a]?.metrics?.diffPercentage ?? -1;
+      const bDiff = imageResults[b]?.metrics?.diffPercentage ?? -1;
+      return bDiff - aDiff;
+    });
+  });
+
+  let currentList = $derived.by(() => {
+    if (sortMode !== 'diff' || !imageResults) return currentListProp;
+    const PAGE_SIZE = Math.ceil(fullListProp.length / (totalPagesProp || 1));
+    return fullList.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  });
+
+  let totalPages = $derived(sortMode === 'diff' && imageResults ? totalPagesProp : totalPagesProp);
 
   let debouncedSearchQuery = $state('');
   let loadedImages = $state<Set<string>>(new Set());
@@ -177,6 +204,11 @@
       <button class="view-toggle" class:active={viewMode === 'list'} onclick={() => setViewMode('list')} title="List view">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
+      <span class="view-divider"></span>
+      <button class="sort-toggle" class:active={sortMode === 'diff'} onclick={() => setSortMode(sortMode === 'diff' ? 'name' : 'diff')} title={sortMode === 'diff' ? 'Sort by name' : 'Sort by diff % (highest first)'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h12M3 18h6"/></svg>
+        {sortMode === 'diff' ? '% ↓' : 'A-Z'}
+      </button>
     </div>
   </div>
 
@@ -206,6 +238,7 @@
           {@const checked = isSelected(filename)}
           {@const meta = metadataMap.get(filename)}
           {@const tag = getTagFor(filename)}
+          {@const result = imageResults?.[filename]}
           <div
             class="image-card"
             class:multi-selected={checked}
@@ -234,7 +267,12 @@
                   {/if}
                 </div>
               </div>
-              <div class="image-tag tag-{tag}">{getTagLabel(tag)}</div>
+              <div class="card-badges">
+                {#if result?.metrics}
+                  <span class="card-diff" style="color: {getDiffColor(result.metrics.diffPercentage)}">{result.metrics.diffPercentage.toFixed(2)}%</span>
+                {/if}
+                <div class="image-tag tag-{tag}">{getTagLabel(tag)}</div>
+              </div>
             </div>
             <div class="image-thumb">
               <label class="checkbox-wrapper" class:visible={checked} onclick={(e) => e.stopPropagation()}>
@@ -444,6 +482,8 @@
   .image-card.tag-passed { border-color: rgba(56, 189, 248, 0.7); }
 
   .image-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
+  .card-badges { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+  .card-diff { font-size: 0.75rem; font-weight: 700; font-family: var(--font-mono, monospace); white-space: nowrap; }
   .image-card-title { min-width: 0; }
   .image-title { font-size: 0.85rem; font-weight: 600; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .image-meta { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.15rem; }
@@ -512,6 +552,15 @@
   }
   .view-toggle:hover { color: var(--text-strong); border-color: var(--text-muted); }
   .view-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+
+  .sort-toggle {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0 0.5rem; height: 28px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); cursor: pointer;
+    font-size: 0.7rem; font-family: var(--font-mono, monospace); transition: all 0.15s;
+  }
+  .sort-toggle:hover { color: var(--text-strong); border-color: var(--text-muted); }
+  .sort-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
 
   /* List view */
   .image-list {

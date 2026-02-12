@@ -74,6 +74,14 @@
     return '#ef4444';
   }
 
+  type SortMode = 'name' | 'diff';
+  const CROSS_SORT_KEY = 'vrt-cross-sort-mode';
+  let crossSortMode = $state<SortMode>((localStorage.getItem(CROSS_SORT_KEY) as SortMode) || 'name');
+  function setCrossSortMode(mode: SortMode) {
+    crossSortMode = mode;
+    localStorage.setItem(CROSS_SORT_KEY, mode);
+  }
+
   // Preferences persistence
   function getCrossPrefsKey(): string {
     return `vrt:cross-prefs:${projectId}`;
@@ -477,12 +485,16 @@
   let crossFilteredItems = $derived.by((): CrossResultItem[] => {
     if (!crossResults) return [];
     const q = crossSearchQuery.trim().toLowerCase();
-    return crossResults.items.filter((item) => {
+    const filtered = crossResults.items.filter((item) => {
       if (crossHideApproved && item.accepted) return false;
       if (!matchesCrossStatusSet(item, crossStatusFilter)) return false;
       if (!q) return true;
       return `${item.scenario} ${item.viewport}`.toLowerCase().includes(q);
     });
+    if (crossSortMode === 'diff') {
+      filtered.sort((a, b) => b.diffPercentage - a.diffPercentage);
+    }
+    return filtered;
   });
 
   let crossTotalPages = $derived(Math.ceil(crossFilteredItems.length / CROSS_PAGE_SIZE));
@@ -677,28 +689,17 @@
       <button class="tag-filter" class:active={crossHideApproved} onclick={() => crossHideApproved = !crossHideApproved} title="Hide approved items from results">Hide Approved</button>
     </div>
     <div class="cross-selection-controls">
-      {#if selectedCrossCount === 0}
-        <button
-          class="btn small rerun"
-          onclick={rerunFilteredCrossItems}
-          disabled={crossFilteredItems.length === 0 || crossCompareRunning || crossTestRunning}
-        >
-          {crossCompareRunning ? 'Running...' : `Rerun Compare Filtered (${crossFilteredItems.length})`}
-        </button>
-        <button
-          class="btn small rerun-tests"
-          onclick={rerunFilteredCrossItemTests}
-          disabled={crossFilteredItems.length === 0 || crossCompareRunning || crossTestRunning}
-        >
-          {crossTestRunning ? 'Rerunning...' : `Rerun Tests Filtered (${crossFilteredItems.length})`}
-        </button>
-      {/if}
       <span class="view-divider"></span>
       <button class="view-toggle" class:active={crossViewMode === 'grid'} onclick={() => setCrossViewMode('grid')} title="Grid view">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       </button>
       <button class="view-toggle" class:active={crossViewMode === 'list'} onclick={() => setCrossViewMode('list')} title="List view">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <span class="view-divider"></span>
+      <button class="sort-toggle" class:active={crossSortMode === 'diff'} onclick={() => setCrossSortMode(crossSortMode === 'diff' ? 'name' : 'diff')} title={crossSortMode === 'diff' ? 'Sort by name' : 'Sort by diff % (highest first)'}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h12M3 18h6"/></svg>
+        {crossSortMode === 'diff' ? '% ↓' : 'A-Z'}
       </button>
     </div>
   </div>
@@ -1204,6 +1205,15 @@
   }
   .view-toggle:hover { color: var(--text-strong); border-color: var(--text-muted); }
   .view-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+
+  .sort-toggle {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0 0.5rem; height: 28px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-muted); cursor: pointer;
+    font-size: 0.7rem; font-family: var(--font-mono, monospace); transition: all 0.15s;
+  }
+  .sort-toggle:hover { color: var(--text-strong); border-color: var(--text-muted); }
+  .sort-toggle.active { color: var(--accent); border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
 
   /* Cross list view */
   .cross-list { display: flex; flex-direction: column; }

@@ -84,6 +84,11 @@
           Rerun ({selectedCount})
         </button>
       {/if}
+      {#if onAITriage}
+        <button class="btn ai-triage" onclick={onAITriage} disabled={bulkOperating || aiTriageRunning}>
+          {aiTriageRunning ? 'AI Triaging...' : `AI Triage (${selectedCount})`}
+        </button>
+      {/if}
       {#if onDelete}
         <button class="btn danger" onclick={onDelete} disabled={bulkOperating}>Delete ({selectedCount})</button>
       {/if}

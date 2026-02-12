@@ -141,6 +141,12 @@
   let analysisResults = $state<Array<{ filename: string; analysis?: AIAnalysisResult; error?: string }>>([]);
   let showAnalysisModal = $state(false);
   let aiAnalysisCache = $state<Record<string, AIAnalysisResult>>({});
+  type AnalyzeItemInput = {
+    baseline: { type: 'baseline' | 'test'; filename: string };
+    test: { type: 'baseline' | 'test'; filename: string };
+    diff?: { type: 'diff' | 'custom-diff'; filename: string };
+    name?: string;
+  };
 
   // Compare fullscreen modal state
   let showCompareFullscreen = $state(false);
@@ -746,23 +752,10 @@
     }
   }
 
-  async function handleAnalyze(filenames: string[]) {
-    if (!compareLeft || !compareRight) {
-      error = 'Select images to compare before analyzing';
-      return;
-    }
-
+  async function runAnalyzeItems(items: AnalyzeItemInput[]): Promise<void> {
+    if (items.length === 0) return;
     try {
       analyzing = true;
-      const items = filenames.map((filename) => ({
-        baseline: { type: compareLeft!.type, filename: compareLeft!.filename },
-        test: { type: compareRight!.type, filename },
-        diff: compareResult?.diffFilename
-          ? { type: 'custom-diff' as const, filename: compareResult.diffFilename }
-          : undefined,
-        name: filename,
-      }));
-
       const result = await analyze.run(projectId, items);
       analysisResults = result.results;
 
@@ -772,12 +765,76 @@
         }
       }
       aiAnalysisCache = { ...aiAnalysisCache };
-
       showAnalysisModal = true;
     } catch (err) {
       error = getErrorMessage(err, 'AI analysis failed');
     } finally {
       analyzing = false;
+    }
+  }
+
+  async function handleAnalyze(filenames: string[]) {
+    if (!compareLeft || !compareRight) {
+      error = 'Select images to compare before analyzing';
+      return;
+    }
+
+    const items: AnalyzeItemInput[] = filenames.map((filename) => ({
+      baseline: { type: compareLeft.type, filename: compareLeft.filename },
+      test: { type: compareRight.type, filename },
+      diff: compareResult?.diffFilename
+        ? { type: 'custom-diff', filename: compareResult.diffFilename }
+        : undefined,
+      name: filename,
+    }));
+
+    await runAnalyzeItems(items);
+  }
+
+  function buildTriageItems(
+    filenames: string[]
+  ): { items: AnalyzeItemInput[]; skippedNoBaseline: number; skippedNoTest: number } {
+    const unique = [...new Set(filenames)];
+    const items: AnalyzeItemInput[] = [];
+    let skippedNoBaseline = 0;
+    let skippedNoTest = 0;
+
+    for (const filename of unique) {
+      if (!store.testsSet.has(filename)) {
+        skippedNoTest += 1;
+        continue;
+      }
+      if (!store.baselinesSet.has(filename)) {
+        skippedNoBaseline += 1;
+        continue;
+      }
+
+      const meta = store.testMetadataMap.get(filename) ?? store.baselineMetadataMap.get(filename);
+      items.push({
+        baseline: { type: 'baseline', filename },
+        test: { type: 'test', filename },
+        diff: store.diffsSet.has(filename) ? { type: 'diff', filename } : undefined,
+        name: meta?.scenario ?? filename,
+      });
+    }
+
+    return { items, skippedNoBaseline, skippedNoTest };
+  }
+
+  async function handleAITriage(filenames: string[]) {
+    const { items, skippedNoBaseline, skippedNoTest } = buildTriageItems(filenames);
+    if (items.length === 0) {
+      showToast('No comparable baseline/test pairs selected for AI triage', 'error');
+      return;
+    }
+
+    await runAnalyzeItems(items);
+
+    if (skippedNoBaseline > 0 || skippedNoTest > 0) {
+      const skippedParts: string[] = [];
+      if (skippedNoBaseline > 0) skippedParts.push(`${skippedNoBaseline} missing baseline`);
+      if (skippedNoTest > 0) skippedParts.push(`${skippedNoTest} missing test`);
+      showToast(`AI triage skipped ${skippedParts.join(', ')}`, 'error');
     }
   }
 
@@ -1196,6 +1253,8 @@
     onApprove={handleBulkApprove}
     onReject={handleBulkReject}
     onRerun={handleBulkRerun}
+    onAITriage={() => handleAITriage([...selectedImages])}
+    aiTriageRunning={analyzing}
     onDelete={handleBulkDelete}
     onSelectAll={() => { selectedImages = new Set(fullList); }}
     onCancel={deselectAll}
@@ -1239,6 +1298,8 @@
     onApprove={handleGalleryApprove}
     onReject={handleGalleryReject}
     onRerun={handleRerun}
+    onAnalyze={(filename) => filename && handleAITriage([filename])}
+    analyzing={analyzing}
     testRunning={!!testState}
     {getImageUrl}
     getImageMetadata={(type, filename) => store.getMetadataForType(type, filename)}

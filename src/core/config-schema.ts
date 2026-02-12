@@ -117,6 +117,7 @@ const AIAnalysisSchema = z.object({
   authToken: z.string().optional(),
   model: z.string().optional(),
   baseUrl: z.string().url().optional(),
+  manualOnly: z.boolean().default(false),
   // Only analyze diffs that exceed these thresholds (to save API costs)
   analyzeThreshold: z
     .object({

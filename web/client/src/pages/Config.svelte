@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, projects, type VRTConfig, type Project } from '../lib/api';
+  import { analyze, config, projects, type AIProviderStatus, type Project, type VRTConfig } from '../lib/api';
   import { getErrorMessage } from '../lib/errors';
   import { getAppContext } from '../lib/app-context';
   import BrowserList from '../components/BrowserList.svelte';
@@ -18,16 +18,19 @@
   let error = $state<string | null>(null);
   let success = $state<string | null>(null);
   let showScenarioDefaults = $state(false);
+  let providerStatuses = $state<AIProviderStatus[] | null>(null);
 
   async function loadConfig() {
     try {
       loading = true;
-      const [projRes, configRes] = await Promise.all([
+      const [projRes, configRes, providerStatusRes] = await Promise.all([
         projects.get(projectId),
         config.get(projectId),
+        analyze.providerStatus(projectId).catch(() => null),
       ]);
       project = projRes.project;
       configData = JSON.parse(JSON.stringify(configRes.config));
+      providerStatuses = providerStatusRes?.providers ?? null;
 
       if (configData.scenarioDefaults && Object.keys(configData.scenarioDefaults).length > 0) {
         showScenarioDefaults = true;
@@ -250,7 +253,7 @@
       <ScenarioList bind:scenarios={configData.scenarios} />
 
       <!-- AI Settings Section -->
-      <AISettings config={configData} />
+      <AISettings config={configData} providerStatuses={providerStatuses} />
 
       <!-- Remove Project -->
       <div class="danger-zone">

@@ -65,6 +65,7 @@ export type ChangeCategory =
   | 'noise';
 export type Severity = 'critical' | 'warning' | 'info';
 export type Recommendation = 'approve' | 'review' | 'reject';
+export type AIProviderName = 'anthropic' | 'openai' | 'openrouter' | 'google';
 
 export interface AIAnalysisResult {
   category: ChangeCategory;
@@ -77,6 +78,19 @@ export interface AIAnalysisResult {
   provider: string;
   model: string;
   tokensUsed?: number;
+}
+
+export interface AIProviderStatus {
+  provider: AIProviderName;
+  configured: boolean;
+  active: boolean;
+  source: 'config' | 'env' | 'config+env' | 'none';
+  detail: string;
+}
+
+export interface AIProviderStatusResponse {
+  activeProvider: AIProviderName | null;
+  providers: AIProviderStatus[];
 }
 
 export interface DomDiffSummary {
@@ -254,11 +268,12 @@ export interface VRTConfig {
   };
   ai?: {
     enabled: boolean;
-    provider: 'anthropic' | 'openai' | 'openrouter' | 'google';
+    provider: AIProviderName;
     apiKey?: string;
     authToken?: string;
     model?: string;
     baseUrl?: string;
+    manualOnly?: boolean;
     analyzeThreshold: {
       maxPHashSimilarity: number;
       maxSSIM: number;

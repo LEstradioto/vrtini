@@ -29,13 +29,128 @@ interface AnalyzeResultItem {
   error?: string;
 }
 
+interface LoadedAIConfig {
+  provider: AIProvider;
+  apiKey?: string;
+  authToken?: string;
+  model?: string;
+  baseUrl?: string;
+}
+
+interface ProviderStatus {
+  provider: AIProvider;
+  configured: boolean;
+  active: boolean;
+  source: 'config' | 'env' | 'config+env' | 'none';
+  detail: string;
+}
+
+const PROVIDERS: AIProvider[] = ['anthropic', 'openai', 'openrouter', 'google'];
+
+function hasEnvCredential(provider: AIProvider): boolean {
+  switch (provider) {
+    case 'anthropic':
+      return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+    case 'openai':
+      return !!process.env.OPENAI_API_KEY;
+    case 'openrouter':
+      return !!process.env.OPENROUTER_API_KEY;
+    case 'google':
+      return !!process.env.GOOGLE_API_KEY;
+    default:
+      return false;
+  }
+}
+
+function hasConfigCredential(aiConfig: LoadedAIConfig | undefined, provider: AIProvider): boolean {
+  if (!aiConfig || aiConfig.provider !== provider) return false;
+  if (provider === 'anthropic') return !!(aiConfig.apiKey || aiConfig.authToken);
+  return !!aiConfig.apiKey;
+}
+
+function providerDetail(provider: AIProvider): string {
+  switch (provider) {
+    case 'anthropic':
+      return 'Needs ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN';
+    case 'openai':
+      return 'Needs OPENAI_API_KEY';
+    case 'openrouter':
+      return 'Needs OPENROUTER_API_KEY';
+    case 'google':
+      return 'Needs GOOGLE_API_KEY';
+    default:
+      return 'Not configured';
+  }
+}
+
+function getProviderStatuses(aiConfig?: LoadedAIConfig): ProviderStatus[] {
+  return PROVIDERS.map((provider) => {
+    const configReady = hasConfigCredential(aiConfig, provider);
+    const envReady = hasEnvCredential(provider);
+    const configured = configReady || envReady;
+    const source: ProviderStatus['source'] = configReady
+      ? envReady
+        ? 'config+env'
+        : 'config'
+      : envReady
+        ? 'env'
+        : 'none';
+
+    let detail = providerDetail(provider);
+    if (source === 'config+env') detail = 'Configured via project + environment';
+    else if (source === 'config') detail = 'Configured in project settings';
+    else if (source === 'env') detail = 'Configured via environment variable';
+
+    return {
+      provider,
+      configured,
+      active: aiConfig?.provider === provider,
+      source,
+      detail,
+    };
+  });
+}
+
 function resolveProvider(): AIProvider | null {
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return 'anthropic';
   if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
+  if (process.env.GOOGLE_API_KEY) return 'google';
   return null;
 }
 
 export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get<{
+    Params: { id: string };
+  }>('/projects/:id/analyze/providers', { preHandler: requireProject }, async (request, reply) => {
+    const project = request.project;
+    if (!project) {
+      reply.code(404);
+      return { error: 'Project not found' };
+    }
+
+    let aiConfig: LoadedAIConfig | undefined;
+    try {
+      const config = await loadProjectConfig(project.path, project.configFile);
+      if (config.ai?.provider) {
+        aiConfig = {
+          provider: config.ai.provider,
+          apiKey: config.ai.apiKey,
+          authToken: config.ai.authToken,
+          model: config.ai.model,
+          baseUrl: config.ai.baseUrl,
+        };
+      }
+    } catch {
+      // Ignore config errors and only surface environment status.
+    }
+
+    return {
+      activeProvider: aiConfig?.provider ?? null,
+      providers: getProviderStatuses(aiConfig),
+    };
+  });
+
   // Analyze images using AI
   fastify.post<{
     Params: { id: string };
@@ -58,9 +173,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       // Load project config to get AI settings
-      let aiConfig:
-        | { provider: AIProvider; apiKey?: string; authToken?: string; model?: string }
-        | undefined;
+      let aiConfig: LoadedAIConfig | undefined;
 
       try {
         const config = await loadProjectConfig(project.path, project.configFile);
@@ -70,6 +183,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
             apiKey: config.ai.apiKey,
             authToken: config.ai.authToken,
             model: config.ai.model,
+            baseUrl: config.ai.baseUrl,
           };
         }
       } catch {
@@ -83,7 +197,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
         reply.code(400);
         return {
           error:
-            'AI not configured. Set ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN (Claude Max), or OPENAI_API_KEY, or configure AI in project settings.',
+            'AI not configured. Set ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN, OPENAI_API_KEY, OPENROUTER_API_KEY, or GOOGLE_API_KEY, or configure AI in project settings.',
         };
       }
 
@@ -113,6 +227,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
             apiKey: aiConfig?.apiKey,
             authToken: aiConfig?.authToken,
             model: aiConfig?.model,
+            baseUrl: aiConfig?.baseUrl,
             scenarioName: item.name || item.test.filename,
           });
 
@@ -146,6 +261,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
             apiKey: aiConfig?.apiKey,
             authToken: aiConfig?.authToken,
             model: aiConfig?.model,
+            baseUrl: aiConfig?.baseUrl,
           },
           3 // concurrency
         );

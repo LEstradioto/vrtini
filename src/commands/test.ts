@@ -117,6 +117,7 @@ async function persistImageMetadata(
 interface AISettings {
   enabled: boolean;
   analyzeAll: boolean;
+  manualOnly: boolean;
   threshold: { maxPHashSimilarity: number; maxSSIM: number; minPixelDiff: number };
   config: VRTConfig['ai'];
 }
@@ -135,6 +136,7 @@ function resolveAISettings(
   return {
     enabled,
     analyzeAll: options.aiAll === true,
+    manualOnly: config.ai?.manualOnly ?? false,
     threshold: config.ai?.analyzeThreshold ?? {
       maxPHashSimilarity: 0.95,
       maxSSIM: 0.98,
@@ -222,7 +224,8 @@ async function enrichDiffResult(
   const needsAI =
     ai.enabled &&
     (ai.analyzeAll ||
-      ((result.phash?.similarity ?? 0) < ai.threshold.maxPHashSimilarity &&
+      (!ai.manualOnly &&
+        (result.phash?.similarity ?? 0) < ai.threshold.maxPHashSimilarity &&
         (result.ssimScore ?? 0) < ai.threshold.maxSSIM &&
         result.diffPercentage >= ai.threshold.minPixelDiff));
 
@@ -234,6 +237,7 @@ async function enrichDiffResult(
         apiKey: ai.config?.apiKey,
         authToken: ai.config?.authToken,
         model: ai.config?.model,
+        baseUrl: ai.config?.baseUrl,
         scenarioName: scenario.name,
         url: scenario.url,
         pixelDiff: result.pixelDiff,

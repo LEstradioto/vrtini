@@ -116,7 +116,7 @@ export function getConfigSchemaInfo(): Record<string, string[]> {
   return {
     browsers: ['chromium', 'webkit'],
     waitForOptions: ['load', 'networkidle', 'domcontentloaded'],
-    aiProviders: ['anthropic', 'openai'],
+    aiProviders: ['anthropic', 'openai', 'openrouter', 'google'],
     severityLevels: ['info', 'warning', 'critical'],
     changeCategories: ['cosmetic', 'noise', 'content_change', 'layout_shift', 'regression'],
     ruleActions: ['approve', 'flag', 'reject'],

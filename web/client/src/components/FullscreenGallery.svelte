@@ -34,7 +34,7 @@
     compareThreshold?: number;
     onThresholdChange?: (threshold: number) => void;
     onRecompare?: () => Promise<void>;
-    onAnalyze?: () => void;
+    onAnalyze?: (filename?: string) => void;
     onAcceptForBrowser?: () => void;
     onRevokeAcceptance?: () => void;
     isAccepted?: boolean;
@@ -623,6 +623,17 @@
     autoAdvance();
   }
 
+  function handleAnalyzeAction() {
+    if (!onAnalyze) return;
+    if (isCompareMode) {
+      onAnalyze();
+      return;
+    }
+    if (currentImage) {
+      onAnalyze(currentImage.filename);
+    }
+  }
+
   function autoAdvance() {
     if (currentIndex < queue.length - 1) {
       // Don't increment - the queue will update and shift
@@ -1032,8 +1043,9 @@
     onReject={() => handleReject()}
     {onRerun}
     {testRunning}
-    {onAnalyze}
+    onAnalyze={onAnalyze ? handleAnalyzeAction : undefined}
     {analyzing}
+    canAnalyze={isCompareMode || (!!currentImage && hasBaseline)}
     isAccepted={effectiveIsAccepted}
     {onRevokeAcceptance}
     {onAcceptForBrowser}

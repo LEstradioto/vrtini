@@ -6,6 +6,8 @@ import type {
   AcceptanceSignals,
   AutoThresholdCaps,
   AIAnalysisResult,
+  AIProviderStatus,
+  AIProviderStatusResponse,
   CompareResult,
   ImageResult,
   ProjectTiming,
@@ -44,6 +46,7 @@ import {
   AcceptanceCreateResponseSchema,
   RevokeResponseSchema,
   AnalyzeResponseSchema,
+  AIProviderStatusResponseSchema,
   TestRunResponseSchema,
   TestStatusResponseSchema,
   TestAbortResponseSchema,
@@ -61,6 +64,8 @@ export type {
   AcceptanceSignals,
   AutoThresholdCaps,
   AIAnalysisResult,
+  AIProviderStatus,
+  AIProviderStatusResponse,
   CompareResult,
   ImageResult,
   ProjectTiming,
@@ -343,6 +348,8 @@ export const analyze = {
       },
       AnalyzeResponseSchema
     ),
+  providerStatus: (projectId: string) =>
+    request(`/projects/${projectId}/analyze/providers`, {}, AIProviderStatusResponseSchema),
 };
 
 // Test API

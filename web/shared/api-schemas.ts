@@ -70,6 +70,7 @@ const ChangeCategorySchema = z.enum([
 
 const SeveritySchema = z.enum(['critical', 'warning', 'info']);
 const RecommendationSchema = z.enum(['approve', 'review', 'reject']);
+const AIProviderNameSchema = z.enum(['anthropic', 'openai', 'openrouter', 'google']);
 
 export const AIAnalysisResultSchema = z.object({
   category: ChangeCategorySchema,
@@ -253,11 +254,12 @@ export const VRTConfigSchema = z
     ai: z
       .object({
         enabled: z.boolean(),
-        provider: z.enum(['anthropic', 'openai', 'openrouter', 'google']),
+        provider: AIProviderNameSchema,
         apiKey: z.string().optional(),
         authToken: z.string().optional(),
         model: z.string().optional(),
         baseUrl: z.string().optional(),
+        manualOnly: z.boolean().optional(),
         analyzeThreshold: z.object({
           maxPHashSimilarity: z.number(),
           maxSSIM: z.number(),
@@ -395,6 +397,19 @@ export const AnalyzeResponseSchema = z.object({
       error: z.string().optional(),
     })
   ),
+});
+
+export const AIProviderStatusSchema = z.object({
+  provider: AIProviderNameSchema,
+  configured: z.boolean(),
+  active: z.boolean(),
+  source: z.enum(['config', 'env', 'config+env', 'none']),
+  detail: z.string(),
+});
+
+export const AIProviderStatusResponseSchema = z.object({
+  activeProvider: AIProviderNameSchema.nullable(),
+  providers: z.array(AIProviderStatusSchema),
 });
 
 export const TestRunResponseSchema = z.object({

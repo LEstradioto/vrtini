@@ -21,6 +21,7 @@
     testRunning: boolean;
     onAnalyze?: () => void;
     analyzing: boolean;
+    canAnalyze?: boolean;
     isAccepted: boolean;
     onRevokeAcceptance?: () => void;
     onAcceptForBrowser?: () => void;
@@ -46,6 +47,7 @@
     testRunning,
     onAnalyze,
     analyzing,
+    canAnalyze = true,
     isAccepted,
     onRevokeAcceptance,
     onAcceptForBrowser,
@@ -141,6 +143,11 @@
         </button>
       {/if}
     {:else if currentImage && onApprove && onReject}
+      {#if onAnalyze}
+        <button class="action-btn ai" onclick={onAnalyze} disabled={analyzing || !canAnalyze}>
+          {analyzing ? 'Analyzing...' : 'AI Triage'}
+        </button>
+      {/if}
       <button class="action-btn approve" onclick={handleApprove} disabled={!canAct}>
         {#if currentImage.status === 'new'}
           Approve as Baseline

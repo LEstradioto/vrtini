@@ -46,6 +46,7 @@ export function getDefaultConfig(): Partial<VRTConfig> {
     ai: {
       enabled: false,
       provider: 'anthropic',
+      manualOnly: false,
       analyzeThreshold: {
         maxPHashSimilarity: 0.95,
         maxSSIM: 0.98,

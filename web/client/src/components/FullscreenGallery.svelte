@@ -237,6 +237,36 @@
     };
   }
 
+  function clampPercent(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(100, value));
+  }
+
+  function formatPercent(value: number): string {
+    return `${clampPercent(value).toFixed(1)}%`;
+  }
+
+  function getMetricHint(metric: 'diff' | 'ssim' | 'phash' | 'pixels', value: number): string {
+    if (metric === 'diff') {
+      if (value < 1) return 'Very small visual delta';
+      if (value <= 5) return 'Moderate delta';
+      return 'Large visual delta';
+    }
+    if (metric === 'ssim') {
+      if (value >= 99) return 'Structure nearly identical';
+      if (value >= 95) return 'Noticeable structural change';
+      return 'Strong structural divergence';
+    }
+    if (metric === 'phash') {
+      if (value >= 99) return 'Perceptually very close';
+      if (value >= 95) return 'Perceptual drift detected';
+      return 'Perceptual mismatch likely';
+    }
+    if (value < 250) return 'Tiny absolute pixel delta';
+    if (value < 5000) return 'Moderate absolute pixel delta';
+    return 'Large absolute pixel delta';
+  }
+
   // Zoom constants
   const ZOOM_STEP = 0.1;
   const MIN_ZOOM = 0.01;
@@ -327,6 +357,16 @@
       severity: finding.severity,
       description: finding.description,
     }));
+  });
+  let thresholdTrack = $derived.by(() => {
+    const threshold = clampPercent(localThreshold * 100);
+    const observed = clampPercent(effectiveCompareMetrics?.diffPercentage ?? 0);
+    return {
+      threshold,
+      observed,
+      pass: observed <= threshold,
+      checkpoints: [0, 1, 5, 10, 25, 50, 75, 100],
+    };
   });
 
   $effect(() => {
@@ -1168,6 +1208,63 @@
     </div>
   {/if}
 
+  {#if isCompareMode && effectiveCompareMetrics}
+    <details class="diagnostic-panel" open>
+      <summary>Detailed Diff Diagnostics</summary>
+      <div class="diagnostic-grid">
+        <div class="diagnostic-item">
+          <span class="diagnostic-label">Diff %</span>
+          <span class="diagnostic-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
+          <span class="diagnostic-hint">{getMetricHint('diff', effectiveCompareMetrics.diffPercentage)}</span>
+        </div>
+        {#if effectiveCompareMetrics.ssimScore !== undefined}
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">SSIM</span>
+            <span class="diagnostic-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(2)}%</span>
+            <span class="diagnostic-hint">{getMetricHint('ssim', effectiveCompareMetrics.ssimScore * 100)}</span>
+          </div>
+        {/if}
+        {#if effectiveCompareMetrics.phash}
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">pHash</span>
+            <span class="diagnostic-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(2)}%</span>
+            <span class="diagnostic-hint">{getMetricHint('phash', effectiveCompareMetrics.phash.similarity * 100)}</span>
+          </div>
+        {/if}
+        <div class="diagnostic-item">
+          <span class="diagnostic-label">Pixel Diff Count</span>
+          <span class="diagnostic-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
+          <span class="diagnostic-hint">{getMetricHint('pixels', effectiveCompareMetrics.pixelDiff)}</span>
+        </div>
+      </div>
+
+      <div class="threshold-report">
+        <div class="threshold-head">
+          <span>Threshold Timeline (0-100)</span>
+          <span class="threshold-status" class:pass={thresholdTrack.pass} class:fail={!thresholdTrack.pass}>
+            {#if thresholdTrack.pass}
+              Within configured threshold
+            {:else}
+              Above configured threshold
+            {/if}
+          </span>
+        </div>
+        <div class="threshold-scale">
+          <div class="threshold-rail"></div>
+          {#each thresholdTrack.checkpoints as point}
+            <span class="threshold-tick" style="left: {point}%">{point}</span>
+          {/each}
+          <span class="threshold-marker configured" style="left: {thresholdTrack.threshold}%" title="Configured threshold: {formatPercent(thresholdTrack.threshold)}"></span>
+          <span class="threshold-marker observed" style="left: {thresholdTrack.observed}%" title="Observed diff: {formatPercent(thresholdTrack.observed)}"></span>
+        </div>
+        <div class="threshold-legend">
+          <span><i class="marker-dot configured"></i>Configured: {formatPercent(thresholdTrack.threshold)}</span>
+          <span><i class="marker-dot observed"></i>Observed: {formatPercent(thresholdTrack.observed)}</span>
+        </div>
+      </div>
+    </details>
+  {/if}
+
   {#if isCompareMode && compareDataView === 'structural' && hasStructuralInsights}
     {@const structuralTotal = effectiveCompareDomDiff?.findingCount ?? effectiveCompareDomDiff?.findings?.length ?? 0}
     <section class="structural-panel" aria-live="polite">
@@ -1368,6 +1465,190 @@
     padding: 0 5px;
     font-size: 10px;
     color: var(--text-muted, #9ba3af);
+  }
+
+  .diagnostic-panel {
+    margin: 8px 16px 0;
+    border: 1px solid var(--border, #2a2f36);
+    background: rgba(7, 11, 15, 0.95);
+  }
+
+  .diagnostic-panel > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 10px 12px;
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-strong, #f8fafc);
+    border-bottom: 1px solid var(--border, #2a2f36);
+  }
+
+  .diagnostic-panel > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .diagnostic-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .diagnostic-item {
+    border: 1px solid var(--border, #2a2f36);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .diagnostic-label {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted, #9ba3af);
+  }
+
+  .diagnostic-value {
+    color: var(--text-strong, #f8fafc);
+    font-family: var(--font-mono, monospace);
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .diagnostic-hint {
+    color: var(--text-muted, #9ba3af);
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .threshold-report {
+    border-top: 1px solid var(--border, #2a2f36);
+    padding: 10px 12px 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .threshold-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted, #9ba3af);
+  }
+
+  .threshold-status {
+    border: 1px solid var(--border, #2a2f36);
+    padding: 3px 7px;
+    white-space: nowrap;
+  }
+
+  .threshold-status.pass {
+    border-color: rgba(34, 197, 94, 0.45);
+    color: #4ade80;
+  }
+
+  .threshold-status.fail {
+    border-color: rgba(249, 115, 22, 0.5);
+    color: #fb923c;
+  }
+
+  .threshold-scale {
+    position: relative;
+    height: 34px;
+    margin: 2px 0 0;
+  }
+
+  .threshold-rail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 15px;
+    height: 4px;
+    background: linear-gradient(90deg, rgba(34, 197, 94, 0.65), rgba(245, 158, 11, 0.75), rgba(239, 68, 68, 0.75));
+    opacity: 0.78;
+  }
+
+  .threshold-tick {
+    position: absolute;
+    top: 22px;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--text-muted, #9ba3af);
+    font-family: var(--font-mono, monospace);
+  }
+
+  .threshold-marker {
+    position: absolute;
+    top: 8px;
+    width: 2px;
+    height: 16px;
+    transform: translateX(-50%);
+  }
+
+  .threshold-marker::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+  }
+
+  .threshold-marker.configured {
+    background: #22c55e;
+  }
+
+  .threshold-marker.configured::after {
+    background: #22c55e;
+  }
+
+  .threshold-marker.observed {
+    background: #f97316;
+  }
+
+  .threshold-marker.observed::after {
+    background: #f97316;
+  }
+
+  .threshold-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-muted, #9ba3af);
+  }
+
+  .threshold-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .marker-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  .marker-dot.configured {
+    background: #22c55e;
+  }
+
+  .marker-dot.observed {
+    background: #f97316;
   }
 
   .structural-panel {

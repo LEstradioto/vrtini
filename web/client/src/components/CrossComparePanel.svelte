@@ -82,9 +82,11 @@
   let crossPrefsLoaded = $state(false);
   let crossPrefsApplying = $state(false);
   let selectedCrossItems = $state<Set<string>>(new Set());
+  let selectAllCrossCheckbox = $state<HTMLInputElement | null>(null);
   let crossApproveRunning = $state(false);
   let crossApproveProgress = $state(0);
   let crossApproveTotal = $state(0);
+  let fullRunRunning = $state(false);
 
   let aiTriageRunning = $state(false);
   let aiTriageError = $state<string | null>(null);
@@ -806,6 +808,43 @@
     selectedCrossItems = new Set();
   }
 
+  function handleToggleAllCrossRows(event: Event) {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    if (!checked) {
+      deselectAllCross();
+      return;
+    }
+    selectedCrossItems = new Set(crossFilteredItems.map(getItemKey));
+  }
+
+  let crossTestProgressPct = $derived.by(() => {
+    if (!crossTestJob || crossTestJob.total <= 0) return 0;
+    return Math.max(0, Math.min(100, Math.round((crossTestJob.progress / crossTestJob.total) * 100)));
+  });
+
+  async function runFullPipeline() {
+    if (crossCompareRunning || crossTestRunning) return;
+    fullRunRunning = true;
+    crossTestRunning = true;
+    crossTestError = null;
+    crossTestJob = null;
+    try {
+      const started = await test.run(projectId);
+      const finished = await waitForTestJob(started.jobId);
+      if (finished.status === 'failed') {
+        crossTestError = finished.error || 'Tests failed. Cross compare was not started.';
+        return;
+      }
+      await runCrossCompare(selectedCrossKey ? { key: selectedCrossKey, resetAcceptances: true } : undefined);
+    } catch (err) {
+      crossTestError = getErrorMessage(err, 'Failed to run full pipeline');
+    } finally {
+      crossTestRunning = false;
+      crossTestJob = null;
+      fullRunRunning = false;
+    }
+  }
+
   function openCrossCompare(item: CrossResultItem) {
     if (!crossResults) return;
     const index = crossFilteredItems.findIndex((entry) => entry.itemKey === item.itemKey);
@@ -827,6 +866,11 @@
   $effect(() => {
     const maxPage = Math.max(0, crossTotalPages - 1);
     if (crossCurrentPage > maxPage) crossCurrentPage = maxPage;
+  });
+
+  $effect(() => {
+    if (!selectAllCrossCheckbox) return;
+    selectAllCrossCheckbox.indeterminate = selectedCrossCount > 0 && !allCrossFilteredSelected;
   });
 
   $effect(() => {
@@ -1006,6 +1050,15 @@
       <button class="tag-filter" class:active={crossHideApproved} onclick={() => crossHideApproved = !crossHideApproved} title="Hide approved items from results">Hide Approved</button>
     </div>
     <div class="cross-selection-controls">
+      <label class="row-select-all" title="Select all rows in current filtered result">
+        <input
+          bind:this={selectAllCrossCheckbox}
+          type="checkbox"
+          checked={allCrossFilteredSelected}
+          onchange={handleToggleAllCrossRows}
+        />
+        <span>Rows</span>
+      </label>
       <span class="view-divider"></span>
       <button class="view-toggle" class:active={crossViewMode === 'grid'} onclick={() => setCrossViewMode('grid')} title="Grid view">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
@@ -1026,6 +1079,20 @@
   {/if}
   {#if crossTestError}
     <div class="error">{crossTestError}</div>
+  {/if}
+  {#if crossTestRunning && crossTestJob}
+    <div class="cross-run-progress cross-test-progress" role="status" aria-live="polite">
+      <div class="cross-run-progress-head">
+        <span>Running tests before compare...</span>
+        <span>{crossTestProgressPct}%</span>
+      </div>
+      <div class="cross-run-progress-track">
+        <div class="cross-run-progress-fill running" style="width: {crossTestProgressPct}%"></div>
+      </div>
+      <div class="cross-run-progress-meta">
+        <span>{crossTestJob.progress}/{crossTestJob.total} screenshots</span>
+      </div>
+    </div>
   {/if}
   {#if crossResultsError}
     <div class="error">{crossResultsError}</div>
@@ -1254,6 +1321,22 @@
       {/if}
     </div>
   {/if}
+
+  <div class="cross-footer-run">
+    <button
+      class="btn primary full-run-btn"
+      onclick={runFullPipeline}
+      disabled={crossCompareRunning || crossTestRunning || crossApproveRunning || aiTriageRunning}
+    >
+      {#if fullRunRunning}
+        Running Full Pipeline...
+      {:else if selectedCrossKey}
+        Full Run: Tests + Current Pair
+      {:else}
+        Full Run: Tests + Cross Compare
+      {/if}
+    </button>
+  </div>
 </div>
 
 <style>
@@ -1373,6 +1456,27 @@
     border-left: 1px solid var(--border);
   }
 
+  .row-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: var(--font-mono, monospace);
+    user-select: none;
+    cursor: pointer;
+  }
+
+  .row-select-all input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    margin: 0;
+    cursor: pointer;
+  }
+
   .cross-summary-line {
     font-size: 0.75rem;
     color: var(--text-muted);
@@ -1380,6 +1484,19 @@
     border-radius: 0;
     border: 1px solid var(--border);
     background: var(--panel);
+  }
+
+  .cross-footer-run {
+    margin-top: 0.25rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .full-run-btn {
+    min-width: 250px;
+    justify-content: center;
   }
 
   .cross-grid {

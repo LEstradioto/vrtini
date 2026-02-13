@@ -93,6 +93,7 @@
   let loadedImages = $state<Set<string>>(new Set());
   let lastSelectedIndex = $state<number | null>(null);
   let viewMode = $state<ViewMode>((localStorage.getItem(VIEW_MODE_KEY) as ViewMode) || 'grid');
+  let selectAllCheckbox = $state<HTMLInputElement | null>(null);
 
   function setViewMode(mode: ViewMode) {
     viewMode = mode;
@@ -175,12 +176,26 @@
     lastSelectedIndex = null;
   }
 
+  function handleToggleAllRows(event: Event) {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    if (checked) {
+      selectedImages = new Set(fullList);
+      return;
+    }
+    deselectAll();
+  }
+
   // Debounce search
   $effect(() => {
     const query = searchQuery;
     if (!query.trim()) { debouncedSearchQuery = ''; return; }
     const handle = setTimeout(() => { debouncedSearchQuery = query; }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
+  });
+
+  $effect(() => {
+    if (!selectAllCheckbox) return;
+    selectAllCheckbox.indeterminate = selectedCount > 0 && !allFilteredSelected;
   });
 </script>
 
@@ -206,6 +221,15 @@
       {/if}
     </div>
     <div class="selection-controls">
+      <label class="row-select-all" title="Select all rows in current filtered result">
+        <input
+          bind:this={selectAllCheckbox}
+          type="checkbox"
+          checked={allFilteredSelected}
+          onchange={handleToggleAllRows}
+        />
+        <span>Rows</span>
+      </label>
       <button class="btn small" class:expanded={allPageSelected && !allFilteredSelected && totalPages > 1} class:all-selected={allFilteredSelected} onclick={selectAll}>{selectAllLabel}</button>
       <button class="btn small" onclick={deselectAll} disabled={selectedCount === 0}>Deselect</button>
       <span class="view-divider"></span>
@@ -287,7 +311,7 @@
               </div>
             </div>
             <div class="image-thumb">
-              <label class="checkbox-wrapper" class:visible={checked} onclick={(e) => e.stopPropagation()}>
+              <label class="checkbox-wrapper" onclick={(e) => e.stopPropagation()}>
                 <input type="checkbox" checked={checked} onclick={(e) => toggleImageSelection(filename, index, e)} />
                 <span class="checkmark"></span>
               </label>
@@ -430,6 +454,27 @@
     border-left: 1px solid var(--border);
   }
 
+  .row-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-family: var(--font-mono, monospace);
+    user-select: none;
+    cursor: pointer;
+  }
+
+  .row-select-all input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    margin: 0;
+    cursor: pointer;
+  }
+
   .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: none; border-radius: 0; background: var(--border); color: var(--text-strong); font-size: 0.875rem; font-family: var(--font-mono, monospace); text-transform: lowercase; cursor: pointer; transition: background 0.2s; }
   .btn:hover { background: var(--border-soft); }
   .btn.small { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
@@ -522,9 +567,8 @@
 
   .checkbox-wrapper {
     position: absolute; top: 6px; left: 6px; z-index: 2;
-    opacity: 0; transition: opacity 0.15s;
+    opacity: 1;
   }
-  .checkbox-wrapper.visible, .image-card:hover .checkbox-wrapper { opacity: 1; }
   .checkbox-wrapper input { position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0; }
   .checkmark {
     display: block; width: 18px; height: 18px; background: rgba(0, 0, 0, 0.6);

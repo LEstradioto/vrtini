@@ -18,23 +18,23 @@ Build a best‑in‑class visual regression platform that explains _what changed
 - [ ] Add text diff (content and position) and layout drift diff (box movement + size changes).
 - [ ] Add a lightweight classification layer: text change, layout shift, spacing change, style change, background change.
 - [ ] Ship a report view that shows per‑item insights alongside the visual diff.
-- [ ] Add a **Detailed Diff Report** modal (similar to AI triage detail) for every comparison item:
+- [x] Add a **Detailed Diff Report** modal (similar to AI triage detail) for every comparison item:
   - show all engine outputs (pixelmatch/odiff/ssim/phash/dom),
   - show configured thresholds vs observed values,
   - explain pass/fail/flag decision in plain language.
-- [ ] Add a **Threshold Timeline/Range UI** in report view:
+- [x] Add a **Threshold Timeline/Range UI** in report view:
   - normalized 0-100 rail with checkpoints,
   - markers for configured threshold, measured score, and recommendation zone.
-- [ ] Add a **Config Explainer** panel:
+- [x] Add a **Config Explainer** panel:
   - explain each relevant config section and expected impact,
   - highlight likely knobs to tweak for the current mismatch pattern.
 
 ## UX Flow Upgrades (Planned)
 
-- [ ] Keep row checkboxes always visible in both grid and list views.
-- [ ] Add sticky/header “Select all rows” checkbox with consistent datatable behavior.
-- [ ] Ensure test runs always show live progress feedback (same clarity level as compare progress).
-- [ ] Add footer **Full Run** action: run tests first, then auto-run cross-compare pipeline.
+- [x] Keep row checkboxes always visible in both grid and list views.
+- [x] Add sticky/header “Select all rows” checkbox with consistent datatable behavior.
+- [x] Ensure test runs always show live progress feedback (same clarity level as compare progress).
+- [x] Add footer **Full Run** action: run tests first, then auto-run cross-compare pipeline.
 
 ## Analysis Pipeline (Spec v1)
 

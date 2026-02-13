@@ -44,6 +44,50 @@
     analyzeThreshold: { maxPHashSimilarity: 0.95, maxSSIM: 0.98, minPixelDiff: 0.1 },
     autoApprove: { enabled: false, rules: [] as unknown[] },
   } as const;
+  const configExplainers = [
+    {
+      title: 'Thresholds',
+      impact: 'Controls pass/fail strictness.',
+      details:
+        'Lower threshold is stricter; use diff% and pixel caps when you need stable tolerance across browsers.',
+    },
+    {
+      title: 'Auto Thresholds',
+      impact: 'Learns tolerance caps from project history.',
+      details:
+        'Enable when you have enough approvals. Keep min sample size conservative to avoid noisy recommendations.',
+    },
+    {
+      title: 'Confidence',
+      impact: 'Defines confidence bands shown in triage.',
+      details:
+        'Pass/warn thresholds help separate obvious matches from uncertain items that still need review.',
+    },
+    {
+      title: 'DOM Snapshot',
+      impact: 'Adds structural signals on top of pixels.',
+      details:
+        'Useful for text/layout drift detection. Higher max elements gives richer analysis with higher runtime cost.',
+    },
+    {
+      title: 'Cross Compare',
+      impact: 'Controls browser-pair normalization.',
+      details:
+        'Use pad/resize/crop based on viewport mismatch pattern. Pair filter limits which browser combos are compared.',
+    },
+    {
+      title: 'Engines',
+      impact: 'Fine-tunes each diff algorithm.',
+      details:
+        'Start with defaults; then calibrate per engine only when diagnostics show false positives or missed diffs.',
+    },
+    {
+      title: 'AI Settings',
+      impact: 'Cost and automation policy.',
+      details:
+        'Manual-only keeps humans in the loop; analyze thresholds decide which diffs should spend AI calls.',
+    },
+  ] as const;
 
   function cloneConfig<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
@@ -387,6 +431,22 @@
     <div class="loading">Loading config...</div>
   {:else if configData}
     <div class="sections">
+      <section class="section explainer-section">
+        <h2>Config Explainer</h2>
+        <p class="hint">
+          Quick reference for what each config block changes and which knobs to tune first.
+        </p>
+        <div class="explainer-grid">
+          {#each configExplainers as item}
+            <article class="explainer-card">
+              <h3>{item.title}</h3>
+              <p class="explainer-impact">{item.impact}</p>
+              <p>{item.details}</p>
+            </article>
+          {/each}
+        </div>
+      </section>
+
       <!-- Paths Section -->
       <section class="section">
         <h2>Paths</h2>
@@ -1161,6 +1221,45 @@
     border: 1px solid var(--border);
     border-radius: 0;
     padding: 1rem;
+  }
+
+  .explainer-section .hint {
+    margin-top: -0.35rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .explainer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.7rem;
+  }
+
+  .explainer-card {
+    border: 1px solid var(--border);
+    background: var(--panel-strong);
+    padding: 0.75rem;
+  }
+
+  .explainer-card h3 {
+    margin: 0 0 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+
+  .explainer-card p {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+  }
+
+  .explainer-impact {
+    color: var(--text-strong) !important;
+    margin-bottom: 0.35rem !important;
   }
 
   .section h2 {

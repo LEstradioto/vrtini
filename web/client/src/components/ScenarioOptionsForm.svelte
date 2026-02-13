@@ -49,6 +49,14 @@
     />
   </label>
   <label>
+    Post Interaction Wait (ms)
+    <input
+      type="number"
+      value={options.postInteractionWait ?? ''}
+      onchange={(e) => { options.postInteractionWait = parseInt(e.currentTarget.value) || undefined; }}
+    />
+  </label>
+  <label>
     Selector (capture element)
     <input
       type="text"
@@ -90,6 +98,19 @@
       placeholder=".modal, .popup"
     />
     <span class="hint-inline">Comma-separated (display: none)</span>
+  </label>
+  <label>
+    Block URLs
+    <input
+      type="text"
+      value={formatSelectors(options.blockUrls)}
+      onchange={(e) => {
+        const patterns = parseSelectors(e.currentTarget.value);
+        options.blockUrls = patterns.length ? patterns : undefined;
+      }}
+      placeholder="googletagmanager.com, doubleclick.net"
+    />
+    <span class="hint-inline">Comma-separated URL substrings to block</span>
   </label>
 
   {#if showDiffThreshold}

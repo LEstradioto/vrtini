@@ -327,6 +327,7 @@ export interface VRTConfig {
   browsers: BrowserConfig[];
   viewports: { name: string; width: number; height: number }[];
   threshold: number;
+  quickMode?: boolean;
   diffThreshold?: {
     maxDiffPercentage?: number;
     maxDiffPixels?: number;
@@ -339,9 +340,39 @@ export interface VRTConfig {
   disableAnimations: boolean;
   diffColor: string;
   concurrency?: number; // Parallel page concurrency (1-20, default: 5)
+  confidence?: {
+    passThreshold?: number;
+    warnThreshold?: number;
+  };
   scenarioDefaults?: ScenarioOptions; // Default options for all scenarios
   scenarios: Scenario[];
+  engines?: {
+    pixelmatch?: {
+      enabled?: boolean;
+      threshold?: number;
+      antialiasing?: boolean;
+      alpha?: number;
+    };
+    odiff?: {
+      enabled?: boolean;
+      threshold?: number;
+      antialiasing?: boolean;
+      failOnLayoutDiff?: boolean;
+      outputDiffMask?: boolean;
+    };
+    ssim?: {
+      enabled?: boolean;
+      threshold?: number;
+      antialiasing?: boolean;
+    };
+    phash?: {
+      enabled?: boolean;
+      threshold?: number;
+      antialiasing?: boolean;
+    };
+  };
   crossCompare?: {
+    pairs?: string[];
     normalization?: 'pad' | 'resize' | 'crop';
     mismatch?: 'strict' | 'ignore';
   };
@@ -364,7 +395,11 @@ export interface VRTConfig {
     };
   };
   domSnapshot?: {
-    enabled: boolean;
-    maxElements: number;
+    enabled?: boolean;
+    maxElements?: number;
   };
+  report?: {
+    embedImages?: boolean;
+  };
+  keepDiffOnMatch?: boolean;
 }

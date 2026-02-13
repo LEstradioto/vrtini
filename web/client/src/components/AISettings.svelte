@@ -51,6 +51,31 @@
     openrouter: 'OpenRouter',
     google: 'Google',
   };
+  const OPENROUTER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+
+  type AutoApproveCategory = 'cosmetic' | 'noise' | 'content_change' | 'layout_shift' | 'regression';
+  type AutoApproveSeverity = 'info' | 'warning' | 'critical';
+  type AutoApproveAction = 'approve' | 'flag' | 'reject';
+  interface AutoApproveCondition {
+    categories?: AutoApproveCategory[];
+    maxSeverity?: AutoApproveSeverity;
+    minConfidence?: number;
+    maxPixelDiff?: number;
+    minSSIM?: number;
+    minPHash?: number;
+  }
+  interface AutoApproveRule {
+    condition: AutoApproveCondition;
+    action: AutoApproveAction;
+  }
+
+  const AUTO_APPROVE_CATEGORIES: AutoApproveCategory[] = [
+    'cosmetic',
+    'noise',
+    'content_change',
+    'layout_shift',
+    'regression',
+  ];
 
   let currentProvider = $derived(config.ai?.provider ?? 'anthropic');
   let presets = $derived(MODEL_PRESETS[currentProvider] ?? []);
@@ -58,6 +83,10 @@
   let statusByProvider = $derived(
     new Map((providerStatuses ?? []).map((status) => [status.provider, status]))
   );
+  let autoApproveRules = $derived.by(() => {
+    const rules = config.ai?.autoApprove?.rules;
+    return Array.isArray(rules) ? (rules as AutoApproveRule[]) : [];
+  });
 
   let providerValidation = $state<{
     state: 'idle' | 'checking' | 'valid' | 'invalid';
@@ -69,6 +98,104 @@
   // Non-reactive request token to prevent self-triggering validation loops.
   let validationRevision = 0;
   const VALIDATION_DEBOUNCE_MS = 500;
+
+  function parseOptionalNumber(value: string): number | undefined {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  function ensureAutoApproveConfig(): void {
+    if (!config.ai) return;
+    if (!config.ai.autoApprove || typeof config.ai.autoApprove !== 'object') {
+      config.ai.autoApprove = { enabled: false, rules: [] };
+    }
+    if (!Array.isArray(config.ai.autoApprove.rules)) {
+      config.ai.autoApprove.rules = [];
+    }
+  }
+
+  function addAutoApproveRule(): void {
+    ensureAutoApproveConfig();
+    if (!config.ai) return;
+    const rules = Array.isArray(config.ai.autoApprove!.rules)
+      ? (config.ai.autoApprove!.rules as AutoApproveRule[])
+      : [];
+    config.ai.autoApprove!.rules = [...rules, { condition: {}, action: 'flag' }];
+  }
+
+  function removeAutoApproveRule(index: number): void {
+    ensureAutoApproveConfig();
+    if (!config.ai) return;
+    const rules = Array.isArray(config.ai.autoApprove!.rules)
+      ? (config.ai.autoApprove!.rules as AutoApproveRule[])
+      : [];
+    config.ai.autoApprove!.rules = rules.filter((_, i) => i !== index);
+  }
+
+  function updateRuleAction(index: number, action: AutoApproveAction): void {
+    ensureAutoApproveConfig();
+    if (!config.ai) return;
+    const rules = Array.isArray(config.ai.autoApprove!.rules)
+      ? (config.ai.autoApprove!.rules as AutoApproveRule[])
+      : [];
+    const target = rules[index];
+    if (!target) return;
+    rules[index] = { ...target, action };
+    config.ai.autoApprove!.rules = [...rules];
+  }
+
+  function updateRuleSeverity(index: number, value: string): void {
+    ensureAutoApproveConfig();
+    if (!config.ai) return;
+    const rules = Array.isArray(config.ai.autoApprove!.rules)
+      ? (config.ai.autoApprove!.rules as AutoApproveRule[])
+      : [];
+    const target = rules[index];
+    if (!target) return;
+    const condition = { ...(target.condition ?? {}) };
+    if (!value) delete condition.maxSeverity;
+    else condition.maxSeverity = value as AutoApproveSeverity;
+    rules[index] = { ...target, condition };
+    config.ai.autoApprove!.rules = [...rules];
+  }
+
+  function updateRuleNumber(
+    index: number,
+    key: 'minConfidence' | 'maxPixelDiff' | 'minSSIM' | 'minPHash',
+    value: string
+  ): void {
+    ensureAutoApproveConfig();
+    if (!config.ai) return;
+    const rules = Array.isArray(config.ai.autoApprove!.rules)
+      ? (config.ai.autoApprove!.rules as AutoApproveRule[])
+      : [];
+    const target = rules[index];
+    if (!target) return;
+    const condition = { ...(target.condition ?? {}) };
+    const parsed = parseOptionalNumber(value);
+    if (parsed === undefined) delete condition[key];
+    else condition[key] = parsed;
+    rules[index] = { ...target, condition };
+    config.ai.autoApprove!.rules = [...rules];
+  }
+
+  function toggleRuleCategory(index: number, category: AutoApproveCategory, enabled: boolean): void {
+    ensureAutoApproveConfig();
+    if (!config.ai) return;
+    const rules = Array.isArray(config.ai.autoApprove!.rules)
+      ? (config.ai.autoApprove!.rules as AutoApproveRule[])
+      : [];
+    const target = rules[index];
+    if (!target) return;
+    const condition = { ...(target.condition ?? {}) };
+    const current = new Set(condition.categories ?? []);
+    if (enabled) current.add(category);
+    else current.delete(category);
+    condition.categories = [...current];
+    if (condition.categories.length === 0) delete condition.categories;
+    rules[index] = { ...target, condition };
+    config.ai.autoApprove!.rules = [...rules];
+  }
 
   function buildValidationPayload() {
     return {
@@ -213,20 +340,24 @@
         <p class="hint">Use either API Key (standard) or Auth Token (Claude Max subscription). Auth Token takes effect when no API Key is set.</p>
       {/if}
 
-      {#if currentProvider === 'openrouter'}
-        <label>
-          Base URL
-          <input
-            type="text"
-            value={config.ai.baseUrl ?? 'https://openrouter.ai/api/v1'}
-            onchange={(e) => {
-              const val = e.currentTarget.value.trim();
-              config.ai!.baseUrl = val === 'https://openrouter.ai/api/v1' ? undefined : val || undefined;
-            }}
-            placeholder="https://openrouter.ai/api/v1"
-          />
-        </label>
-      {/if}
+      <label>
+        Base URL (optional)
+        <input
+          type="text"
+          value={config.ai.baseUrl ?? (currentProvider === 'openrouter' ? OPENROUTER_DEFAULT_BASE_URL : '')}
+          onchange={(e) => {
+            const val = e.currentTarget.value.trim();
+            if (!val) {
+              config.ai!.baseUrl = undefined;
+            } else if (currentProvider === 'openrouter' && val === OPENROUTER_DEFAULT_BASE_URL) {
+              config.ai!.baseUrl = undefined;
+            } else {
+              config.ai!.baseUrl = val;
+            }
+          }}
+          placeholder={currentProvider === 'openrouter' ? OPENROUTER_DEFAULT_BASE_URL : 'Provider default URL'}
+        />
+      </label>
 
       <p class="hint env-hint">Env var fallback: {envHint}</p>
       <p class="hint key-status key-status-{providerValidation.state}">
@@ -283,6 +414,135 @@
           <input type="number" min="0" step="0.1" bind:value={config.ai.analyzeThreshold.minPixelDiff} />
         </label>
       </fieldset>
+
+      <div class="auto-approve-head">
+        <h3>Auto-Approve Rules</h3>
+        <button class="btn small" onclick={addAutoApproveRule} disabled={!(config.ai.autoApprove?.enabled ?? false)}>
+          + Add Rule
+        </button>
+      </div>
+      <label class="manual-only">
+        <input
+          type="checkbox"
+          checked={config.ai.autoApprove?.enabled ?? false}
+          onchange={(e) => {
+            ensureAutoApproveConfig();
+            if (!config.ai) return;
+            config.ai.autoApprove!.enabled = e.currentTarget.checked;
+          }}
+        />
+        Enable automatic actions from AI analysis rules
+      </label>
+      <p class="hint">
+        Rules are evaluated top-to-bottom for each AI analysis result. First matching rule applies its action.
+      </p>
+
+      {#if config.ai.autoApprove?.enabled}
+        <div class="auto-rules">
+          {#if autoApproveRules.length === 0}
+            <p class="hint empty-rules">No rules configured yet.</p>
+          {:else}
+            {#each autoApproveRules as rule, index}
+              <div class="rule-card">
+                <div class="rule-head">
+                  <span class="rule-title">Rule {index + 1}</span>
+                  <button class="btn small danger" onclick={() => removeAutoApproveRule(index)}>Remove</button>
+                </div>
+
+                <div class="rule-grid">
+                  <label>
+                    Action
+                    <select
+                      value={rule.action}
+                      onchange={(e) => updateRuleAction(index, e.currentTarget.value as AutoApproveAction)}
+                    >
+                      <option value="approve">approve</option>
+                      <option value="flag">flag</option>
+                      <option value="reject">reject</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Max Severity
+                    <select
+                      value={rule.condition?.maxSeverity ?? ''}
+                      onchange={(e) => updateRuleSeverity(index, e.currentTarget.value)}
+                    >
+                      <option value="">Any</option>
+                      <option value="info">info</option>
+                      <option value="warning">warning</option>
+                      <option value="critical">critical</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Min Confidence (0-1)
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={rule.condition?.minConfidence ?? ''}
+                      onchange={(e) => updateRuleNumber(index, 'minConfidence', e.currentTarget.value)}
+                    />
+                  </label>
+
+                  <label>
+                    Max Pixel Diff %
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={rule.condition?.maxPixelDiff ?? ''}
+                      onchange={(e) => updateRuleNumber(index, 'maxPixelDiff', e.currentTarget.value)}
+                    />
+                  </label>
+
+                  <label>
+                    Min SSIM (0-1)
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={rule.condition?.minSSIM ?? ''}
+                      onchange={(e) => updateRuleNumber(index, 'minSSIM', e.currentTarget.value)}
+                    />
+                  </label>
+
+                  <label>
+                    Min pHash (0-1)
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={rule.condition?.minPHash ?? ''}
+                      onchange={(e) => updateRuleNumber(index, 'minPHash', e.currentTarget.value)}
+                    />
+                  </label>
+                </div>
+
+                <div class="category-block">
+                  <span class="category-title">Categories</span>
+                  <div class="category-grid">
+                    {#each AUTO_APPROVE_CATEGORIES as category}
+                      <label class="checkbox category-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={rule.condition?.categories?.includes(category) ?? false}
+                          onchange={(e) => toggleRuleCategory(index, category, e.currentTarget.checked)}
+                        />
+                        {category}
+                      </label>
+                    {/each}
+                  </div>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
     </div>
   {/if}
 </section>
@@ -303,6 +563,42 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--panel-strong);
+    color: var(--text-strong);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.76rem;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    text-transform: lowercase;
+  }
+
+  .btn:hover {
+    border-color: var(--text-muted);
+    background: var(--border);
+  }
+
+  .btn.small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .btn.danger:hover {
+    border-color: rgba(239, 68, 68, 0.8);
+    color: #fecaca;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   label {
@@ -500,5 +796,81 @@
 
   .thresholds[disabled] {
     opacity: 0.55;
+  }
+
+  .auto-approve-head {
+    grid-column: 1 / -1;
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .auto-approve-head h3 {
+    margin: 0;
+  }
+
+  .auto-rules {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .empty-rules {
+    margin: 0;
+  }
+
+  .rule-card {
+    border: 1px solid var(--border);
+    background: var(--panel-strong);
+    padding: 0.75rem;
+  }
+
+  .rule-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .rule-title {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    color: var(--text-strong);
+  }
+
+  .rule-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.65rem;
+  }
+
+  .category-block {
+    margin-top: 0.85rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .category-title {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: lowercase;
+    letter-spacing: 0.03em;
+  }
+
+  .category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.45rem;
+  }
+
+  .category-checkbox {
+    font-size: 0.72rem;
   }
 </style>

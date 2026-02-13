@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import {
     APIError,
     analyze,
@@ -57,6 +58,8 @@
     if (typeof source.threshold !== 'number' || !Number.isFinite(source.threshold)) source.threshold = 0.1;
     if (typeof source.disableAnimations !== 'boolean') source.disableAnimations = true;
     if (typeof source.diffColor !== 'string') source.diffColor = '#ff00ff';
+    if (typeof source.quickMode !== 'boolean') source.quickMode = false;
+    if (typeof source.keepDiffOnMatch !== 'boolean') source.keepDiffOnMatch = false;
 
     const browsers = Array.isArray(source.browsers) ? source.browsers : [];
     source.browsers = browsers.filter((browser) => {
@@ -281,6 +284,18 @@
     configData.viewports = configData.viewports.filter((_, i) => i !== index);
   }
 
+  function parseOptionalFloat(value: string): number | undefined {
+    if (!value.trim()) return undefined;
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  function parseOptionalInt(value: string): number | undefined {
+    if (!value.trim()) return undefined;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
   async function deleteProject() {
     const confirmed = confirm(
       'Remove this project from vrtini?\n\n' +
@@ -309,7 +324,7 @@
 
     saveState = 'dirty';
     success = null;
-    const revision = saveRevision + 1;
+    const revision = untrack(() => saveRevision + 1);
     saveRevision = revision;
 
     const handle = setTimeout(() => {
@@ -475,6 +490,453 @@
             <input type="checkbox" bind:checked={configData.disableAnimations} />
             Disable Animations
           </label>
+        </div>
+      </section>
+
+      <!-- Advanced Section -->
+      <section class="section">
+        <h2>Advanced</h2>
+        <div class="form-row">
+          <label class="checkbox">
+            <input type="checkbox" bind:checked={configData.quickMode} />
+            Quick Mode (pixelmatch-only)
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" bind:checked={configData.keepDiffOnMatch} />
+            Keep Diff On Match
+          </label>
+          <label class="checkbox">
+            <input
+              type="checkbox"
+              checked={configData.report?.embedImages ?? false}
+              onchange={(e) => {
+                if (!configData!.report || typeof configData!.report !== 'object') {
+                  configData!.report = {};
+                }
+                configData!.report.embedImages = (e.currentTarget as HTMLInputElement).checked;
+              }}
+            />
+            Embed Report Images
+          </label>
+        </div>
+
+        <div class="subsection-grid">
+          <div class="subsection">
+            <h3>DOM Snapshot</h3>
+            <div class="form-row">
+              <label class="checkbox">
+                <input
+                  type="checkbox"
+                  checked={configData.domSnapshot?.enabled ?? false}
+                  onchange={(e) => {
+                    if (!configData!.domSnapshot || typeof configData!.domSnapshot !== 'object') {
+                      configData!.domSnapshot = { enabled: false, maxElements: 2000 };
+                    }
+                    configData!.domSnapshot.enabled = (e.currentTarget as HTMLInputElement).checked;
+                  }}
+                />
+                Enable DOM Snapshot
+              </label>
+              <label>
+                Max Elements
+                <input
+                  type="number"
+                  min="100"
+                  max="10000"
+                  value={configData.domSnapshot?.maxElements ?? 2000}
+                  disabled={!(configData.domSnapshot?.enabled ?? false)}
+                  onchange={(e) => {
+                    if (!configData!.domSnapshot || typeof configData!.domSnapshot !== 'object') {
+                      configData!.domSnapshot = { enabled: false, maxElements: 2000 };
+                    }
+                    const parsed = parseOptionalInt((e.currentTarget as HTMLInputElement).value);
+                    configData!.domSnapshot.maxElements = parsed ?? 2000;
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h3>Auto Thresholds</h3>
+            <div class="form-row">
+              <label class="checkbox">
+                <input
+                  type="checkbox"
+                  checked={configData.autoThresholds?.enabled ?? false}
+                  onchange={(e) => {
+                    if (!configData!.autoThresholds || typeof configData!.autoThresholds !== 'object') {
+                      configData!.autoThresholds = { enabled: false };
+                    }
+                    configData!.autoThresholds.enabled = (e.currentTarget as HTMLInputElement).checked;
+                  }}
+                />
+                Enable Learned Threshold Caps
+              </label>
+              <label>
+                Percentile (0-1)
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={configData.autoThresholds?.percentile ?? ''}
+                  onchange={(e) => {
+                    if (!configData!.autoThresholds || typeof configData!.autoThresholds !== 'object') {
+                      configData!.autoThresholds = { enabled: false };
+                    }
+                    const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                    if (parsed === undefined) {
+                      delete configData!.autoThresholds.percentile;
+                    } else {
+                      configData!.autoThresholds.percentile = parsed;
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Min Sample Size
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={configData.autoThresholds?.minSampleSize ?? ''}
+                  onchange={(e) => {
+                    if (!configData!.autoThresholds || typeof configData!.autoThresholds !== 'object') {
+                      configData!.autoThresholds = { enabled: false };
+                    }
+                    const parsed = parseOptionalInt((e.currentTarget as HTMLInputElement).value);
+                    if (parsed === undefined) {
+                      delete configData!.autoThresholds.minSampleSize;
+                    } else {
+                      configData!.autoThresholds.minSampleSize = parsed;
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h3>Confidence Thresholds</h3>
+            <div class="form-row">
+              <label>
+                Pass Threshold (0-100)
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={configData.confidence?.passThreshold ?? ''}
+                  onchange={(e) => {
+                    if (!configData!.confidence || typeof configData!.confidence !== 'object') {
+                      configData!.confidence = {};
+                    }
+                    const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                    if (parsed === undefined) {
+                      delete configData!.confidence.passThreshold;
+                    } else {
+                      configData!.confidence.passThreshold = parsed;
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Warn Threshold (0-100)
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={configData.confidence?.warnThreshold ?? ''}
+                  onchange={(e) => {
+                    if (!configData!.confidence || typeof configData!.confidence !== 'object') {
+                      configData!.confidence = {};
+                    }
+                    const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                    if (parsed === undefined) {
+                      delete configData!.confidence.warnThreshold;
+                    } else {
+                      configData!.confidence.warnThreshold = parsed;
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h3>Cross Compare</h3>
+            <div class="form-row">
+              <label>
+                Normalization
+                <select
+                  value={configData.crossCompare?.normalization ?? 'pad'}
+                  onchange={(e) => {
+                    if (!configData!.crossCompare || typeof configData!.crossCompare !== 'object') {
+                      configData!.crossCompare = {};
+                    }
+                    configData!.crossCompare.normalization = (e.currentTarget as HTMLSelectElement).value as 'pad' | 'resize' | 'crop';
+                  }}
+                >
+                  <option value="pad">pad</option>
+                  <option value="resize">resize</option>
+                  <option value="crop">crop</option>
+                </select>
+              </label>
+              <label>
+                Mismatch Handling
+                <select
+                  value={configData.crossCompare?.mismatch ?? 'strict'}
+                  onchange={(e) => {
+                    if (!configData!.crossCompare || typeof configData!.crossCompare !== 'object') {
+                      configData!.crossCompare = {};
+                    }
+                    configData!.crossCompare.mismatch = (e.currentTarget as HTMLSelectElement).value as 'strict' | 'ignore';
+                  }}
+                >
+                  <option value="strict">strict</option>
+                  <option value="ignore">ignore</option>
+                </select>
+              </label>
+              <label>
+                Pairs (comma separated, optional)
+                <input
+                  type="text"
+                  value={configData.crossCompare?.pairs?.join(', ') ?? ''}
+                  onchange={(e) => {
+                    if (!configData!.crossCompare || typeof configData!.crossCompare !== 'object') {
+                      configData!.crossCompare = {};
+                    }
+                    const raw = (e.currentTarget as HTMLInputElement).value;
+                    const pairs = raw
+                      .split(',')
+                      .map((part) => part.trim())
+                      .filter(Boolean);
+                    if (pairs.length === 0) {
+                      delete configData!.crossCompare.pairs;
+                    } else {
+                      configData!.crossCompare.pairs = pairs;
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="subsection subsection-wide">
+            <h3>Engines</h3>
+            <div class="engines-grid">
+              <fieldset>
+                <legend>pixelmatch</legend>
+                <label class="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={configData.engines?.pixelmatch?.enabled ?? true}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.pixelmatch || typeof configData!.engines.pixelmatch !== 'object') {
+                        configData!.engines.pixelmatch = {};
+                      }
+                      configData!.engines.pixelmatch.enabled = (e.currentTarget as HTMLInputElement).checked;
+                    }}
+                  />
+                  enabled
+                </label>
+                <label>
+                  threshold (0-1)
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={configData.engines?.pixelmatch?.threshold ?? ''}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.pixelmatch || typeof configData!.engines.pixelmatch !== 'object') {
+                        configData!.engines.pixelmatch = {};
+                      }
+                      const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                      if (parsed === undefined) delete configData!.engines.pixelmatch.threshold;
+                      else configData!.engines.pixelmatch.threshold = parsed;
+                    }}
+                  />
+                </label>
+                <label>
+                  alpha (0-1)
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={configData.engines?.pixelmatch?.alpha ?? ''}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.pixelmatch || typeof configData!.engines.pixelmatch !== 'object') {
+                        configData!.engines.pixelmatch = {};
+                      }
+                      const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                      if (parsed === undefined) delete configData!.engines.pixelmatch.alpha;
+                      else configData!.engines.pixelmatch.alpha = parsed;
+                    }}
+                  />
+                </label>
+                <label class="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={configData.engines?.pixelmatch?.antialiasing ?? false}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.pixelmatch || typeof configData!.engines.pixelmatch !== 'object') {
+                        configData!.engines.pixelmatch = {};
+                      }
+                      configData!.engines.pixelmatch.antialiasing = (e.currentTarget as HTMLInputElement).checked;
+                    }}
+                  />
+                  antialiasing
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>odiff</legend>
+                <label class="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={configData.engines?.odiff?.enabled ?? true}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.odiff || typeof configData!.engines.odiff !== 'object') {
+                        configData!.engines.odiff = {};
+                      }
+                      configData!.engines.odiff.enabled = (e.currentTarget as HTMLInputElement).checked;
+                    }}
+                  />
+                  enabled
+                </label>
+                <label>
+                  threshold (0-1)
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={configData.engines?.odiff?.threshold ?? ''}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.odiff || typeof configData!.engines.odiff !== 'object') {
+                        configData!.engines.odiff = {};
+                      }
+                      const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                      if (parsed === undefined) delete configData!.engines.odiff.threshold;
+                      else configData!.engines.odiff.threshold = parsed;
+                    }}
+                  />
+                </label>
+                <label class="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={configData.engines?.odiff?.failOnLayoutDiff ?? false}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.odiff || typeof configData!.engines.odiff !== 'object') {
+                        configData!.engines.odiff = {};
+                      }
+                      configData!.engines.odiff.failOnLayoutDiff = (e.currentTarget as HTMLInputElement).checked;
+                    }}
+                  />
+                  failOnLayoutDiff
+                </label>
+                <label class="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={configData.engines?.odiff?.outputDiffMask ?? false}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.odiff || typeof configData!.engines.odiff !== 'object') {
+                        configData!.engines.odiff = {};
+                      }
+                      configData!.engines.odiff.outputDiffMask = (e.currentTarget as HTMLInputElement).checked;
+                    }}
+                  />
+                  outputDiffMask
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>ssim</legend>
+                <label class="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={configData.engines?.ssim?.enabled ?? true}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.ssim || typeof configData!.engines.ssim !== 'object') {
+                        configData!.engines.ssim = {};
+                      }
+                      configData!.engines.ssim.enabled = (e.currentTarget as HTMLInputElement).checked;
+                    }}
+                  />
+                  enabled
+                </label>
+                <label>
+                  threshold (0-1)
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={configData.engines?.ssim?.threshold ?? ''}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.ssim || typeof configData!.engines.ssim !== 'object') {
+                        configData!.engines.ssim = {};
+                      }
+                      const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                      if (parsed === undefined) delete configData!.engines.ssim.threshold;
+                      else configData!.engines.ssim.threshold = parsed;
+                    }}
+                  />
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>phash</legend>
+                <label class="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={configData.engines?.phash?.enabled ?? true}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.phash || typeof configData!.engines.phash !== 'object') {
+                        configData!.engines.phash = {};
+                      }
+                      configData!.engines.phash.enabled = (e.currentTarget as HTMLInputElement).checked;
+                    }}
+                  />
+                  enabled
+                </label>
+                <label>
+                  threshold (0-1)
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={configData.engines?.phash?.threshold ?? ''}
+                    onchange={(e) => {
+                      if (!configData!.engines || typeof configData!.engines !== 'object') configData!.engines = {};
+                      if (!configData!.engines.phash || typeof configData!.engines.phash !== 'object') {
+                        configData!.engines.phash = {};
+                      }
+                      const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                      if (parsed === undefined) delete configData!.engines.phash.threshold;
+                      else configData!.engines.phash.threshold = parsed;
+                    }}
+                  />
+                </label>
+              </fieldset>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -720,6 +1182,57 @@
     gap: 1rem;
   }
 
+  .subsection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .subsection {
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    padding: 0.85rem;
+  }
+
+  .subsection h3 {
+    margin: 0 0 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .subsection-wide {
+    grid-column: 1 / -1;
+  }
+
+  .engines-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.75rem;
+  }
+
+  fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 0;
+  }
+
+  legend {
+    padding: 0 0.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    color: var(--accent);
+  }
+
   label {
     display: block;
     font-family: var(--font-mono);
@@ -747,6 +1260,12 @@
   select:focus {
     outline: none;
     border-color: var(--accent);
+  }
+
+  input:disabled,
+  select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   input[type="range"] {

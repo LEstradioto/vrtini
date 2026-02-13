@@ -265,6 +265,7 @@ export const VRTConfigSchema = z
     browsers: z.array(BrowserConfigSchema),
     viewports: z.array(z.object({ name: z.string(), width: z.number(), height: z.number() })),
     threshold: z.number(),
+    quickMode: z.boolean().optional(),
     diffThreshold: z
       .object({
         maxDiffPercentage: z.number().optional(),
@@ -281,6 +282,12 @@ export const VRTConfigSchema = z
     disableAnimations: z.boolean(),
     diffColor: z.string(),
     concurrency: z.number().optional(),
+    confidence: z
+      .object({
+        passThreshold: z.number().optional(),
+        warnThreshold: z.number().optional(),
+      })
+      .optional(),
     scenarioDefaults: z.record(z.unknown()).optional(),
     scenarios: z.array(
       z
@@ -292,10 +299,58 @@ export const VRTConfigSchema = z
     ),
     crossCompare: z
       .object({
+        pairs: z.array(z.string()).optional(),
         normalization: z.enum(['pad', 'resize', 'crop']).optional(),
         mismatch: z.enum(['strict', 'ignore']).optional(),
       })
       .optional(),
+    engines: z
+      .object({
+        pixelmatch: z
+          .object({
+            enabled: z.boolean().optional(),
+            threshold: z.number().optional(),
+            antialiasing: z.boolean().optional(),
+            alpha: z.number().optional(),
+          })
+          .optional(),
+        odiff: z
+          .object({
+            enabled: z.boolean().optional(),
+            threshold: z.number().optional(),
+            antialiasing: z.boolean().optional(),
+            failOnLayoutDiff: z.boolean().optional(),
+            outputDiffMask: z.boolean().optional(),
+          })
+          .optional(),
+        ssim: z
+          .object({
+            enabled: z.boolean().optional(),
+            threshold: z.number().optional(),
+            antialiasing: z.boolean().optional(),
+          })
+          .optional(),
+        phash: z
+          .object({
+            enabled: z.boolean().optional(),
+            threshold: z.number().optional(),
+            antialiasing: z.boolean().optional(),
+          })
+          .optional(),
+      })
+      .optional(),
+    domSnapshot: z
+      .object({
+        enabled: z.boolean().optional(),
+        maxElements: z.number().optional(),
+      })
+      .optional(),
+    report: z
+      .object({
+        embedImages: z.boolean().optional(),
+      })
+      .optional(),
+    keepDiffOnMatch: z.boolean().optional(),
     ai: z
       .object({
         enabled: z.boolean(),

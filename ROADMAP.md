@@ -56,3 +56,15 @@ Build a best‑in‑class visual regression platform that explains _what changed
 - [ ] Multi‑browser normalization heuristics (font metrics, subpixel rounding, rendering differences).
 - [ ] Per‑component tolerance thresholds (e.g., “button label kerning acceptable”).
 - [ ] Explainability heatmaps for layout vs style vs content changes.
+
+## Research Tracks (Foundation)
+
+- [ ] Graph‑based layout diff (network graph over DOM/layout nodes)
+  - Foundation: model each snapshot as a graph (`node = element`, `edges = parent-child + visual adjacency`), then compare graph topology + geometry deltas to detect structural regressions with less pixel noise.
+  - Why: catches meaningful layout rewires (moved/removed/re-parented blocks) that pure pixel metrics can miss.
+  - Scope v1: start with lightweight graph features (degree, depth, neighborhood overlap, edge-weighted bbox deltas), then evaluate matching strategies (Hungarian / bipartite matching) before any GNN complexity.
+
+- [ ] Project‑level adaptive learning for thresholds and approval prediction
+  - Foundation: learn from historical human actions (`approve/reject/flag/revoke`) plus metrics (diff%, SSIM, pHash, DOM findings, scenario, viewport, browser pair).
+  - Why: each project has distinct tolerance; a per-project model can reduce manual triage while keeping confidence calibrated.
+  - Scope v1: build an online feature store + interpretable model (logistic / gradient boosting) to propose `recommended action + confidence`, with strict human override and audit trail.

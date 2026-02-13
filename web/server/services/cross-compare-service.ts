@@ -3,7 +3,11 @@ import { existsSync } from 'fs';
 import { resolve, relative, dirname } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
 import { normalizeBrowserConfig } from '../../../src/core/browser-versions.js';
-import { getProjectDirs, getScreenshotFilename } from '../../../src/core/paths.js';
+import {
+  getProjectDirs,
+  getScreenshotFilename,
+  getSnapshotFilename,
+} from '../../../src/core/paths.js';
 import { compareImages } from '../../../src/core/compare.js';
 import { formatBrowser, type BrowserRef, type ComparisonResult } from '../../../src/core/types.js';
 import { getDiffPath } from '../../../src/core/types.js';
@@ -11,6 +15,7 @@ import { buildEnginesConfig } from '../../../src/core/compare-runner.js';
 import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';
 import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
+import type { DomDiffResult } from '../../../src/engines/dom-diff.js';
 
 function buildCrossComparePairs(
   browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[]
@@ -75,6 +80,7 @@ export interface CrossResultItem {
   pixelDiff: number;
   ssimScore?: number;
   phash?: PerceptualHashResult;
+  domDiff?: DomDiffResult;
   error?: string;
   accepted?: boolean;
   acceptedAt?: string;
@@ -548,19 +554,22 @@ export async function runCrossCompare(
         if (itemKeyFilter && !itemKeyFilter.has(itemKey)) {
           continue;
         }
-        const baselinePath = resolve(
-          outputDir,
-          getScreenshotFilename(
-            scenario.name,
-            pair.baseline.name,
-            viewport.name,
-            pair.baseline.version
-          )
+        const baselineFilename = getScreenshotFilename(
+          scenario.name,
+          pair.baseline.name,
+          viewport.name,
+          pair.baseline.version
         );
-        const testPath = resolve(
-          outputDir,
-          getScreenshotFilename(scenario.name, pair.test.name, viewport.name, pair.test.version)
+        const testFilename = getScreenshotFilename(
+          scenario.name,
+          pair.test.name,
+          viewport.name,
+          pair.test.version
         );
+        const baselinePath = resolve(outputDir, baselineFilename);
+        const testPath = resolve(outputDir, testFilename);
+        const baselineSnapshotPath = resolve(outputDir, getSnapshotFilename(baselineFilename));
+        const testSnapshotPath = resolve(outputDir, getSnapshotFilename(testFilename));
 
         const diffName = getScreenshotFilename(
           scenario.name,
@@ -582,6 +591,8 @@ export async function runCrossCompare(
             scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
           maxDiffPixels:
             scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
+          baselineSnapshot: config.domSnapshot?.enabled ? baselineSnapshotPath : undefined,
+          testSnapshot: config.domSnapshot?.enabled ? testSnapshotPath : undefined,
         });
 
         const diffPathValue = getDiffPath(result);
@@ -599,6 +610,7 @@ export async function runCrossCompare(
           pixelDiff: result.pixelDiff,
           ssimScore: 'ssimScore' in result ? result.ssimScore : undefined,
           phash: 'phash' in result ? result.phash : undefined,
+          domDiff: result.reason === 'diff' ? result.domDiff : undefined,
           error: result.reason === 'error' ? result.error : undefined,
         };
 

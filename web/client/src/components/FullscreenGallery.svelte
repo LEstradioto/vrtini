@@ -8,6 +8,8 @@
     GalleryImage,
     CompareImages,
     CompareMetrics,
+    CompareDomDiff,
+    CompareDomDiffFinding,
     CompareQueueItem,
     ColumnMode,
   } from './gallery-types.js';
@@ -27,6 +29,7 @@
     compareImages?: CompareImages;
     compareTitle?: string;
     compareMetrics?: CompareMetrics;
+    compareDomDiff?: CompareDomDiff;
     compareViewport?: string;
     compareQueue?: CompareQueueItem[];
     compareIndex?: number;
@@ -67,6 +70,7 @@
     compareImages,
     compareTitle,
     compareMetrics,
+    compareDomDiff,
     compareViewport,
     compareQueue = [],
     compareIndex = 0,
@@ -94,6 +98,7 @@
   let effectiveCompareImages = $derived(activeCompareItem?.images ?? compareImages ?? null);
   let effectiveCompareTitle = $derived(activeCompareItem?.title ?? compareTitle);
   let effectiveCompareMetrics = $derived(activeCompareItem?.metrics ?? compareMetrics);
+  let effectiveCompareDomDiff = $derived(activeCompareItem?.domDiff ?? compareDomDiff ?? null);
   let effectiveIsAccepted = $derived(activeCompareItem?.accepted ?? isAccepted);
   let effectiveCompareBadge = $derived(activeCompareItem?.badge ?? null);
   let effectiveCompareAIBadge = $derived.by(() => {
@@ -124,6 +129,14 @@
   });
   let hasCompareQueue = $derived(compareQueue.length > 1 && !!onCompareNavigate);
   let isCompareMode = $derived(!!effectiveCompareImages);
+  let hasStructuralInsights = $derived.by(() => {
+    if (!effectiveCompareDomDiff) return false;
+    const count =
+      effectiveCompareDomDiff.findingCount ??
+      effectiveCompareDomDiff.findings?.length ??
+      0;
+    return count > 0;
+  });
   let aiBadgePulsing = $state(false);
   let lastAIBadgeKey = '';
 
@@ -178,6 +191,7 @@
   // State
   let currentIndex = $state(initialIndex);
   let currentView = $state<'baseline' | 'test' | 'diff'>('test');
+  let compareDataView = $state<'visual' | 'structural'>('visual');
   let showThumbnails = $state(false);
   let zoom = $state(loadSavedZoom());
   let isDragging = $state(false);
@@ -193,6 +207,35 @@
   let panicResumeHandle = 0;
   let panicShowingDiff = false;
   let panicNextView: 'baseline' | 'test' = 'baseline';
+
+  function toSafeText(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+    return String(value);
+  }
+
+  function toTextDiffFinding(finding: CompareDomDiffFinding): {
+    path: string;
+    tag: string;
+    before: string;
+    after: string;
+    description: string;
+    severity: CompareDomDiffFinding['severity'];
+  } | null {
+    if (finding.type !== 'text_changed') return null;
+    const detail = finding.detail ?? {};
+    const before = toSafeText((detail as Record<string, unknown>).from);
+    const after = toSafeText((detail as Record<string, unknown>).to);
+    if (before === after) return null;
+    return {
+      path: finding.path,
+      tag: finding.tag,
+      before,
+      after,
+      description: finding.description,
+      severity: finding.severity,
+    };
+  }
 
   // Zoom constants
   const ZOOM_STEP = 0.1;
@@ -263,6 +306,34 @@
   let effectiveIsFlagged = $derived(
     isCompareMode ? (activeCompareItem?.flagged ?? isFlagged) : !!currentImage?.flagged
   );
+  let structuralSummaryEntries = $derived.by(() => {
+    if (!effectiveCompareDomDiff?.summary) return [] as Array<{ type: string; count: number }>;
+    return Object.entries(effectiveCompareDomDiff.summary)
+      .filter(([, count]) => (count ?? 0) > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => ({ type, count }));
+  });
+  let textDiffItems = $derived.by(() => {
+    const findings = effectiveCompareDomDiff?.findings ?? [];
+    return findings
+      .map(toTextDiffFinding)
+      .filter((finding): finding is NonNullable<typeof finding> => !!finding);
+  });
+  let structuralTopFindings = $derived.by(() => {
+    if (effectiveCompareDomDiff?.topFindings?.length) return effectiveCompareDomDiff.topFindings;
+    const findings = effectiveCompareDomDiff?.findings ?? [];
+    return findings.slice(0, 8).map((finding) => ({
+      type: finding.type,
+      severity: finding.severity,
+      description: finding.description,
+    }));
+  });
+
+  $effect(() => {
+    if (!isCompareMode || !hasStructuralInsights) {
+      compareDataView = 'visual';
+    }
+  });
 
   // Title for header
   let displayTitle = $derived(
@@ -709,7 +780,7 @@
   function handleKeyDown(e: KeyboardEvent) {
     const handledKeys = [
       'Escape', 'ArrowLeft', 'ArrowRight',
-      '1', '2', '3',
+      '1', '2', '3', '4',
       'a', 'A', 'u', 'U', 'r', 'R', 't', 'T',
       'g', 'G',
       '+', '=', '-',
@@ -733,15 +804,23 @@
         break;
       case '1':
         if (panicActive) stopPanic();
+        compareDataView = 'visual';
         if (hasBaseline) currentView = 'baseline';
         break;
       case '2':
         if (panicActive) stopPanic();
+        compareDataView = 'visual';
         currentView = 'test';
         break;
       case '3':
         if (panicActive) stopPanic();
+        compareDataView = 'visual';
         if (hasDiff) currentView = 'diff';
+        break;
+      case '4':
+        if (isCompareMode && hasStructuralInsights) {
+          compareDataView = 'structural';
+        }
         break;
       case 'a':
       case 'A':
@@ -1048,7 +1127,11 @@
     {baseImageSrc}
     {localThreshold}
     {recomparing}
-    onViewChange={(view) => { if (panicActive) stopPanic(); currentView = view; }}
+    onViewChange={(view) => {
+      if (panicActive) stopPanic();
+      compareDataView = 'visual';
+      currentView = view;
+    }}
     onZoomIn={zoomIn}
     onZoomOut={zoomOut}
     onResetZoom={resetZoom}
@@ -1062,54 +1145,131 @@
     onLocalThresholdChange={(value) => { localThreshold = value; }}
   />
 
-  <GalleryImageViewer
-    {isCompareMode}
-    {hasCompareQueue}
-    {currentImage}
-    {currentIndex}
-    queueLength={queue.length}
-    {compareIndexValue}
-    compareQueueLength={compareQueue.length}
-    {showThumbnails}
-    {isDragging}
-    {useColumnMode}
-    {centerImage}
-    {baseImageSrc}
-    {overlayImageSrc}
-    {displayTitle}
-    {zoom}
-    {diffOpacity}
-    {columnWidth}
-    {scaledHeight}
-    {columnSegmentHeight}
-    {columnScrollHeight}
-    {effectiveColumns}
-    {columnIndexes}
-    {getColumnOffset}
-    onNavigatePrev={isCompareMode ? navigateComparePrev : navigatePrev}
-    onNavigateNext={isCompareMode ? navigateCompareNext : navigateNext}
-    onWheel={handleWheel}
-    onMouseDown={handleMouseDown}
-    onScroll={handleScroll}
-    onImageLoad={handleImageLoad}
-    onContainerReady={handleContainerReady}
-  />
-
-  {#if showThumbnails && !isCompareMode && getImageUrl}
-    <GalleryThumbnailStrip
-      {queue}
-      {currentIndex}
-      {getImageUrl}
-      onNavigateTo={navigateTo}
-    />
+  {#if isCompareMode && hasStructuralInsights}
+    <div class="compare-data-tabs" role="tablist" aria-label="Compare data view">
+      <button
+        class="data-tab"
+        class:active={compareDataView === 'visual'}
+        role="tab"
+        aria-selected={compareDataView === 'visual'}
+        onclick={() => (compareDataView = 'visual')}
+      >
+        Visual <kbd>1-3</kbd>
+      </button>
+      <button
+        class="data-tab"
+        class:active={compareDataView === 'structural'}
+        role="tab"
+        aria-selected={compareDataView === 'structural'}
+        onclick={() => (compareDataView = 'structural')}
+      >
+        Structural/Text <kbd>4</kbd>
+      </button>
+    </div>
   {/if}
 
-  {#if showThumbnails && isCompareMode && hasCompareQueue}
-    <CompareThumbnailStrip
-      queue={compareQueue}
-      currentIndex={compareIndexValue}
-      onNavigateTo={navigateCompareTo}
+  {#if isCompareMode && compareDataView === 'structural' && hasStructuralInsights}
+    {@const structuralTotal = effectiveCompareDomDiff?.findingCount ?? effectiveCompareDomDiff?.findings?.length ?? 0}
+    <section class="structural-panel" aria-live="polite">
+      <div class="structural-head">
+        <div class="structural-title-row">
+          <span class="structural-title">Structural/Text Diff</span>
+          <span class="structural-meta">
+            Similarity: {((effectiveCompareDomDiff?.similarity ?? 0) * 100).toFixed(1)}% · Findings: {structuralTotal}
+          </span>
+        </div>
+        {#if structuralSummaryEntries.length > 0}
+          <div class="structural-summary">
+            {#each structuralSummaryEntries as entry}
+              <span class="structural-chip">{entry.type}: {entry.count}</span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      {#if textDiffItems.length > 0}
+        <div class="structural-section">
+          <h4>Text Changes ({textDiffItems.length})</h4>
+          <div class="text-diff-list">
+            {#each textDiffItems as textChange}
+              <article class="text-diff-item severity-{textChange.severity}">
+                <div class="text-diff-title">
+                  <span class="text-diff-path">{textChange.path}</span>
+                  <span class="text-diff-tag">&lt;{textChange.tag}&gt;</span>
+                </div>
+                <p class="text-diff-description">{textChange.description}</p>
+                <pre class="text-diff-block">- {textChange.before || '<empty>'}
++ {textChange.after || '<empty>'}</pre>
+              </article>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      {#if structuralTopFindings.length > 0}
+        <div class="structural-section">
+          <h4>Top Structural Findings</h4>
+          <ul class="structural-finding-list">
+            {#each structuralTopFindings as finding}
+              <li class="structural-finding severity-{finding.severity}">
+                <span class="finding-type">{finding.type}</span>
+                <span class="finding-desc">{finding.description}</span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+    </section>
+  {:else}
+    <GalleryImageViewer
+      {isCompareMode}
+      {hasCompareQueue}
+      {currentImage}
+      {currentIndex}
+      queueLength={queue.length}
+      {compareIndexValue}
+      compareQueueLength={compareQueue.length}
+      {showThumbnails}
+      {isDragging}
+      {useColumnMode}
+      {centerImage}
+      {baseImageSrc}
+      {overlayImageSrc}
+      {displayTitle}
+      {zoom}
+      {diffOpacity}
+      {columnWidth}
+      {scaledHeight}
+      {columnSegmentHeight}
+      {columnScrollHeight}
+      {effectiveColumns}
+      {columnIndexes}
+      {getColumnOffset}
+      onNavigatePrev={isCompareMode ? navigateComparePrev : navigatePrev}
+      onNavigateNext={isCompareMode ? navigateCompareNext : navigateNext}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onScroll={handleScroll}
+      onImageLoad={handleImageLoad}
+      onContainerReady={handleContainerReady}
     />
+
+    {#if showThumbnails && !isCompareMode && getImageUrl}
+      <GalleryThumbnailStrip
+        {queue}
+        {currentIndex}
+        {getImageUrl}
+        onNavigateTo={navigateTo}
+      />
+    {/if}
+
+    {#if showThumbnails && isCompareMode && hasCompareQueue}
+      <CompareThumbnailStrip
+        queue={compareQueue}
+        currentIndex={compareIndexValue}
+        onNavigateTo={navigateCompareTo}
+      />
+    {/if}
   {/if}
 
   {#if effectiveIsFlagged}
@@ -1123,10 +1283,10 @@
     {canAct}
     panicAvailable={hasBaseline}
     {panicActive}
-    thumbnailsAvailable={isCompareMode ? hasCompareQueue : queue.length > 1}
+    thumbnailsAvailable={isCompareMode ? (hasCompareQueue && compareDataView === 'visual') : queue.length > 1}
     thumbnailsActive={showThumbnails}
-    autoFitAvailable={!!baseImageSrc}
-    autoFitActive={!!baseImageSrc && columnMode === 'auto'}
+    autoFitAvailable={compareDataView === 'visual' && !!baseImageSrc}
+    autoFitActive={compareDataView === 'visual' && !!baseImageSrc && columnMode === 'auto'}
     onTogglePanic={togglePanic}
     onToggleThumbnails={() => { showThumbnails = !showThumbnails; }}
     onToggleAutoFit={toggleAutoFit}
@@ -1175,5 +1335,196 @@
     letter-spacing: 0.1em;
     text-align: center;
     text-transform: uppercase;
+  }
+
+  .compare-data-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 8px 16px 0;
+  }
+
+  .data-tab {
+    border: 1px solid var(--border, #2a2f36);
+    background: transparent;
+    color: var(--text-muted, #9ba3af);
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .data-tab.active {
+    color: var(--text-strong, #f8fafc);
+    border-color: var(--accent, #4ade80);
+  }
+
+  .data-tab kbd {
+    border: 1px solid var(--border, #2a2f36);
+    padding: 0 5px;
+    font-size: 10px;
+    color: var(--text-muted, #9ba3af);
+  }
+
+  .structural-panel {
+    margin: 8px 16px 12px;
+    border: 1px solid var(--border, #2a2f36);
+    background: rgba(10, 14, 18, 0.96);
+    color: var(--text-strong, #f8fafc);
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
+    padding: 14px;
+  }
+
+  .structural-head {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .structural-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .structural-title {
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent, #4ade80);
+  }
+
+  .structural-meta {
+    font-size: 12px;
+    color: var(--text-muted, #9ba3af);
+  }
+
+  .structural-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .structural-chip {
+    border: 1px solid var(--border, #2a2f36);
+    padding: 4px 8px;
+    font-size: 11px;
+    color: var(--text-muted, #9ba3af);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .structural-section {
+    margin-bottom: 16px;
+  }
+
+  .structural-section h4 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted, #9ba3af);
+  }
+
+  .text-diff-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .text-diff-item {
+    border: 1px solid var(--border, #2a2f36);
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.01);
+  }
+
+  .text-diff-item.severity-warning {
+    border-color: rgba(250, 204, 21, 0.45);
+  }
+
+  .text-diff-item.severity-critical {
+    border-color: rgba(251, 113, 133, 0.55);
+  }
+
+  .text-diff-title {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+
+  .text-diff-path {
+    color: var(--text-strong, #f8fafc);
+    font-family: var(--font-mono, monospace);
+  }
+
+  .text-diff-tag {
+    color: var(--text-muted, #9ba3af);
+    font-family: var(--font-mono, monospace);
+  }
+
+  .text-diff-description {
+    margin: 0 0 8px;
+    color: var(--text-muted, #9ba3af);
+    font-size: 12px;
+  }
+
+  .text-diff-block {
+    margin: 0;
+    border: 1px solid var(--border, #2a2f36);
+    background: rgba(0, 0, 0, 0.35);
+    padding: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .structural-finding-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+
+  .structural-finding {
+    border: 1px solid var(--border, #2a2f36);
+    padding: 8px;
+    display: grid;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.01);
+  }
+
+  .structural-finding.severity-warning {
+    border-color: rgba(250, 204, 21, 0.45);
+  }
+
+  .structural-finding.severity-critical {
+    border-color: rgba(251, 113, 133, 0.55);
+  }
+
+  .finding-type {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--accent, #4ade80);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+
+  .finding-desc {
+    font-size: 12px;
+    color: var(--text-muted, #9ba3af);
   }
 </style>

@@ -32,6 +32,23 @@ export interface CompareMetrics {
   phash?: { similarity: number };
 }
 
+export interface CompareDomDiffFinding {
+  type: string;
+  path: string;
+  tag: string;
+  severity: 'critical' | 'warning' | 'info';
+  description: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface CompareDomDiff {
+  similarity: number;
+  summary: Record<string, number>;
+  findings?: CompareDomDiffFinding[];
+  findingCount?: number;
+  topFindings?: { type: string; severity: string; description: string }[];
+}
+
 export interface CompareQueueItem {
   images: CompareImages;
   title: string;
@@ -46,6 +63,7 @@ export interface CompareQueueItem {
   aiRecommendation?: 'approve' | 'review' | 'reject';
   aiCategory?: string;
   aiConfidence?: number;
+  domDiff?: CompareDomDiff;
 }
 
 export type ColumnMode =

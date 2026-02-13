@@ -26,6 +26,7 @@
   import AIAnalysisModal from '../components/AIAnalysisModal.svelte';
   import FullscreenGallery from '../components/FullscreenGallery.svelte';
   import ProjectHeader from '../components/ProjectHeader.svelte';
+  import type { CompareDomDiff } from '../components/gallery-types.js';
 
   import { getAppContext } from '../lib/app-context';
   import { DEFAULT_COMPARISON_THRESHOLD, PAGE_SIZE, CROSS_THUMB_MAX, SEARCH_DEBOUNCE_MS } from '../../../shared/constants';
@@ -239,9 +240,36 @@
     ssimScore?: number;
     phash?: { similarity: number; baselineHash: string; testHash: string };
   } | null>(null);
+  let compareDomDiff = $state<CompareDomDiff | null>(null);
   let currentCrossItem = $state<CrossResultItem | null>(null);
   let crossQueueIndex = $state(0);
   let compareMode = $state<'manual' | 'cross' | null>(null);
+
+  function toCompareDomDiffFromCrossItem(item: CrossResultItem): CompareDomDiff | undefined {
+    if (!item.domDiff) return undefined;
+    const findings = item.domDiff.findings ?? [];
+    return {
+      similarity: item.domDiff.similarity,
+      summary: item.domDiff.summary,
+      findings,
+      findingCount: findings.length,
+      topFindings: findings.slice(0, 5).map((finding) => ({
+        type: finding.type,
+        severity: finding.severity,
+        description: finding.description,
+      })),
+    };
+  }
+
+  function toCompareDomDiffFromCompareResult(result: CompareResult | null): CompareDomDiff | null {
+    if (!result?.domDiff) return null;
+    return {
+      similarity: result.domDiff.similarity,
+      summary: result.domDiff.summary,
+      findingCount: result.domDiff.findingCount,
+      topFindings: result.domDiff.topFindings,
+    };
+  }
 
   // Multi-select state
   let selectedImages = $state<Set<string>>(new Set());
@@ -424,6 +452,7 @@
         ssimScore: item.ssimScore,
         phash: item.phash,
       },
+      domDiff: toCompareDomDiffFromCrossItem(item),
       viewport: item.viewport,
       badge: {
         label: item.flagged
@@ -1055,6 +1084,7 @@
       ssimScore: compareResult.ssimScore,
       phash: compareResult.phash,
     };
+    compareDomDiff = toCompareDomDiffFromCompareResult(compareResult);
     compareMode = 'manual';
     compareFullscreenTitle = `${compareLeft.filename} vs ${compareRight.filename}`;
     showCompareFullscreen = true;
@@ -1075,6 +1105,7 @@
         ssimScore: item.ssimScore,
         phash: item.phash,
       },
+      domDiff: toCompareDomDiffFromCrossItem(item),
       title: `${item.scenario} · ${item.viewport}`,
     };
   }
@@ -1083,6 +1114,7 @@
     const payload = buildCrossComparePayload(item, results);
     compareImages = payload.images;
     compareMetrics = payload.metrics;
+    compareDomDiff = payload.domDiff ?? null;
     compareFullscreenTitle = payload.title;
     currentCrossItem = item;
   }
@@ -1111,6 +1143,7 @@
     showCompareFullscreen = false;
     compareImages = null;
     compareMetrics = null;
+    compareDomDiff = null;
     compareMode = null;
     currentCrossItem = null;
     crossQueueIndex = 0;
@@ -1396,6 +1429,7 @@
     compareImages={compareImages}
     compareTitle={compareFullscreenTitle}
     compareMetrics={compareMetrics}
+    compareDomDiff={compareDomDiff ?? undefined}
     compareViewport={compareViewport ?? undefined}
     compareQueue={compareMode === 'cross' ? crossCompareQueue : []}
     compareIndex={compareMode === 'cross' ? crossQueueIndex : 0}

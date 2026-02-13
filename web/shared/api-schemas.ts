@@ -91,6 +91,19 @@ export const AIAnalysisResultSchema = z.object({
   tokensUsed: z.number().optional(),
 });
 
+export const DomDiffSummarySchema = z.object({
+  findingCount: z.number(),
+  similarity: z.number(),
+  topFindings: z.array(
+    z.object({
+      type: z.string(),
+      severity: z.string(),
+      description: z.string(),
+    })
+  ),
+  summary: z.record(z.string(), z.number()),
+});
+
 export const CompareResultSchema = z.object({
   diffUrl: z.string(),
   diffFilename: z.string(),
@@ -104,6 +117,22 @@ export const CompareResultSchema = z.object({
       testHash: z.string(),
     })
     .optional(),
+  domDiff: DomDiffSummarySchema.optional(),
+});
+
+export const DomDiffFindingSchema = z.object({
+  type: z.string(),
+  path: z.string(),
+  tag: z.string(),
+  severity: z.enum(['critical', 'warning', 'info']),
+  description: z.string(),
+  detail: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const DomDiffStructuredSchema = z.object({
+  findings: z.array(DomDiffFindingSchema),
+  summary: z.record(z.string(), z.number()),
+  similarity: z.number(),
 });
 
 export const ImageResultSchema = z.object({
@@ -171,6 +200,7 @@ export const CrossResultItemSchema = z.object({
       testHash: z.string(),
     })
     .optional(),
+  domDiff: DomDiffStructuredSchema.optional(),
   error: z.string().optional(),
   accepted: z.boolean().optional(),
   acceptedAt: z.string().optional(),

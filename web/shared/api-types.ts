@@ -113,6 +113,21 @@ export interface DomDiffSummary {
   summary: Record<string, number>;
 }
 
+export interface DomDiffFinding {
+  type: string;
+  path: string;
+  tag: string;
+  severity: 'critical' | 'warning' | 'info';
+  description: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface DomDiffStructured {
+  findings: DomDiffFinding[];
+  summary: Record<string, number>;
+  similarity: number;
+}
+
 export interface CompareResult {
   diffUrl: string;
   diffFilename: string;
@@ -201,6 +216,7 @@ export interface CrossResultItem {
     baselineHash: string;
     testHash: string;
   };
+  domDiff?: DomDiffStructured;
   error?: string;
   accepted?: boolean;
   acceptedAt?: string;

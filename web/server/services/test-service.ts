@@ -152,7 +152,7 @@ async function persistImageMetadata(
   ]);
 }
 
-async function clearStaleArtifacts(
+async function clearStaleDiffArtifacts(
   dirs: ProjectDirs,
   config: VRTConfig,
   scenarios: VRTConfig['scenarios']
@@ -162,9 +162,7 @@ async function clearStaleArtifacts(
       const { name: browser, version } = normalizeBrowserConfig(browserConfig);
       for (const viewport of config.viewports) {
         const filename = getScreenshotFilename(scenario.name, browser, viewport.name, version);
-        const testFile = resolve(dirs.outputDir, filename);
         const diffFile = resolve(dirs.diffDir, filename);
-        if (existsSync(testFile)) await unlink(testFile);
         if (existsSync(diffFile)) await unlink(diffFile);
       }
     }
@@ -180,7 +178,6 @@ async function captureScreenshots(
 ): Promise<number> {
   const signal = job.abortController?.signal;
   await ensureCaptureDirs(dirs);
-  await clearStaleArtifacts(dirs, config, scenarios);
 
   const originalCwd = process.cwd();
   process.chdir(projectPath);
@@ -383,6 +380,10 @@ export async function runTests(
   if (signal?.aborted) {
     return;
   }
+
+  // Keep previous diff artifacts if capture fails (e.g., Docker unavailable).
+  // Once capture succeeds, clear stale diffs for this run scope before recomparing.
+  await clearStaleDiffArtifacts(dirs, config, scenarios);
 
   const { results, compareDuration } = await compareScreenshots(
     job,

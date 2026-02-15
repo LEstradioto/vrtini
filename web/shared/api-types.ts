@@ -111,6 +111,7 @@ export interface DomDiffSummary {
   similarity: number;
   topFindings: { type: string; severity: string; description: string }[];
   summary: Record<string, number>;
+  findings?: DomDiffFinding[];
 }
 
 export interface DomDiffFinding {
@@ -134,6 +135,7 @@ export interface CompareResult {
   pixelDiff: number;
   diffPercentage: number;
   ssimScore?: number;
+  engineResults?: EngineResultInfo[];
   phash?: {
     similarity: number;
     baselineHash: string;
@@ -146,6 +148,7 @@ export interface EngineResultInfo {
   engine: string;
   similarity: number;
   diffPercent: number;
+  diffPixels?: number;
   error?: string;
 }
 
@@ -211,10 +214,16 @@ export interface CrossResultItem {
   diffPercentage: number;
   pixelDiff: number;
   ssimScore?: number;
+  engineResults?: EngineResultInfo[];
   phash?: {
     similarity: number;
     baselineHash: string;
     testHash: string;
+  };
+  domSnapshot?: {
+    enabled: boolean;
+    baselineFound: boolean;
+    testFound: boolean;
   };
   domDiff?: DomDiffStructured;
   error?: string;

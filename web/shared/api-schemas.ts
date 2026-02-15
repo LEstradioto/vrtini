@@ -102,6 +102,26 @@ export const DomDiffSummarySchema = z.object({
     })
   ),
   summary: z.record(z.string(), z.number()),
+  findings: z
+    .array(
+      z.object({
+        type: z.string(),
+        path: z.string(),
+        tag: z.string(),
+        severity: z.enum(['critical', 'warning', 'info']),
+        description: z.string(),
+        detail: z.record(z.string(), z.unknown()).optional(),
+      })
+    )
+    .optional(),
+});
+
+export const EngineResultInfoSchema = z.object({
+  engine: z.string(),
+  similarity: z.number(),
+  diffPercent: z.number(),
+  diffPixels: z.number().optional(),
+  error: z.string().optional(),
 });
 
 export const CompareResultSchema = z.object({
@@ -110,6 +130,7 @@ export const CompareResultSchema = z.object({
   pixelDiff: z.number(),
   diffPercentage: z.number(),
   ssimScore: z.number().optional(),
+  engineResults: z.array(EngineResultInfoSchema).optional(),
   phash: z
     .object({
       similarity: z.number(),
@@ -151,6 +172,7 @@ export const ImageResultSchema = z.object({
       ssimScore: z.number().optional(),
     })
     .optional(),
+  engineResults: z.array(EngineResultInfoSchema).optional(),
 });
 
 export const ProjectTimingSchema = z.object({
@@ -193,11 +215,19 @@ export const CrossResultItemSchema = z.object({
   diffPercentage: z.number(),
   pixelDiff: z.number(),
   ssimScore: z.number().optional(),
+  engineResults: z.array(EngineResultInfoSchema).optional(),
   phash: z
     .object({
       similarity: z.number(),
       baselineHash: z.string(),
       testHash: z.string(),
+    })
+    .optional(),
+  domSnapshot: z
+    .object({
+      enabled: z.boolean(),
+      baselineFound: z.boolean(),
+      testFound: z.boolean(),
     })
     .optional(),
   domDiff: DomDiffStructuredSchema.optional(),

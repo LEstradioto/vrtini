@@ -29,6 +29,13 @@ export interface CompareMetrics {
   pixelDiff: number;
   diffPercentage: number;
   ssimScore?: number;
+  engineResults?: Array<{
+    engine: string;
+    similarity: number;
+    diffPercent: number;
+    diffPixels?: number;
+    error?: string;
+  }>;
   phash?: { similarity: number };
 }
 
@@ -63,6 +70,11 @@ export interface CompareQueueItem {
   aiRecommendation?: 'approve' | 'review' | 'reject';
   aiCategory?: string;
   aiConfidence?: number;
+  domSnapshotStatus?: {
+    enabled: boolean;
+    baselineFound: boolean;
+    testFound: boolean;
+  };
   domDiff?: CompareDomDiff;
 }
 

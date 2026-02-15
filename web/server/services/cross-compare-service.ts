@@ -79,7 +79,19 @@ export interface CrossResultItem {
   diffPercentage: number;
   pixelDiff: number;
   ssimScore?: number;
+  engineResults?: {
+    engine: string;
+    similarity: number;
+    diffPercent: number;
+    diffPixels?: number;
+    error?: string;
+  }[];
   phash?: PerceptualHashResult;
+  domSnapshot?: {
+    enabled: boolean;
+    baselineFound: boolean;
+    testFound: boolean;
+  };
   domDiff?: DomDiffResult;
   error?: string;
   accepted?: boolean;
@@ -570,6 +582,9 @@ export async function runCrossCompare(
         const testPath = resolve(outputDir, testFilename);
         const baselineSnapshotPath = resolve(outputDir, getSnapshotFilename(baselineFilename));
         const testSnapshotPath = resolve(outputDir, getSnapshotFilename(testFilename));
+        const domSnapshotEnabled = !!config.domSnapshot?.enabled;
+        const baselineSnapshotFound = domSnapshotEnabled && existsSync(baselineSnapshotPath);
+        const testSnapshotFound = domSnapshotEnabled && existsSync(testSnapshotPath);
 
         const diffName = getScreenshotFilename(
           scenario.name,
@@ -591,8 +606,9 @@ export async function runCrossCompare(
             scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
           maxDiffPixels:
             scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
-          baselineSnapshot: config.domSnapshot?.enabled ? baselineSnapshotPath : undefined,
-          testSnapshot: config.domSnapshot?.enabled ? testSnapshotPath : undefined,
+          baselineSnapshot:
+            domSnapshotEnabled && baselineSnapshotFound ? baselineSnapshotPath : undefined,
+          testSnapshot: domSnapshotEnabled && testSnapshotFound ? testSnapshotPath : undefined,
         });
 
         const diffPathValue = getDiffPath(result);
@@ -609,7 +625,24 @@ export async function runCrossCompare(
           diffPercentage: result.diffPercentage,
           pixelDiff: result.pixelDiff,
           ssimScore: 'ssimScore' in result ? result.ssimScore : undefined,
+          engineResults:
+            result.reason === 'diff' && Array.isArray(result.engineResults)
+              ? result.engineResults.map((engineResult) => ({
+                  engine: engineResult.engine,
+                  similarity: engineResult.similarity,
+                  diffPercent: engineResult.diffPercent,
+                  diffPixels: engineResult.diffPixels,
+                  error: engineResult.error,
+                }))
+              : undefined,
           phash: 'phash' in result ? result.phash : undefined,
+          domSnapshot: domSnapshotEnabled
+            ? {
+                enabled: true,
+                baselineFound: baselineSnapshotFound,
+                testFound: testSnapshotFound,
+              }
+            : undefined,
           domDiff: result.reason === 'diff' ? result.domDiff : undefined,
           error: result.reason === 'error' ? result.error : undefined,
         };

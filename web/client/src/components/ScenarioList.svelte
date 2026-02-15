@@ -4,31 +4,73 @@
 
   let { scenarios = $bindable() } = $props<{ scenarios: Scenario[] }>();
 
-  let expandedScenario = $state<number | null>(null);
+  let expandedScenarios = $state<Set<number>>(new Set());
+
+  function isExpanded(index: number): boolean {
+    return expandedScenarios.has(index);
+  }
+
+  function toggleScenario(index: number): void {
+    const next = new Set(expandedScenarios);
+    if (next.has(index)) {
+      next.delete(index);
+    } else {
+      next.add(index);
+    }
+    expandedScenarios = next;
+  }
+
+  function expandAllScenarios(): void {
+    expandedScenarios = new Set(scenarios.map((_, i) => i));
+  }
+
+  function collapseAllScenarios(): void {
+    expandedScenarios = new Set();
+  }
 
   function addScenario() {
     scenarios = [
       ...scenarios,
       { name: 'new-scenario', url: 'https://example.com' },
     ];
-    expandedScenario = scenarios.length - 1;
+    expandedScenarios = new Set([...expandedScenarios, scenarios.length - 1]);
   }
 
   function removeScenario(index: number) {
     scenarios = scenarios.filter((_, i) => i !== index);
-    if (expandedScenario === index) expandedScenario = null;
+    const next = new Set<number>();
+    for (const expandedIndex of expandedScenarios) {
+      if (expandedIndex < index) next.add(expandedIndex);
+      if (expandedIndex > index) next.add(expandedIndex - 1);
+    }
+    expandedScenarios = next;
   }
 </script>
 
 <section class="section">
   <h2>
-    Scenarios
-    <button class="btn small" onclick={addScenario}>+ Add</button>
+    <span>Scenarios</span>
+    <div class="scenario-actions">
+      <button class="btn small" onclick={addScenario}>+ Add</button>
+      <button class="btn small" onclick={expandAllScenarios} disabled={scenarios.length === 0}>
+        Expand all
+      </button>
+      <button class="btn small" onclick={collapseAllScenarios} disabled={expandedScenarios.size === 0}>
+        Collapse all
+      </button>
+    </div>
   </h2>
   <div class="scenario-list">
     {#each scenarios as scenario, i}
-      <div class="scenario-item" class:expanded={expandedScenario === i}>
-        <div class="scenario-header" onclick={() => (expandedScenario = expandedScenario === i ? null : i)} onkeydown={(e) => e.key === 'Enter' && (expandedScenario = expandedScenario === i ? null : i)} role="button" tabindex="0">
+      <div class="scenario-item" class:expanded={isExpanded(i)}>
+        <div
+          class="scenario-header"
+          onclick={() => toggleScenario(i)}
+          onkeydown={(e) => e.key === 'Enter' && toggleScenario(i)}
+          role="button"
+          tabindex="0"
+        >
+          <span class="scenario-chevron" aria-hidden="true">{isExpanded(i) ? '▾' : '▸'}</span>
           <span class="scenario-name">{scenario.name}</span>
           <span class="scenario-url">{scenario.url}</span>
           <button
@@ -39,7 +81,7 @@
           </button>
         </div>
 
-        {#if expandedScenario === i}
+        {#if isExpanded(i)}
           <div class="scenario-details">
             <label>
               Name
@@ -75,6 +117,12 @@
     align-items: center;
   }
 
+  .scenario-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;
@@ -92,6 +140,11 @@
 
   .btn:hover {
     background: var(--border-soft);
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .btn.small {
@@ -123,13 +176,21 @@
   .scenario-header {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.65rem;
     padding: 0.75rem;
     cursor: pointer;
   }
 
   .scenario-header:hover {
     background: var(--panel);
+  }
+
+  .scenario-chevron {
+    color: var(--text-muted);
+    width: 0.7rem;
+    font-size: 0.8rem;
+    line-height: 1;
+    flex-shrink: 0;
   }
 
   .scenario-name {

@@ -14,6 +14,7 @@
     } | null;
     aiBadgePulsing?: boolean;
     onOpenAIAnalysis?: () => void;
+    onOpenDiffDiagnostics?: () => void;
     effectiveCompareUpdatedAt?: { left?: string; right?: string; diff?: string } | null;
     queueUpdatedAt?: { label: string; iso: string } | null;
     hasCompareQueue: boolean;
@@ -58,6 +59,7 @@
     effectiveCompareAIBadge,
     aiBadgePulsing = false,
     onOpenAIAnalysis,
+    onOpenDiffDiagnostics,
     effectiveCompareUpdatedAt = null,
     queueUpdatedAt = null,
     hasCompareQueue,
@@ -177,7 +179,14 @@
           </div>
 
           {#if effectiveCompareMetrics}
-            <div class="metrics-display compare-inline">
+            <svelte:element
+              this={onOpenDiffDiagnostics ? 'button' : 'div'}
+              type={onOpenDiffDiagnostics ? 'button' : undefined}
+              class="metrics-display compare-inline"
+              class:metrics-trigger={!!onOpenDiffDiagnostics}
+              onclick={onOpenDiffDiagnostics}
+              title={onOpenDiffDiagnostics ? 'Open diff diagnostics' : undefined}
+            >
               <span class="metric" title="Percentage of differing pixels (pixel diff ÷ total pixels).">
                 <span class="metric-label">Diff</span>
                 <span class="metric-value" style="color: {getDiffColor(effectiveCompareMetrics.diffPercentage)}">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
@@ -215,7 +224,7 @@
                   </span>
                 </span>
               {/if}
-            </div>
+            </svelte:element>
           {/if}
         </div>
 
@@ -940,6 +949,18 @@
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 0;
+  }
+
+  .metrics-display.metrics-trigger {
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+
+  .metrics-display.metrics-trigger:hover {
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .metric {

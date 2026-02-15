@@ -44,51 +44,6 @@
     analyzeThreshold: { maxPHashSimilarity: 0.95, maxSSIM: 0.98, minPixelDiff: 0.1 },
     autoApprove: { enabled: false, rules: [] as unknown[] },
   } as const;
-  const configExplainers = [
-    {
-      title: 'Thresholds',
-      impact: 'Controls pass/fail strictness.',
-      details:
-        'Lower threshold is stricter; use diff% and pixel caps when you need stable tolerance across browsers.',
-    },
-    {
-      title: 'Auto Thresholds',
-      impact: 'Learns tolerance caps from project history.',
-      details:
-        'Enable when you have enough approvals. Keep min sample size conservative to avoid noisy recommendations.',
-    },
-    {
-      title: 'Confidence',
-      impact: 'Defines confidence bands shown in triage.',
-      details:
-        'Pass/warn thresholds help separate obvious matches from uncertain items that still need review.',
-    },
-    {
-      title: 'DOM Snapshot',
-      impact: 'Adds structural signals on top of pixels.',
-      details:
-        'Useful for text/layout drift detection. Higher max elements gives richer analysis with higher runtime cost.',
-    },
-    {
-      title: 'Cross Compare',
-      impact: 'Controls browser-pair normalization.',
-      details:
-        'Use pad/resize/crop based on viewport mismatch pattern. Pair filter limits which browser combos are compared.',
-    },
-    {
-      title: 'Engines',
-      impact: 'Fine-tunes each diff algorithm.',
-      details:
-        'Start with defaults; then calibrate per engine only when diagnostics show false positives or missed diffs.',
-    },
-    {
-      title: 'AI Settings',
-      impact: 'Cost and automation policy.',
-      details:
-        'Manual-only keeps humans in the loop; analyze thresholds decide which diffs should spend AI calls.',
-    },
-  ] as const;
-
   function cloneConfig<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
   }
@@ -431,25 +386,10 @@
     <div class="loading">Loading config...</div>
   {:else if configData}
     <div class="sections">
-      <section class="section explainer-section">
-        <h2>Config Explainer</h2>
-        <p class="hint">
-          Quick reference for what each config block changes and which knobs to tune first.
-        </p>
-        <div class="explainer-grid">
-          {#each configExplainers as item}
-            <article class="explainer-card">
-              <h3>{item.title}</h3>
-              <p class="explainer-impact">{item.impact}</p>
-              <p>{item.details}</p>
-            </article>
-          {/each}
-        </div>
-      </section>
-
       <!-- Paths Section -->
       <section class="section">
         <h2>Paths</h2>
+        <p class="section-explainer">Defines where baselines and generated outputs are persisted on disk.</p>
         <div class="form-row">
           <label>
             Baseline Directory
@@ -471,6 +411,7 @@
           Viewports
           <button class="btn small" onclick={addViewport}>+ Add</button>
         </h2>
+        <p class="section-explainer">Controls screenshot dimensions per scenario and browser run.</p>
         <div class="viewport-list">
           {#each configData.viewports as viewport, i}
             <div class="viewport-item">
@@ -484,9 +425,32 @@
         </div>
       </section>
 
+      <!-- Scenarios Section -->
+      <ScenarioList bind:scenarios={configData.scenarios} />
+
+      <!-- Scenario Defaults Section -->
+      <section class="section">
+        <h2>
+          Scenario Defaults
+          <button class="btn small" onclick={() => showScenarioDefaults = !showScenarioDefaults}>
+            {showScenarioDefaults ? 'Hide' : 'Show'}
+          </button>
+        </h2>
+        <p class="section-explainer">Default capture/wait/selector rules applied to every scenario unless overridden.</p>
+
+        {#if showScenarioDefaults}
+          <div class="defaults-form">
+            <ScenarioOptionsForm
+              options={configData.scenarioDefaults ??= {}}
+            />
+          </div>
+        {/if}
+      </section>
+
       <!-- Settings Section -->
       <section class="section">
         <h2>Settings</h2>
+        <p class="section-explainer">Primary diff tolerance and execution controls used on every compare.</p>
         <div class="form-row">
           <label>
             Threshold (0-1)
@@ -556,6 +520,7 @@
       <!-- Advanced Section -->
       <section class="section">
         <h2>Advanced</h2>
+        <p class="section-explainer">Engine-level and structural options for fine calibration and cross-browser behavior.</p>
         <div class="form-row">
           <label class="checkbox">
             <input type="checkbox" bind:checked={configData.quickMode} />
@@ -583,6 +548,7 @@
         <div class="subsection-grid">
           <div class="subsection">
             <h3>DOM Snapshot</h3>
+            <p class="subsection-explainer">Captures layout/text structure to explain diffs beyond raw pixels.</p>
             <div class="form-row">
               <label class="checkbox">
                 <input
@@ -619,6 +585,7 @@
 
           <div class="subsection">
             <h3>Auto Thresholds</h3>
+            <p class="subsection-explainer">Learns tolerance caps from historical approvals for this project.</p>
             <div class="form-row">
               <label class="checkbox">
                 <input
@@ -679,6 +646,7 @@
 
           <div class="subsection">
             <h3>Confidence Thresholds</h3>
+            <p class="subsection-explainer">Defines score bands for pass/warn/fail decisions shown in review flows.</p>
             <div class="form-row">
               <label>
                 Pass Threshold (0-100)
@@ -727,6 +695,7 @@
 
           <div class="subsection">
             <h3>Cross Compare</h3>
+            <p class="subsection-explainer">Configures normalization and mismatch policy for browser-vs-browser pairs.</p>
             <div class="form-row">
               <label>
                 Normalization
@@ -786,6 +755,7 @@
 
           <div class="subsection subsection-wide">
             <h3>Engines</h3>
+            <p class="subsection-explainer">Tune each engine only when diagnostics show false positives or misses.</p>
             <div class="engines-grid">
               <fieldset>
                 <legend>pixelmatch</legend>
@@ -1000,29 +970,10 @@
         </div>
       </section>
 
-      <!-- Scenario Defaults Section -->
-      <section class="section">
-        <h2>
-          Scenario Defaults
-          <button class="btn small" onclick={() => showScenarioDefaults = !showScenarioDefaults}>
-            {showScenarioDefaults ? 'Hide' : 'Show'}
-          </button>
-        </h2>
-        <p class="hint">Default options applied to all scenarios (can be overridden per scenario)</p>
-
-        {#if showScenarioDefaults}
-          <div class="defaults-form">
-            <ScenarioOptionsForm
-              options={configData.scenarioDefaults ??= {}}
-            />
-          </div>
-        {/if}
-      </section>
-
-      <!-- Scenarios Section -->
-      <ScenarioList bind:scenarios={configData.scenarios} />
-
       <!-- AI Settings Section -->
+      <p class="section-explainer standalone-explainer">
+        AI settings control provider credentials, triage triggers, and optional automated actions.
+      </p>
       <AISettings projectId={projectId} config={configData} providerStatuses={providerStatuses} />
 
       <!-- Remove Project -->
@@ -1223,43 +1174,28 @@
     padding: 1rem;
   }
 
-  .explainer-section .hint {
-    margin-top: -0.35rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .explainer-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.7rem;
-  }
-
-  .explainer-card {
-    border: 1px solid var(--border);
-    background: var(--panel-strong);
-    padding: 0.75rem;
-  }
-
-  .explainer-card h3 {
-    margin: 0 0 0.45rem;
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--accent);
-  }
-
-  .explainer-card p {
-    margin: 0;
+  .section-explainer {
+    margin: -0.3rem 0 0.9rem;
     font-family: var(--font-mono);
     font-size: 0.7rem;
-    line-height: 1.35;
     color: var(--text-muted);
+    line-height: 1.4;
   }
 
-  .explainer-impact {
-    color: var(--text-strong) !important;
-    margin-bottom: 0.35rem !important;
+  .subsection-explainer {
+    margin: -0.45rem 0 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .standalone-explainer {
+    margin-top: 0.25rem;
+    margin-bottom: -0.25rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border);
+    background: var(--panel);
   }
 
   .section h2 {

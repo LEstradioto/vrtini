@@ -238,6 +238,13 @@
     pixelDiff: number;
     diffPercentage: number;
     ssimScore?: number;
+    engineResults?: Array<{
+      engine: string;
+      similarity: number;
+      diffPercent: number;
+      diffPixels?: number;
+      error?: string;
+    }>;
     phash?: { similarity: number; baselineHash: string; testHash: string };
   } | null>(null);
   let compareDomDiff = $state<CompareDomDiff | null>(null);
@@ -263,11 +270,13 @@
 
   function toCompareDomDiffFromCompareResult(result: CompareResult | null): CompareDomDiff | null {
     if (!result?.domDiff) return null;
+    const findings = result.domDiff.findings ?? [];
     return {
       similarity: result.domDiff.similarity,
       summary: result.domDiff.summary,
       findingCount: result.domDiff.findingCount,
       topFindings: result.domDiff.topFindings,
+      findings,
     };
   }
 
@@ -450,9 +459,11 @@
         pixelDiff: item.pixelDiff,
         diffPercentage: item.diffPercentage,
         ssimScore: item.ssimScore,
+        engineResults: item.engineResults,
         phash: item.phash,
       },
       domDiff: toCompareDomDiffFromCrossItem(item),
+      domSnapshotStatus: item.domSnapshot,
       viewport: item.viewport,
       badge: {
         label: item.flagged
@@ -1082,6 +1093,7 @@
       pixelDiff: compareResult.pixelDiff,
       diffPercentage: compareResult.diffPercentage,
       ssimScore: compareResult.ssimScore,
+      engineResults: compareResult.engineResults,
       phash: compareResult.phash,
     };
     compareDomDiff = toCompareDomDiffFromCompareResult(compareResult);
@@ -1103,9 +1115,11 @@
         pixelDiff: item.pixelDiff,
         diffPercentage: item.diffPercentage,
         ssimScore: item.ssimScore,
+        engineResults: item.engineResults,
         phash: item.phash,
       },
       domDiff: toCompareDomDiffFromCrossItem(item),
+      domSnapshotStatus: item.domSnapshot,
       title: `${item.scenario} · ${item.viewport}`,
     };
   }
@@ -1508,8 +1522,6 @@
     onAITriage={() => handleAITriage([...selectedImages])}
     aiTriageRunning={analyzing}
     onDelete={handleBulkDelete}
-    onSelectAll={() => { selectedImages = new Set(fullList); }}
-    onCancel={deselectAll}
   />
 {/if}
 {#if activeTab === 'cross' && (crossPanel?.getCrossState()?.selectedCrossCount ?? 0) > 0}
@@ -1530,8 +1542,6 @@
     }}
     aiTriageRunning={crossState?.aiTriageRunning || false}
     onDelete={() => crossPanel?.deleteCrossItems()}
-    onSelectAll={() => crossPanel?.selectAllCross()}
-    onCancel={() => crossPanel?.deselectAllCross()}
   />
 {/if}
 

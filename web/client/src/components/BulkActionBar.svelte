@@ -15,8 +15,6 @@
     onRerunTests,
     onAITriage,
     aiTriageRunning = false,
-    onSelectAll,
-    onCancel,
   } = $props<{
     selectedCount: number;
     selectedApprovableCount?: number;
@@ -33,8 +31,6 @@
     onRerunTests?: () => void;
     onAITriage?: () => void;
     aiTriageRunning?: boolean;
-    onSelectAll?: () => void;
-    onCancel: () => void;
   }>();
 </script>
 
@@ -52,12 +48,12 @@
       {/if}
       {#if onRerun}
         <button class="btn accent" onclick={onRerun} disabled={crossRunning}>
-          {crossRunning ? 'Running...' : `Rerun Compare (${selectedCount})`}
+          {crossRunning ? 'Running...' : `Rerun Cross Compare (${selectedCount})`}
         </button>
       {/if}
       {#if onRerunTests}
         <button class="btn warning" onclick={onRerunTests} disabled={crossRunning}>
-          {crossRunning ? 'Running...' : `Rerun Tests (${selectedCount})`}
+          {crossRunning ? 'Running...' : `Rerun Tests + Compare (${selectedCount})`}
         </button>
       {/if}
       {#if onAITriage}
@@ -93,10 +89,6 @@
         <button class="btn danger" onclick={onDelete} disabled={bulkOperating}>Delete ({selectedCount})</button>
       {/if}
     {/if}
-    {#if onSelectAll}
-      <button class="btn" onclick={onSelectAll}>Select All</button>
-    {/if}
-    <button class="btn" onclick={onCancel} disabled={bulkOperating}>Deselect</button>
   </div>
 </div>
 

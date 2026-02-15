@@ -198,6 +198,7 @@
   let diffOpacity = $state(loadSavedOpacity());
   let localThreshold = $state(compareThreshold);
   let columnMode = $state<ColumnMode>(loadSavedColumnMode());
+  let showDiagnosticsModal = $state(false);
   let lastMultiColumnMode = $state<ColumnMode>(columnMode === '1' ? 'auto' : columnMode);
   let lastNonAutoColumnMode = $state<ColumnMode>(columnMode === 'auto' ? '1' : columnMode);
   let panicActive = $state(false);
@@ -265,6 +266,15 @@
     if (value < 250) return 'Tiny absolute pixel delta';
     if (value < 5000) return 'Moderate absolute pixel delta';
     return 'Large absolute pixel delta';
+  }
+
+  function formatUnknown(value: unknown): string {
+    if (value === undefined) return '';
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
   }
 
   // Zoom constants
@@ -368,10 +378,102 @@
       checkpoints: [0, 1, 5, 10, 25, 50, 75, 100],
     };
   });
+  let diagnosticsRaw = $derived.by(() => ({
+    metrics: effectiveCompareMetrics ?? null,
+    threshold: {
+      configuredPercent: thresholdTrack.threshold,
+      observedPercent: thresholdTrack.observed,
+      pass: thresholdTrack.pass,
+    },
+    domSnapshotStatus: activeCompareItem?.domSnapshotStatus ?? null,
+    domDiff: effectiveCompareDomDiff ?? null,
+    hasTextDiff: textDiffItems.length > 0,
+  }));
+  let engineSignals = $derived.by(() => {
+    const metrics = effectiveCompareMetrics;
+    const dom = effectiveCompareDomDiff;
+    const domSnapshotStatus = activeCompareItem?.domSnapshotStatus;
+    const engineResults = metrics?.engineResults ?? [];
+    const byEngine = new Map(
+      engineResults.map((engineResult) => [engineResult.engine.toLowerCase(), engineResult])
+    );
+    const odiff = byEngine.get('odiff');
+    const ssim = byEngine.get('ssim');
+    const phash = byEngine.get('phash');
+
+    const odiffDetail = odiff
+      ? odiff.error
+        ? `Engine error: ${odiff.error}`
+        : `${(odiff.similarity * 100).toFixed(2)}% similarity · ${odiff.diffPercent.toFixed(2)}% diff${odiff.diffPixels !== undefined ? ` · ${odiff.diffPixels.toLocaleString()} pixels` : ''}`
+      : 'No odiff result available for this item';
+    const ssimValue =
+      ssim && !ssim.error
+        ? ssim.similarity
+        : metrics?.ssimScore !== undefined
+          ? metrics.ssimScore
+          : undefined;
+    const phashValue =
+      phash && !phash.error
+        ? phash.similarity
+        : metrics?.phash
+          ? metrics.phash.similarity
+          : undefined;
+    const domDetail = dom
+      ? `${((dom.similarity ?? 0) * 100).toFixed(1)}% similarity · ${dom.findingCount ?? dom.findings?.length ?? 0} findings`
+      : domSnapshotStatus?.enabled
+        ? `No DOM diff payload · snapshots ${domSnapshotStatus.baselineFound ? 'baseline:ok' : 'baseline:missing'} / ${domSnapshotStatus.testFound ? 'test:ok' : 'test:missing'}`
+        : 'No DOM diff payload';
+    const domNote = domSnapshotStatus?.enabled
+      ? domSnapshotStatus.baselineFound && domSnapshotStatus.testFound
+        ? 'Snapshot files exist; this item produced no structural findings payload.'
+        : 'DOM diff needs both snapshot files. Re-run tests with DOM snapshot capture enabled for this project.'
+      : 'Layout/text structural analysis.';
+
+    return [
+      {
+        name: 'pixelmatch',
+        state: metrics ? 'available' : 'missing',
+        detail: metrics
+          ? `diff ${metrics.diffPercentage.toFixed(2)}% · ${metrics.pixelDiff.toLocaleString()} pixels`
+          : 'No metric payload',
+        note: 'Primary pixel diff map used in compare output.',
+      },
+      {
+        name: 'odiff',
+        state: odiff && !odiff.error ? 'available' : 'missing',
+        detail: odiffDetail,
+        note: 'Alternative diff engine, useful for anti-aliased/layout-sensitive changes.',
+      },
+      {
+        name: 'ssim',
+        state: ssimValue !== undefined ? 'available' : 'missing',
+        detail: ssimValue !== undefined ? `${(ssimValue * 100).toFixed(2)}% similarity` : 'No SSIM value available',
+        note: 'Structural similarity signal.',
+      },
+      {
+        name: 'phash',
+        state: phashValue !== undefined ? 'available' : 'missing',
+        detail: phashValue !== undefined ? `${(phashValue * 100).toFixed(2)}% similarity` : 'No pHash value available',
+        note: 'Perceptual hash signal for visual likeness.',
+      },
+      {
+        name: 'dom',
+        state: dom ? 'available' : 'missing',
+        detail: domDetail,
+        note: domNote,
+      },
+    ] as Array<{ name: string; state: 'available' | 'missing'; detail: string; note: string }>;
+  });
 
   $effect(() => {
     if (!isCompareMode || !hasStructuralInsights) {
       compareDataView = 'visual';
+    }
+  });
+
+  $effect(() => {
+    if (!isCompareMode || !effectiveCompareMetrics) {
+      showDiagnosticsModal = false;
     }
   });
 
@@ -832,7 +934,11 @@
 
     switch (e.key) {
       case 'Escape':
-        onClose();
+        if (showDiagnosticsModal) {
+          showDiagnosticsModal = false;
+        } else {
+          onClose();
+        }
         break;
       case 'ArrowLeft':
         if (isCompareMode) navigateComparePrev();
@@ -1121,6 +1227,11 @@
     aiBadgePulsing = false;
     onOpenAIAnalysis?.();
   }
+
+  function openDiffDiagnostics() {
+    if (!isCompareMode || !effectiveCompareMetrics) return;
+    showDiagnosticsModal = true;
+  }
 </script>
 
 <svelte:window
@@ -1144,6 +1255,7 @@
     {effectiveCompareAIBadge}
     {aiBadgePulsing}
     onOpenAIAnalysis={onOpenAIAnalysis ? handleOpenAIAnalysis : undefined}
+    onOpenDiffDiagnostics={isCompareMode && effectiveCompareMetrics ? openDiffDiagnostics : undefined}
     effectiveCompareUpdatedAt={effectiveCompareUpdatedAt}
     {queueUpdatedAt}
     {hasCompareQueue}
@@ -1206,63 +1318,6 @@
         Structural/Text <kbd>4</kbd>
       </button>
     </div>
-  {/if}
-
-  {#if isCompareMode && effectiveCompareMetrics}
-    <details class="diagnostic-panel" open>
-      <summary>Detailed Diff Diagnostics</summary>
-      <div class="diagnostic-grid">
-        <div class="diagnostic-item">
-          <span class="diagnostic-label">Diff %</span>
-          <span class="diagnostic-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
-          <span class="diagnostic-hint">{getMetricHint('diff', effectiveCompareMetrics.diffPercentage)}</span>
-        </div>
-        {#if effectiveCompareMetrics.ssimScore !== undefined}
-          <div class="diagnostic-item">
-            <span class="diagnostic-label">SSIM</span>
-            <span class="diagnostic-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(2)}%</span>
-            <span class="diagnostic-hint">{getMetricHint('ssim', effectiveCompareMetrics.ssimScore * 100)}</span>
-          </div>
-        {/if}
-        {#if effectiveCompareMetrics.phash}
-          <div class="diagnostic-item">
-            <span class="diagnostic-label">pHash</span>
-            <span class="diagnostic-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(2)}%</span>
-            <span class="diagnostic-hint">{getMetricHint('phash', effectiveCompareMetrics.phash.similarity * 100)}</span>
-          </div>
-        {/if}
-        <div class="diagnostic-item">
-          <span class="diagnostic-label">Pixel Diff Count</span>
-          <span class="diagnostic-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
-          <span class="diagnostic-hint">{getMetricHint('pixels', effectiveCompareMetrics.pixelDiff)}</span>
-        </div>
-      </div>
-
-      <div class="threshold-report">
-        <div class="threshold-head">
-          <span>Threshold Timeline (0-100)</span>
-          <span class="threshold-status" class:pass={thresholdTrack.pass} class:fail={!thresholdTrack.pass}>
-            {#if thresholdTrack.pass}
-              Within configured threshold
-            {:else}
-              Above configured threshold
-            {/if}
-          </span>
-        </div>
-        <div class="threshold-scale">
-          <div class="threshold-rail"></div>
-          {#each thresholdTrack.checkpoints as point}
-            <span class="threshold-tick" style="left: {point}%">{point}</span>
-          {/each}
-          <span class="threshold-marker configured" style="left: {thresholdTrack.threshold}%" title="Configured threshold: {formatPercent(thresholdTrack.threshold)}"></span>
-          <span class="threshold-marker observed" style="left: {thresholdTrack.observed}%" title="Observed diff: {formatPercent(thresholdTrack.observed)}"></span>
-        </div>
-        <div class="threshold-legend">
-          <span><i class="marker-dot configured"></i>Configured: {formatPercent(thresholdTrack.threshold)}</span>
-          <span><i class="marker-dot observed"></i>Observed: {formatPercent(thresholdTrack.observed)}</span>
-        </div>
-      </div>
-    </details>
   {/if}
 
   {#if isCompareMode && compareDataView === 'structural' && hasStructuralInsights}
@@ -1403,6 +1458,155 @@
   />
 </div>
 
+{#if showDiagnosticsModal && isCompareMode && effectiveCompareMetrics}
+  <div
+    class="diagnostic-modal-backdrop"
+    role="presentation"
+    onclick={() => (showDiagnosticsModal = false)}
+  >
+    <div
+      class="diagnostic-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Detailed diff diagnostics"
+      onclick={(event) => event.stopPropagation()}
+    >
+      <div class="diagnostic-modal-head">
+        <h3>Detailed Diff Diagnostics</h3>
+        <button
+          type="button"
+          class="diagnostic-modal-close"
+          onclick={() => (showDiagnosticsModal = false)}
+        >
+          Close
+        </button>
+      </div>
+
+      <div class="diagnostic-grid">
+        <div class="diagnostic-item">
+          <span class="diagnostic-label">Diff %</span>
+          <span class="diagnostic-value">{effectiveCompareMetrics.diffPercentage.toFixed(2)}%</span>
+          <span class="diagnostic-hint">{getMetricHint('diff', effectiveCompareMetrics.diffPercentage)}</span>
+        </div>
+        {#if effectiveCompareMetrics.ssimScore !== undefined}
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">SSIM</span>
+            <span class="diagnostic-value">{(effectiveCompareMetrics.ssimScore * 100).toFixed(2)}%</span>
+            <span class="diagnostic-hint">{getMetricHint('ssim', effectiveCompareMetrics.ssimScore * 100)}</span>
+          </div>
+        {/if}
+        {#if effectiveCompareMetrics.phash}
+          <div class="diagnostic-item">
+            <span class="diagnostic-label">pHash</span>
+            <span class="diagnostic-value">{(effectiveCompareMetrics.phash.similarity * 100).toFixed(2)}%</span>
+            <span class="diagnostic-hint">{getMetricHint('phash', effectiveCompareMetrics.phash.similarity * 100)}</span>
+          </div>
+        {/if}
+        <div class="diagnostic-item">
+          <span class="diagnostic-label">Pixel Diff Count</span>
+          <span class="diagnostic-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
+          <span class="diagnostic-hint">{getMetricHint('pixels', effectiveCompareMetrics.pixelDiff)}</span>
+        </div>
+      </div>
+
+      <div class="threshold-report">
+        <div class="threshold-head">
+          <span>Threshold Timeline (0-100)</span>
+          <span class="threshold-status" class:pass={thresholdTrack.pass} class:fail={!thresholdTrack.pass}>
+            {#if thresholdTrack.pass}
+              Within configured threshold
+            {:else}
+              Above configured threshold
+            {/if}
+          </span>
+        </div>
+        <div class="threshold-scale">
+          <div class="threshold-rail"></div>
+          {#each thresholdTrack.checkpoints as point}
+            <span class="threshold-tick" style="left: {point}%">{point}</span>
+          {/each}
+          <span class="threshold-marker configured" style="left: {thresholdTrack.threshold}%" title="Configured threshold: {formatPercent(thresholdTrack.threshold)}"></span>
+          <span class="threshold-marker observed" style="left: {thresholdTrack.observed}%" title="Observed diff: {formatPercent(thresholdTrack.observed)}"></span>
+        </div>
+        <div class="threshold-legend">
+          <span><i class="marker-dot configured"></i>Configured: {formatPercent(thresholdTrack.threshold)}</span>
+          <span><i class="marker-dot observed"></i>Observed: {formatPercent(thresholdTrack.observed)}</span>
+        </div>
+      </div>
+
+      <section class="diagnostic-section">
+        <h4>Engine Signals</h4>
+        <p class="diagnostic-note">
+          Confidence weight tuning is not configurable yet. This panel shows all available signals for future weighting controls.
+        </p>
+        <div class="engine-grid">
+          {#each engineSignals as engine}
+            <article class="engine-item">
+              <div class="engine-head">
+                <span class="engine-name">{engine.name}</span>
+                <span class="engine-state" class:available={engine.state === 'available'} class:missing={engine.state === 'missing'}>
+                  {engine.state}
+                </span>
+              </div>
+              <p class="engine-detail">{engine.detail}</p>
+              <p class="engine-note">{engine.note}</p>
+            </article>
+          {/each}
+        </div>
+      </section>
+
+      <section class="diagnostic-section">
+        <h4>Text Diff</h4>
+        {#if textDiffItems.length === 0}
+          <p class="diagnostic-empty">No text-diff payload found for this item.</p>
+        {:else}
+          <div class="text-diff-list">
+            {#each textDiffItems as textChange}
+              <article class="text-diff-item severity-{textChange.severity}">
+                <div class="text-diff-title">
+                  <span class="text-diff-path">{textChange.path}</span>
+                  <span class="text-diff-tag">&lt;{textChange.tag}&gt;</span>
+                </div>
+                <p class="text-diff-description">{textChange.description}</p>
+                <pre class="text-diff-block">- {textChange.before || '<empty>'}
++ {textChange.after || '<empty>'}</pre>
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </section>
+
+      <section class="diagnostic-section">
+        <h4>Structural Findings</h4>
+        {#if !effectiveCompareDomDiff?.findings || effectiveCompareDomDiff.findings.length === 0}
+          <p class="diagnostic-empty">No structural findings payload available.</p>
+        {:else}
+          <div class="finding-list">
+            {#each effectiveCompareDomDiff.findings as finding}
+              <details class="finding-item">
+                <summary>
+                  <span class="finding-severity {finding.severity}">{finding.severity}</span>
+                  <span class="finding-type">{finding.type}</span>
+                  <span class="finding-path">{finding.path}</span>
+                </summary>
+                <p class="finding-description">{finding.description}</p>
+                {#if finding.detail}
+                  <pre class="finding-detail">{formatUnknown(finding.detail)}</pre>
+                {/if}
+              </details>
+            {/each}
+          </div>
+        {/if}
+      </section>
+
+      <section class="diagnostic-section">
+        <h4>Raw Diagnostics Payload</h4>
+        <pre class="diagnostic-json">{formatUnknown(diagnosticsRaw)}</pre>
+      </section>
+    </div>
+  </div>
+{/if}
+
 <style>
   .gallery-overlay {
     position: fixed;
@@ -1467,26 +1671,58 @@
     color: var(--text-muted, #9ba3af);
   }
 
-  .diagnostic-panel {
-    margin: 8px 16px 0;
-    border: 1px solid var(--border, #2a2f36);
-    background: rgba(7, 11, 15, 0.95);
+  .diagnostic-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1015;
+    background: rgba(0, 0, 0, 0.62);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
   }
 
-  .diagnostic-panel > summary {
-    cursor: pointer;
-    list-style: none;
-    padding: 10px 12px;
-    font-family: var(--font-mono, monospace);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-strong, #f8fafc);
+  .diagnostic-modal {
+    width: min(920px, 100%);
+    max-height: min(84vh, 860px);
+    overflow: auto;
+    border: 1px solid var(--border, #2a2f36);
+    background: rgba(7, 11, 15, 0.98);
+  }
+
+  .diagnostic-modal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
     border-bottom: 1px solid var(--border, #2a2f36);
   }
 
-  .diagnostic-panel > summary::-webkit-details-marker {
-    display: none;
+  .diagnostic-modal-head h3 {
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-strong, #f8fafc);
+  }
+
+  .diagnostic-modal-close {
+    border: 1px solid var(--border, #2a2f36);
+    background: transparent;
+    color: var(--text-muted, #9ba3af);
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+
+  .diagnostic-modal-close:hover {
+    border-color: var(--accent, #4ade80);
+    color: var(--accent, #4ade80);
   }
 
   .diagnostic-grid {
@@ -1649,6 +1885,186 @@
 
   .marker-dot.observed {
     background: #f97316;
+  }
+
+  .diagnostic-section {
+    border-top: 1px solid var(--border, #2a2f36);
+    padding: 10px 12px 12px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .diagnostic-section h4 {
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-strong, #f8fafc);
+  }
+
+  .diagnostic-note {
+    margin: 0;
+    color: var(--text-muted, #9ba3af);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .diagnostic-empty {
+    margin: 0;
+    color: var(--text-muted, #9ba3af);
+    font-size: 12px;
+  }
+
+  .engine-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+  }
+
+  .engine-item {
+    border: 1px solid var(--border, #2a2f36);
+    background: rgba(255, 255, 255, 0.015);
+    padding: 8px;
+    display: grid;
+    gap: 5px;
+  }
+
+  .engine-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .engine-name {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--text-strong, #f8fafc);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .engine-state {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border, #2a2f36);
+    padding: 2px 6px;
+  }
+
+  .engine-state.available {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.4);
+  }
+
+  .engine-state.missing {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.45);
+  }
+
+  .engine-detail {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-strong, #f8fafc);
+  }
+
+  .engine-note {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-muted, #9ba3af);
+    line-height: 1.35;
+  }
+
+  .finding-list {
+    display: grid;
+    gap: 6px;
+    max-height: 260px;
+    overflow: auto;
+    padding-right: 4px;
+  }
+
+  .finding-item {
+    border: 1px solid var(--border, #2a2f36);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 8px;
+  }
+
+  .finding-item summary {
+    cursor: pointer;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+  }
+
+  .finding-item summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .finding-severity {
+    font-size: 10px;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border: 1px solid var(--border, #2a2f36);
+    font-family: var(--font-mono, monospace);
+  }
+
+  .finding-severity.critical {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.5);
+  }
+
+  .finding-severity.warning {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.45);
+  }
+
+  .finding-severity.info {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.45);
+  }
+
+  .finding-path {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    color: var(--text-muted, #9ba3af);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 52ch;
+  }
+
+  .finding-description {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--text-muted, #9ba3af);
+  }
+
+  .finding-detail {
+    margin: 8px 0 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border, #2a2f36);
+    padding: 8px;
+  }
+
+  .diagnostic-json {
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border, #2a2f36);
+    padding: 8px;
+    max-height: 260px;
+    overflow: auto;
   }
 
   .structural-panel {

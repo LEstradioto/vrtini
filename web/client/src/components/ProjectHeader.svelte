@@ -52,7 +52,7 @@
         </button>
       </div>
     {:else}
-      <button class="btn primary" onclick={onRunTests}>$ vrt test</button>
+      <button class="btn primary" onclick={onRunTests}>Run Tests</button>
     {/if}
     <button class="btn" onclick={onOpenConfig}>config</button>
   </div>

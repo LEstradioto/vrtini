@@ -21,10 +21,31 @@ export interface ComparisonResultWithUrl {
   pixelDiff: number;
   diffPercentage: number;
   ssimScore?: number;
+  engineResults?: {
+    engine: string;
+    similarity: number;
+    diffPercent: number;
+    diffPixels?: number;
+    error?: string;
+  }[];
   phash?: {
     similarity: number;
     baselineHash: string;
     testHash: string;
+  };
+  domDiff?: {
+    findingCount: number;
+    similarity: number;
+    topFindings: { type: string; severity: string; description: string }[];
+    summary: Record<string, number>;
+    findings?: {
+      type: string;
+      path: string;
+      tag: string;
+      severity: 'critical' | 'warning' | 'info';
+      description: string;
+      detail?: Record<string, unknown>;
+    }[];
   };
 }
 
@@ -83,6 +104,30 @@ export async function compareImagesWithDiff(
 
   // Extract phash if available (match, diff, or error results have it)
   const phash = 'phash' in result && result.phash ? result.phash : undefined;
+  const engineResults =
+    'engineResults' in result && Array.isArray(result.engineResults)
+      ? result.engineResults.map((engineResult) => ({
+          engine: engineResult.engine,
+          similarity: engineResult.similarity,
+          diffPercent: engineResult.diffPercent,
+          diffPixels: engineResult.diffPixels,
+          error: engineResult.error,
+        }))
+      : undefined;
+  const domDiff =
+    result.reason === 'diff' && result.domDiff
+      ? {
+          findingCount: result.domDiff.findings.length,
+          similarity: result.domDiff.similarity,
+          topFindings: result.domDiff.findings.slice(0, 5).map((finding) => ({
+            type: finding.type,
+            severity: finding.severity,
+            description: finding.description,
+          })),
+          summary: result.domDiff.summary,
+          findings: result.domDiff.findings,
+        }
+      : undefined;
 
   return {
     diffUrl: `/api/projects/${projectId}/images/custom-diff/${diffFilename}`,
@@ -90,7 +135,9 @@ export async function compareImagesWithDiff(
     pixelDiff: result.pixelDiff,
     diffPercentage: result.diffPercentage,
     ssimScore: getSsimScore(result),
+    engineResults,
     phash,
+    domDiff,
   };
 }
 

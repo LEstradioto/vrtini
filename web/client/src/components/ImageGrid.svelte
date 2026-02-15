@@ -14,6 +14,11 @@
     | 'auto-review';
   type ViewMode = 'grid' | 'list';
   type SortMode = 'name' | 'diff';
+  type RunningTestState = {
+    phase: string;
+    progress: number;
+    total: number;
+  };
 
   const VIEW_MODE_KEY = 'vrt-image-view-mode';
   const SORT_MODE_KEY = 'vrt-image-sort-mode';
@@ -155,21 +160,28 @@
   let allPageSelected = $derived(currentList.length > 0 && currentList.every((f) => selectedImages.has(f)));
   let allFilteredSelected = $derived(fullList.length > 0 && fullList.every((f) => selectedImages.has(f)));
   let selectedCount = $derived(selectedImages.size);
+  let pageSelectedCount = $derived(
+    currentList.reduce((count, filename) => count + (selectedImages.has(filename) ? 1 : 0), 0)
+  );
 
-  function selectAll() {
-    if (allFilteredSelected) return;
-    if (allPageSelected && totalPages > 1) {
-      selectedImages = new Set(fullList);
-    } else {
-      selectedImages = new Set(currentList);
-    }
+  function selectCurrentPage() {
+    if (currentList.length === 0) return;
+    const next = new Set(selectedImages);
+    for (const filename of currentList) next.add(filename);
+    selectedImages = next;
   }
 
-  let selectAllLabel = $derived.by(() => {
-    if (allFilteredSelected) return `All (${fullList.length})`;
-    if (allPageSelected && totalPages > 1) return `All Pages (${fullList.length})`;
-    return 'Select All';
-  });
+  function deselectCurrentPage() {
+    if (currentList.length === 0) return;
+    const next = new Set(selectedImages);
+    for (const filename of currentList) next.delete(filename);
+    selectedImages = next;
+  }
+
+  function selectAllFiltered() {
+    if (fullList.length === 0) return;
+    selectedImages = new Set(fullList);
+  }
 
   function deselectAll() {
     selectedImages = new Set();
@@ -178,12 +190,35 @@
 
   function handleToggleAllRows(event: Event) {
     const checked = (event.currentTarget as HTMLInputElement).checked;
-    if (checked) {
-      selectedImages = new Set(fullList);
-      return;
-    }
-    deselectAll();
+    if (checked) selectCurrentPage();
+    else if (allFilteredSelected) deselectAll();
+    else deselectCurrentPage();
   }
+
+  let runningTestState = $derived.by((): RunningTestState | null => {
+    if (!testState || typeof testState !== 'object') return null;
+    const state = testState as Partial<RunningTestState>;
+    if (
+      typeof state.phase !== 'string' ||
+      typeof state.progress !== 'number' ||
+      typeof state.total !== 'number'
+    ) {
+      return null;
+    }
+    return {
+      phase: state.phase,
+      progress: state.progress,
+      total: state.total,
+    };
+  });
+
+  let testProgressPct = $derived.by(() => {
+    if (!runningTestState || runningTestState.total <= 0) return 0;
+    return Math.max(
+      0,
+      Math.min(100, Math.round((runningTestState.progress / runningTestState.total) * 100))
+    );
+  });
 
   // Debounce search
   $effect(() => {
@@ -195,7 +230,7 @@
 
   $effect(() => {
     if (!selectAllCheckbox) return;
-    selectAllCheckbox.indeterminate = selectedCount > 0 && !allFilteredSelected;
+    selectAllCheckbox.indeterminate = pageSelectedCount > 0 && !allPageSelected;
   });
 </script>
 
@@ -220,32 +255,22 @@
         </button>
       {/if}
     </div>
-    <div class="selection-controls">
-      <label class="row-select-all" title="Select all rows in current filtered result">
-        <input
-          bind:this={selectAllCheckbox}
-          type="checkbox"
-          checked={allFilteredSelected}
-          onchange={handleToggleAllRows}
-        />
-        <span>Rows</span>
-      </label>
-      <button class="btn small" class:expanded={allPageSelected && !allFilteredSelected && totalPages > 1} class:all-selected={allFilteredSelected} onclick={selectAll}>{selectAllLabel}</button>
-      <button class="btn small" onclick={deselectAll} disabled={selectedCount === 0}>Deselect</button>
-      <span class="view-divider"></span>
-      <button class="view-toggle" class:active={viewMode === 'grid'} onclick={() => setViewMode('grid')} title="Grid view">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      </button>
-      <button class="view-toggle" class:active={viewMode === 'list'} onclick={() => setViewMode('list')} title="List view">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-      <span class="view-divider"></span>
-      <button class="sort-toggle" class:active={sortMode === 'diff'} onclick={() => setSortMode(sortMode === 'diff' ? 'name' : 'diff')} title={sortMode === 'diff' ? 'Sort by name' : 'Sort by diff % (highest first)'}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h12M3 18h6"/></svg>
-        {sortMode === 'diff' ? '% ↓' : 'A-Z'}
-      </button>
-    </div>
   </div>
+
+  {#if runningTestState}
+    <div class="test-run-progress" role="status" aria-live="polite">
+      <div class="test-run-progress-head">
+        <span>{runningTestState.phase}</span>
+        <span>{testProgressPct}%</span>
+      </div>
+      <div class="test-run-progress-track">
+        <div class="test-run-progress-fill" style="width: {testProgressPct}%"></div>
+      </div>
+      <div class="test-run-progress-meta">
+        {runningTestState.progress}/{runningTestState.total} screenshots
+      </div>
+    </div>
+  {/if}
 
   {#if fullList.length === 0}
     <div class="empty">
@@ -265,6 +290,39 @@
     {:else}
       <div class="image-count">{fullList.length} images</div>
     {/if}
+
+    <div class="image-table-header">
+      <div class="image-table-controls-left">
+        <label class="row-select-all" title="Select rows on current page">
+          <input
+            bind:this={selectAllCheckbox}
+            type="checkbox"
+            checked={allPageSelected}
+            onchange={handleToggleAllRows}
+          />
+        </label>
+        {#if allPageSelected && !allFilteredSelected && fullList.length > currentList.length}
+          <button class="btn small select-all-filtered-btn" onclick={selectAllFiltered}>
+            Select all {fullList.length}
+          </button>
+        {/if}
+        {#if selectedCount > 0}
+          <span class="selected-count">{selectedCount} selected</span>
+        {/if}
+      </div>
+      <div class="image-table-controls-right">
+        <button class="view-toggle" class:active={viewMode === 'grid'} onclick={() => setViewMode('grid')} title="Grid view">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button class="view-toggle" class:active={viewMode === 'list'} onclick={() => setViewMode('list')} title="List view">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <button class="sort-toggle" class:active={sortMode === 'diff'} onclick={() => setSortMode(sortMode === 'diff' ? 'name' : 'diff')} title={sortMode === 'diff' ? 'Sort by name' : 'Sort by diff % (highest first)'}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h12M3 18h6"/></svg>
+          {sortMode === 'diff' ? '% ↓' : 'A-Z'}
+        </button>
+      </div>
+    </div>
 
     {#if viewMode === 'grid'}
       <div class="image-grid">
@@ -445,31 +503,42 @@
   .tag-filter.tag-auto-review { border-color: rgba(234, 179, 8, 0.45); background: rgba(234, 179, 8, 0.12); color: var(--tag-auto-review); }
   .tag-filter.tag-passed { border-color: rgba(56, 189, 248, 0.45); background: rgba(56, 189, 248, 0.12); color: var(--tag-passed); }
 
-  .selection-controls {
+  .image-table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 40px;
+    padding: 0.5rem 0.65rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .image-table-controls-left,
+  .image-table-controls-right {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .image-table-controls-right {
     margin-left: auto;
-    padding-left: 1rem;
-    border-left: 1px solid var(--border);
   }
 
   .row-select-all {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    gap: 0;
     color: var(--text-muted);
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-family: var(--font-mono, monospace);
-    user-select: none;
     cursor: pointer;
   }
 
   .row-select-all input {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     accent-color: var(--accent);
     margin: 0;
     cursor: pointer;
@@ -478,8 +547,64 @@
   .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: none; border-radius: 0; background: var(--border); color: var(--text-strong); font-size: 0.875rem; font-family: var(--font-mono, monospace); text-transform: lowercase; cursor: pointer; transition: background 0.2s; }
   .btn:hover { background: var(--border-soft); }
   .btn.small { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
-  .btn.small.expanded { background: var(--accent); color: #fff; }
-  .btn.small.all-selected { background: #22c55e; color: #fff; }
+  .select-all-filtered-btn {
+    white-space: nowrap;
+  }
+
+  .selected-count {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono, monospace);
+    text-transform: lowercase;
+  }
+
+  .test-run-progress {
+    margin: 0.65rem 0.75rem 0;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    padding: 0.5rem 0.6rem;
+  }
+
+  .test-run-progress-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-bottom: 0.3rem;
+  }
+
+  .test-run-progress-track {
+    height: 6px;
+    background: var(--border-soft);
+    overflow: hidden;
+  }
+
+  .test-run-progress-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(
+      110deg,
+      var(--accent) 0%,
+      var(--accent) 35%,
+      color-mix(in srgb, var(--accent) 72%, white 28%) 52%,
+      var(--accent) 70%,
+      var(--accent) 100%
+    );
+    background-size: 28px 100%;
+    animation: test-progress-stripes 0.8s linear infinite;
+    transition: width 0.25s ease;
+  }
+
+  @keyframes test-progress-stripes {
+    from { background-position: 0 0; }
+    to { background-position: 28px 0; }
+  }
+
+  .test-run-progress-meta {
+    margin-top: 0.25rem;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+  }
 
   .empty {
     text-align: center;
@@ -603,7 +728,6 @@
   }
 
   /* View toggle */
-  .view-divider { width: 1px; height: 16px; background: var(--border); }
   .view-toggle {
     display: inline-flex; align-items: center; justify-content: center;
     width: 28px; height: 28px; padding: 0; border: 1px solid var(--border);
@@ -679,6 +803,12 @@
   }
 
   @media (max-width: 768px) {
-    .selection-controls { display: none; }
+    .image-table-header {
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .image-table-controls-right {
+      margin-left: 0;
+    }
   }
 </style>

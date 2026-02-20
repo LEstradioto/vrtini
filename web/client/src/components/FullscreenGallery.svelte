@@ -401,9 +401,13 @@
     const ssim = byEngine.get('ssim');
     const phash = byEngine.get('phash');
 
+    const odiffError = odiff?.error?.trim();
+    const odiffLayoutMismatch = !!odiffError && /layout differs/i.test(odiffError);
     const odiffDetail = odiff
-      ? odiff.error
-        ? `Engine error: ${odiff.error}`
+      ? odiffError
+        ? odiffLayoutMismatch
+          ? 'Layout differs between images (dimensions/layout changed), so odiff similarity was skipped for this item.'
+          : `Engine error: ${odiffError}`
         : `${(odiff.similarity * 100).toFixed(2)}% similarity · ${odiff.diffPercent.toFixed(2)}% diff${odiff.diffPixels !== undefined ? ` · ${odiff.diffPixels.toLocaleString()} pixels` : ''}`
       : 'No odiff result available for this item';
     const ssimValue =
@@ -425,8 +429,8 @@
         : 'No DOM diff payload';
     const domNote = domSnapshotStatus?.enabled
       ? domSnapshotStatus.baselineFound && domSnapshotStatus.testFound
-        ? 'Snapshot files exist; this item produced no structural findings payload.'
-        : 'DOM diff needs both snapshot files. Re-run tests with DOM snapshot capture enabled for this project.'
+        ? 'Snapshot files exist, but this item returned no DOM/text structural payload.'
+        : 'DOM diff requires both snapshot files. Run Tests with DOM snapshot enabled. If still missing, rebuild Docker image and rerun tests.'
       : 'Layout/text structural analysis.';
 
     return [
@@ -440,7 +444,7 @@
       },
       {
         name: 'odiff',
-        state: odiff && !odiff.error ? 'available' : 'missing',
+        state: odiff && !odiffError ? 'available' : odiffError ? 'warning' : 'missing',
         detail: odiffDetail,
         note: 'Alternative diff engine, useful for anti-aliased/layout-sensitive changes.',
       },
@@ -458,11 +462,15 @@
       },
       {
         name: 'dom',
-        state: dom ? 'available' : 'missing',
+        state: dom
+          ? 'available'
+          : domSnapshotStatus?.enabled
+            ? 'warning'
+            : 'missing',
         detail: domDetail,
         note: domNote,
       },
-    ] as Array<{ name: string; state: 'available' | 'missing'; detail: string; note: string }>;
+    ] as Array<{ name: string; state: 'available' | 'warning' | 'missing'; detail: string; note: string }>;
   });
 
   $effect(() => {
@@ -1537,14 +1545,19 @@
       <section class="diagnostic-section">
         <h4>Engine Signals</h4>
         <p class="diagnostic-note">
-          Confidence weight tuning is not configurable yet. This panel shows all available signals for future weighting controls.
+          Signal weights are fixed for now. When a signal is missing or warning, this panel shows exactly what to rerun or rebuild.
         </p>
         <div class="engine-grid">
           {#each engineSignals as engine}
             <article class="engine-item">
               <div class="engine-head">
                 <span class="engine-name">{engine.name}</span>
-                <span class="engine-state" class:available={engine.state === 'available'} class:missing={engine.state === 'missing'}>
+                <span
+                  class="engine-state"
+                  class:available={engine.state === 'available'}
+                  class:warning={engine.state === 'warning'}
+                  class:missing={engine.state === 'missing'}
+                >
                   {engine.state}
                 </span>
               </div>
@@ -1959,9 +1972,14 @@
     border-color: rgba(74, 222, 128, 0.4);
   }
 
-  .engine-state.missing {
+  .engine-state.warning {
     color: #f59e0b;
     border-color: rgba(245, 158, 11, 0.45);
+  }
+
+  .engine-state.missing {
+    color: #fca5a5;
+    border-color: rgba(248, 113, 113, 0.45);
   }
 
   .engine-detail {

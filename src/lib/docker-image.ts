@@ -24,7 +24,7 @@ export async function buildDockerImage(
   const stream = await docker.buildImage(
     {
       context: dockerDir,
-      src: ['Dockerfile', 'playwright-runner.js', 'batch-runner.js'],
+      src: ['Dockerfile', 'playwright-runner.js', 'batch-runner.js', 'dom-snapshot.js'],
     },
     {
       t: imageTag,

@@ -3,8 +3,15 @@
   import ScenarioOptionsForm from './ScenarioOptionsForm.svelte';
 
   let { scenarios = $bindable() } = $props<{ scenarios: Scenario[] }>();
+  const SCENARIOS_BATCH_SIZE = 8;
 
   let expandedScenarios = $state<Set<number>>(new Set());
+  let visibleScenarioCount = $state(SCENARIOS_BATCH_SIZE);
+
+  let visibleScenarios = $derived(scenarios.slice(0, visibleScenarioCount));
+  let hiddenScenarioCount = $derived(Math.max(0, scenarios.length - visibleScenarioCount));
+  let canLoadMore = $derived(hiddenScenarioCount > 0);
+  let canShowLess = $derived(visibleScenarioCount > SCENARIOS_BATCH_SIZE);
 
   function isExpanded(index: number): boolean {
     return expandedScenarios.has(index);
@@ -20,24 +27,36 @@
     expandedScenarios = next;
   }
 
-  function expandAllScenarios(): void {
-    expandedScenarios = new Set(scenarios.map((_, i) => i));
+  function loadMoreScenarios(): void {
+    visibleScenarioCount = Math.min(scenarios.length, visibleScenarioCount + SCENARIOS_BATCH_SIZE);
   }
 
-  function collapseAllScenarios(): void {
-    expandedScenarios = new Set();
+  function showFewerScenarios(): void {
+    visibleScenarioCount = SCENARIOS_BATCH_SIZE;
+    const next = new Set<number>();
+    for (const expandedIndex of expandedScenarios) {
+      if (expandedIndex < SCENARIOS_BATCH_SIZE) next.add(expandedIndex);
+    }
+    expandedScenarios = next;
   }
 
   function addScenario() {
-    scenarios = [
+    const nextScenarios = [
       ...scenarios,
       { name: 'new-scenario', url: 'https://example.com' },
     ];
-    expandedScenarios = new Set([...expandedScenarios, scenarios.length - 1]);
+    scenarios = nextScenarios;
+    const newIndex = nextScenarios.length - 1;
+    visibleScenarioCount = Math.max(visibleScenarioCount, nextScenarios.length);
+    expandedScenarios = new Set([...expandedScenarios, newIndex]);
   }
 
   function removeScenario(index: number) {
     scenarios = scenarios.filter((_, i) => i !== index);
+    visibleScenarioCount = Math.max(
+      SCENARIOS_BATCH_SIZE,
+      Math.min(visibleScenarioCount, scenarios.length)
+    );
     const next = new Set<number>();
     for (const expandedIndex of expandedScenarios) {
       if (expandedIndex < index) next.add(expandedIndex);
@@ -52,16 +71,10 @@
     <span>Scenarios</span>
     <div class="scenario-actions">
       <button class="btn small" onclick={addScenario}>+ Add</button>
-      <button class="btn small" onclick={expandAllScenarios} disabled={scenarios.length === 0}>
-        Expand all
-      </button>
-      <button class="btn small" onclick={collapseAllScenarios} disabled={expandedScenarios.size === 0}>
-        Collapse all
-      </button>
     </div>
   </h2>
   <div class="scenario-list">
-    {#each scenarios as scenario, i}
+    {#each visibleScenarios as scenario, i}
       <div class="scenario-item" class:expanded={isExpanded(i)}>
         <div
           class="scenario-header"
@@ -96,6 +109,21 @@
         {/if}
       </div>
     {/each}
+
+    {#if canLoadMore || canShowLess}
+      <div class="scenario-list-footer">
+        {#if canLoadMore}
+          <button class="btn small" onclick={loadMoreScenarios}>
+            Load more ({hiddenScenarioCount} remaining)
+          </button>
+        {/if}
+        {#if canShowLess}
+          <button class="btn small" onclick={showFewerScenarios}>
+            Show less
+          </button>
+        {/if}
+      </div>
+    {/if}
   </div>
 </section>
 
@@ -160,6 +188,14 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .scenario-list-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding-top: 0.35rem;
   }
 
   .scenario-item {

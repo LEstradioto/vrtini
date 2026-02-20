@@ -33,6 +33,7 @@ export interface ScreenshotResult {
   success: boolean;
   screenshotPath?: string;
   snapshotPath?: string;
+  warning?: string;
   error?: string;
   logs?: string;
 }
@@ -355,6 +356,7 @@ export async function runBatchContainer(
           success: true,
           screenshotPath: join(outputDir, batchResult.screenshot),
           snapshotPath: batchResult.snapshot ? join(outputDir, batchResult.snapshot) : undefined,
+          warning: batchResult.warning,
           logs,
         };
       }

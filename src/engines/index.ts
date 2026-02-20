@@ -39,6 +39,29 @@ const DEFAULT_THRESHOLDS: ConfidenceThresholds = {
   warn: 80,
 };
 
+interface SsimCompareResult {
+  ssim: number;
+}
+type SsimCompareFn = (a: ImageSSIM.IImage, b: ImageSSIM.IImage) => SsimCompareResult;
+
+function resolveSsimCompare(): SsimCompareFn {
+  // `image-ssim` exports differ between CJS/ESM environments.
+  // Try all known shapes to keep runtime stable.
+  const moduleCandidate = ImageSSIM as unknown as {
+    compare?: unknown;
+    default?: { compare?: unknown };
+    ['module.exports']?: { compare?: unknown };
+  };
+  const compareFn =
+    moduleCandidate.compare ??
+    moduleCandidate.default?.compare ??
+    moduleCandidate['module.exports']?.compare;
+  if (typeof compareFn !== 'function') {
+    throw new Error('image-ssim compare() is not available in current module format');
+  }
+  return compareFn as SsimCompareFn;
+}
+
 function buildEnginesConfig(config: Partial<EnginesConfig>): EnginesConfig {
   return {
     pixelmatch: { ...DEFAULT_ENGINES_CONFIG.pixelmatch, ...config.pixelmatch },
@@ -121,6 +144,7 @@ async function runPixelmatch(
 
 async function runSSIM(baseline: string, test: string): Promise<EngineResult> {
   try {
+    const compareFn = resolveSsimCompare();
     const loadPNG = (path: string): PNG => PNG.sync.read(readFileSync(path));
 
     const toImage = (img: PNG): ImageSSIM.IImage => ({
@@ -194,7 +218,7 @@ async function runSSIM(baseline: string, test: string): Promise<EngineResult> {
       img2 = resizePNG(img2, targetWidth, targetHeight);
     }
 
-    const result = ImageSSIM.compare(toImage(img1), toImage(img2));
+    const result = compareFn(toImage(img1), toImage(img2));
 
     return {
       engine: 'ssim',

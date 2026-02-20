@@ -866,6 +866,7 @@
     let diffItems = 0;
     let missing = 0;
     let withError = 0;
+    const errorBuckets = new Map<string, number>();
     for (const item of crossResults.items) {
       if (item.reason !== 'diff') continue;
       diffItems += 1;
@@ -874,14 +875,26 @@
         missing += 1;
         continue;
       }
-      if (odiff.error) withError += 1;
+      if (odiff.error) {
+        withError += 1;
+        const key = odiff.error.trim();
+        errorBuckets.set(key, (errorBuckets.get(key) ?? 0) + 1);
+      }
     }
     if (diffItems === 0) return null;
     if (withError > 0) {
+      const top = [...errorBuckets.entries()].sort((a, b) => b[1] - a[1])[0];
+      const detailParts = [`${withError}/${diffItems} diff item(s) returned odiff errors.`];
+      if (top) {
+        detailParts.push(`Top: "${top[0]}" (${top[1]} items).`);
+      }
+      if (missing > 0) {
+        detailParts.push(`${missing} item(s) have no odiff payload.`);
+      }
       return {
         tone: 'warning',
         title: 'odiff health',
-        detail: `${withError}/${diffItems} diff item(s) returned odiff errors.`,
+        detail: detailParts.join(' '),
       };
     }
     if (missing > 0) {
@@ -891,11 +904,7 @@
         detail: `${missing}/${diffItems} diff item(s) are missing odiff output.`,
       };
     }
-    return {
-      tone: 'info',
-      title: 'odiff health',
-      detail: `Available for ${diffItems}/${diffItems} diff item(s).`,
-    };
+    return null;
   });
   let domSnapshotPrecheck = $derived.by((): PipelineWarning | null => {
     if (!crossResults || crossResults.items.length === 0) return null;
@@ -915,17 +924,16 @@
       if (!snapshot.baselineFound || !snapshot.testFound) missing += 1;
     }
     if (missing > 0) {
+      const missingAll = missing === snapshots.length;
       return {
         tone: 'warning',
         title: 'DOM snapshot',
-        detail: `${missing}/${snapshots.length} item(s) are missing baseline or test snapshots.`,
+        detail: missingAll
+          ? `${missing}/${snapshots.length} item(s) are missing snapshots. Run Tests with domSnapshot enabled. If it stays at zero, rebuild Docker image and rerun tests.`
+          : `${missing}/${snapshots.length} item(s) are missing baseline or test snapshots.`,
       };
     }
-    return {
-      tone: 'info',
-      title: 'DOM snapshot',
-      detail: `Ready for ${snapshots.length}/${snapshots.length} item(s).`,
-    };
+    return null;
   });
 
   // Selection

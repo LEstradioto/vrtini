@@ -36,6 +36,13 @@ function toOdiffOptions(config: OdiffConfig): ODiffOptions {
   };
 }
 
+function withBinaryPath(options: ODiffOptions): ODiffOptions {
+  // `odiff-bin` defaults to a bundled Windows binary (`odiff.exe`), which fails with
+  // ENOEXEC on macOS/Linux. When running on non-Windows, force execution via PATH.
+  if (process.platform === 'win32') return options;
+  return { ...(options as Record<string, unknown>), __binaryPath: 'odiff' } as ODiffOptions;
+}
+
 function resultToEngineResult(result: ODiffResult, diffOutput: string): EngineResult {
   if (result.match) {
     return makeSuccessResult(0, 0, diffOutput);
@@ -74,7 +81,12 @@ export async function compareWithOdiff(
   }
 
   try {
-    const result = await compare(baseline, test, diffOutput, toOdiffOptions(config));
+    const result = await compare(
+      baseline,
+      test,
+      diffOutput,
+      withBinaryPath(toOdiffOptions(config))
+    );
     return resultToEngineResult(result, diffOutput);
   } catch (err: unknown) {
     return makeErrorResult(getErrorMessage(err));

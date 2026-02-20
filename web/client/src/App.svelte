@@ -4,7 +4,11 @@
   import Config from './pages/Config.svelte';
   import { test, projects as projectsApi, images as imagesApi, type Project } from './lib/api';
   import { SvelteMap } from 'svelte/reactivity';
-  import { setAppContext, type TestState } from './lib/app-context';
+  import {
+    setAppContext,
+    type PersistedTestWarning,
+    type TestState,
+  } from './lib/app-context';
   import { getErrorMessage } from './lib/errors';
   import { log } from './lib/logger';
   import { POLL_INTERVAL_MS, MAX_POLL_FAILURES } from '../../shared/constants';
@@ -81,10 +85,13 @@
 
   // Global test errors - shown after tests complete with failure
   let testErrors = new SvelteMap<string, string>();
+  // Test diagnostics warnings persisted after run completion
+  let testWarnings = new SvelteMap<string, PersistedTestWarning>();
 
   // Start a test run for a project
   async function startTest(project: Project, onComplete?: () => void) {
     try {
+      testWarnings.delete(project.id);
       const res = await test.run(project.id);
       runningTests.set(project.id, {
         jobId: res.jobId,
@@ -139,7 +146,9 @@
           ...testState,
           progress: status.progress,
           total: status.total,
-          phase: phaseText
+          phase: phaseText,
+          warnings: status.warnings,
+          captureDiagnostics: status.captureDiagnostics,
         });
 
         if (status.status !== 'running') {
@@ -149,6 +158,15 @@
           // Capture error if test failed
           if (status.status === 'failed' && status.error) {
             testErrors.set(projectId, status.error);
+          }
+          const warningList = status.warnings ?? [];
+          if (warningList.length > 0) {
+            testWarnings.set(projectId, {
+              warnings: warningList,
+              captureDiagnostics: status.captureDiagnostics,
+            });
+          } else {
+            testWarnings.delete(projectId);
           }
 
           onComplete?.();
@@ -185,7 +203,19 @@
   // Rerun specific images (single or bulk)
   async function rerunImage(project: Project, filenames: string | string[], onComplete?: () => void) {
     try {
+      testWarnings.delete(project.id);
       const res = await test.rerun(project.id, filenames);
+      if (res.failed && res.failed.length > 0) {
+        const samples = res.failed.slice(0, 3).join(', ');
+        testWarnings.set(
+          project.id,
+          {
+            warnings: [
+              `Skipped ${res.failed.length} file(s) that did not match config. Samples: ${samples}`,
+            ],
+          }
+        );
+      }
       runningTests.set(project.id, {
         jobId: res.jobId,
         progress: 0,
@@ -202,6 +232,10 @@
 
   function clearTestError(projectId: string) {
     testErrors.delete(projectId);
+  }
+
+  function clearTestWarning(projectId: string) {
+    testWarnings.delete(projectId);
   }
 
   let sidebarCollapsed = $state(false);
@@ -283,7 +317,17 @@
     prevRunningCount = count;
   });
 
-  setAppContext({ navigate, runningTests, startTest, abortTest, rerunImage, testErrors, clearTestError });
+  setAppContext({
+    navigate,
+    runningTests,
+    startTest,
+    abortTest,
+    rerunImage,
+    testErrors,
+    clearTestError,
+    testWarnings,
+    clearTestWarning,
+  });
 </script>
 
 <div class="app" class:sidebar-collapsed={sidebarCollapsed}>

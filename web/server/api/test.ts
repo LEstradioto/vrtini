@@ -191,6 +191,8 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
         startedAt: status.startedAt,
         completedAt: status.completedAt,
         timing: status.timing,
+        warnings: status.warnings,
+        captureDiagnostics: status.captureDiagnostics,
       };
     }
   );

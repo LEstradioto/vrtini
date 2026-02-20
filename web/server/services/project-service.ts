@@ -502,7 +502,14 @@ export function computeAutoThresholdCaps(
 export async function listImages(dir: string): Promise<string[]> {
   if (!existsSync(dir)) return [];
   const files = await readdir(dir);
-  return files.filter((f) => f.endsWith('.png'));
+  return files.filter((filename) => {
+    if (!filename.endsWith('.png')) return false;
+    // Ignore engine artifact outputs (e.g. "foo_webkit_mobile-odiff.png")
+    // so only canonical screenshot/diff files are surfaced to the UI.
+    const stem = filename.slice(0, -4);
+    if (stem.endsWith('-odiff') || stem.endsWith('-pixelmatch')) return false;
+    return true;
+  });
 }
 
 function normalizeImageMetadata(filename: string, value: unknown): ImageMetadata | null {

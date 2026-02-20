@@ -7,6 +7,7 @@ import { getImageMetadataPath } from '../../../src/core/paths.js';
 import {
   parseImageFilename,
   computeAutoThresholdCaps,
+  listImages,
   listImagesWithMetadata,
   loadImageFlags,
   setImageFlag,
@@ -296,6 +297,26 @@ describe('listImagesWithMetadata', () => {
         viewport: 'desktop',
       });
       expect(result[0].updatedAt).toEqual(expect.any(String));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('listImages', () => {
+  it('excludes engine artifact png files from listings', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'vrt-images-'));
+    try {
+      await Promise.all([
+        writeFile(join(dir, 'Route_-about_webkit_mobile.png'), ''),
+        writeFile(join(dir, 'Route_-about_webkit_mobile-odiff.png'), ''),
+        writeFile(join(dir, 'Route_-about_webkit_mobile-pixelmatch.png'), ''),
+        writeFile(join(dir, 'readme.txt'), ''),
+      ]);
+
+      const result = await listImages(dir);
+
+      expect(result).toEqual(['Route_-about_webkit_mobile.png']);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -90,8 +90,16 @@ export class ProjectStore {
     const bSet = new Set(this.baselines);
     const tSet = new Set(this.tests);
     const dSet = new Set(this.diffs);
+    const missingTests: string[] = [];
     let newN = 0;
     let passedN = 0;
+    let missingN = 0;
+    for (const b of this.baselines) {
+      if (!tSet.has(b)) {
+        missingN++;
+        missingTests.push(b);
+      }
+    }
     for (const t of this.tests) {
       if (!bSet.has(t)) newN++;
       else if (!dSet.has(t)) passedN++;
@@ -102,6 +110,8 @@ export class ProjectStore {
       diffsSet: dSet,
       newCount: newN,
       passedCount: passedN,
+      missingTestCount: missingN,
+      missingTests,
     };
   });
 
@@ -110,6 +120,8 @@ export class ProjectStore {
   diffsSet = $derived(this.#imageCounts.diffsSet);
   newCount = $derived(this.#imageCounts.newCount);
   passedCount = $derived(this.#imageCounts.passedCount);
+  missingTestCount = $derived(this.#imageCounts.missingTestCount);
+  missingTests = $derived(this.#imageCounts.missingTests);
   totalCount = $derived(Math.max(this.tests.length, this.baselines.length));
   totalTab = $derived<'tests' | 'baselines'>(
     this.tests.length >= this.baselines.length ? 'tests' : 'baselines'

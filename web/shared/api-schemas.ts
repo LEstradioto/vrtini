@@ -604,6 +604,17 @@ export const TestStatusResponseSchema = z.object({
   results: z.array(z.unknown()),
   error: z.string().optional(),
   timing: ProjectTimingSchema.optional(),
+  warnings: z.array(z.string()).optional(),
+  captureDiagnostics: z
+    .object({
+      expectedScreenshots: z.number(),
+      capturedScreenshots: z.number(),
+      expectedSnapshots: z.number(),
+      capturedSnapshots: z.number(),
+      missingScreenshotSamples: z.array(z.string()),
+      missingSnapshotSamples: z.array(z.string()),
+    })
+    .optional(),
 });
 
 export const TestAbortResponseSchema = z.object({

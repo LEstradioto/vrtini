@@ -9,6 +9,22 @@ export interface TestState {
   aborting?: boolean;
   phase?: string;
   error?: string;
+  warnings?: string[];
+  captureDiagnostics?: TestCaptureDiagnostics;
+}
+
+export interface TestCaptureDiagnostics {
+  expectedScreenshots: number;
+  capturedScreenshots: number;
+  expectedSnapshots: number;
+  capturedSnapshots: number;
+  missingScreenshotSamples: string[];
+  missingSnapshotSamples: string[];
+}
+
+export interface PersistedTestWarning {
+  warnings: string[];
+  captureDiagnostics?: TestCaptureDiagnostics;
 }
 
 export interface AppContext {
@@ -23,6 +39,8 @@ export interface AppContext {
   ) => Promise<void>;
   testErrors: SvelteMap<string, string>;
   clearTestError: (projectId: string) => void;
+  testWarnings: SvelteMap<string, PersistedTestWarning>;
+  clearTestWarning: (projectId: string) => void;
 }
 
 const CTX_KEY = Symbol('app');

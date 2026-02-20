@@ -66,7 +66,7 @@
     toggleTagFilter: (tag: ImageTag, event?: MouseEvent) => void;
     matchesTagSet: (filename: string, tags: Set<ImageTag>) => boolean;
     metadataMap: Map<string, ImageMetadata>;
-    onOpenGallery: (filename: string) => void;
+    onOpenGallery: (filename: string, orderedFilenames?: string[]) => void;
   }>();
 
   let sortMode = $state<SortMode>((localStorage.getItem(SORT_MODE_KEY) as SortMode) || 'name');
@@ -342,8 +342,8 @@
             class:tag-passed={tag === 'passed'}
             class:tag-diff={tag === 'diff'}
             class:tag-auto-review={tag === 'auto-review'}
-            onclick={() => onOpenGallery(filename)}
-            onkeydown={(e) => e.key === 'Enter' && onOpenGallery(filename)}
+            onclick={() => onOpenGallery(filename, fullList)}
+            onkeydown={(e) => e.key === 'Enter' && onOpenGallery(filename, fullList)}
             role="button"
             tabindex="0"
           >
@@ -398,8 +398,8 @@
           <div
             class="list-row"
             class:multi-selected={checked}
-            onclick={() => onOpenGallery(filename)}
-            onkeydown={(e) => e.key === 'Enter' && onOpenGallery(filename)}
+            onclick={() => onOpenGallery(filename, fullList)}
+            onkeydown={(e) => e.key === 'Enter' && onOpenGallery(filename, fullList)}
             role="button"
             tabindex="0"
           >

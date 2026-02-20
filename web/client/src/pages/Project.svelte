@@ -17,7 +17,13 @@
   } from '../lib/api';
   import { getErrorMessage } from '../lib/errors';
   import { log } from '../lib/logger';
-  import { ProjectStore, type ImageTag, type ImageType, type ImageStatus } from '../lib/project-store.svelte';
+  import {
+    ProjectStore,
+    type GalleryImage,
+    type ImageTag,
+    type ImageType,
+    type ImageStatus,
+  } from '../lib/project-store.svelte';
   import CompareSelector from '../components/CompareSelector.svelte';
   import CompareResults from '../components/CompareResults.svelte';
   import CrossComparePanel from '../components/CrossComparePanel.svelte';
@@ -31,7 +37,17 @@
   import { getAppContext } from '../lib/app-context';
   import { DEFAULT_COMPARISON_THRESHOLD, PAGE_SIZE, CROSS_THUMB_MAX, SEARCH_DEBOUNCE_MS } from '../../../shared/constants';
 
-  const { navigate, runningTests, startTest, abortTest, rerunImage, testErrors, clearTestError } = getAppContext();
+  const {
+    navigate,
+    runningTests,
+    startTest,
+    abortTest,
+    rerunImage,
+    testErrors,
+    clearTestError,
+    testWarnings,
+    clearTestWarning,
+  } = getAppContext();
 
   let {
     projectId,
@@ -286,6 +302,7 @@
   // Fullscreen gallery state
   let showGallery = $state(false);
   let galleryStartIndex = $state(0);
+  let galleryOrder = $state<string[] | null>(null);
 
   // Bulk operation state
   let bulkOperating = $state(false);
@@ -348,6 +365,21 @@
       await startTest(project, () => loadProject());
     } catch (err) {
       error = getErrorMessage(err, 'Failed to run tests');
+    }
+  }
+
+  async function rerunMissingTests() {
+    if (!project) return;
+    const filenames = missingTestFilenames;
+    if (filenames.length === 0) return;
+    try {
+      await rerunImage(project, filenames, () => {
+        imageCacheKey++;
+        loadProject();
+      });
+      showToast(`Started rerun for ${filenames.length} missing test(s)`, 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Failed to rerun missing tests'), 'error');
     }
   }
 
@@ -423,9 +455,22 @@
   let failedCount = $derived(store.failedCount);
   let newCount = $derived(store.newCount);
   let passedCount = $derived(store.passedCount);
+  let missingTestCount = $derived(store.missingTestCount);
+  let missingTestFilenames = $derived(store.missingTests);
   let autoThresholdReviewCount = $derived(store.autoThresholdReviewCount);
   let testState = $derived(runningTests.get(projectId));
   let testError = $derived(testErrors.get(projectId));
+  let persistedTestWarning = $derived(testWarnings.get(projectId) ?? null);
+  let hasLiveTestWarnings = $derived((testState?.warnings?.length ?? 0) > 0);
+  let activeTestWarnings = $derived(
+    hasLiveTestWarnings
+      ? (testState?.warnings ?? [])
+      : (persistedTestWarning?.warnings ?? [])
+  );
+  let hasTestDiagnostics = $derived(activeTestWarnings.length > 0);
+  let testCaptureDiagnostics = $derived(
+    testState?.captureDiagnostics ?? persistedTestWarning?.captureDiagnostics ?? null
+  );
 
   // Image lists based on active tab, filtered by tag if set
   let rawList = $derived(store.rawList(activeTab, tagFilter));
@@ -608,6 +653,16 @@
 
   // Gallery queue from store, filtered by current tab/tag
   let filteredGalleryQueue = $derived(store.filteredGalleryQueue(activeTab, tagFilter));
+  let orderedGalleryQueue = $derived.by(() => {
+    if (!galleryOrder || galleryOrder.length === 0) return filteredGalleryQueue;
+    const byFilename = new Map(filteredGalleryQueue.map((item) => [item.filename, item]));
+    const ordered: GalleryImage[] = [];
+    for (const filename of galleryOrder) {
+      const item = byFilename.get(filename);
+      if (item) ordered.push(item);
+    }
+    return ordered.length > 0 ? ordered : filteredGalleryQueue;
+  });
 
   function deselectAll() {
     selectedImages = new Set();
@@ -811,14 +866,29 @@
   });
 
   // Gallery functions
-  function openGallery(filename: string) {
-    const index = filteredGalleryQueue.findIndex((item) => item.filename === filename);
+  function openGallery(filename: string, orderedFilenames?: string[]) {
+    const nextOrder = orderedFilenames && orderedFilenames.length > 0 ? [...orderedFilenames] : null;
+    galleryOrder = nextOrder;
+    const queue =
+      nextOrder && nextOrder.length > 0
+        ? (() => {
+            const byFilename = new Map(filteredGalleryQueue.map((item) => [item.filename, item]));
+            const ordered: GalleryImage[] = [];
+            for (const name of nextOrder) {
+              const item = byFilename.get(name);
+              if (item) ordered.push(item);
+            }
+            return ordered.length > 0 ? ordered : filteredGalleryQueue;
+          })()
+        : filteredGalleryQueue;
+    const index = queue.findIndex((item) => item.filename === filename);
     galleryStartIndex = index >= 0 ? index : 0;
     showGallery = true;
   }
 
   function closeGallery() {
     showGallery = false;
+    galleryOrder = null;
   }
 
   function handleGalleryApprove(filename: string) {
@@ -1216,6 +1286,34 @@
     </div>
   {/if}
 
+  {#if hasTestDiagnostics && activeTab !== 'tests'}
+    <div class="warning test-warning">
+      <div class="warning-header">
+        <strong>Pipeline diagnostics</strong>
+        {#if persistedTestWarning && !hasLiveTestWarnings}
+          <button class="warning-close" onclick={() => clearTestWarning(projectId)}>&times;</button>
+        {/if}
+      </div>
+      <ul class="warning-list">
+        {#each activeTestWarnings as warning}
+          <li>{warning}</li>
+        {/each}
+      </ul>
+      {#if testCaptureDiagnostics}
+        <div class="warning-meta">
+          Screenshots: {testCaptureDiagnostics.capturedScreenshots}/{testCaptureDiagnostics.expectedScreenshots}
+          · Snapshots: {testCaptureDiagnostics.capturedSnapshots}/{testCaptureDiagnostics.expectedSnapshots}
+        </div>
+        {#if testCaptureDiagnostics.missingSnapshotSamples.length > 0}
+          <div class="warning-samples">
+            Missing snapshot samples:
+            {testCaptureDiagnostics.missingSnapshotSamples.join(', ')}
+          </div>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
   {#if loading}
     <div class="loading">Loading project...</div>
   {:else if project}
@@ -1278,6 +1376,33 @@
           </button>
         </div>
       </div>
+
+      {#if missingTestCount > 0}
+        <div class="meta-row missing-tests-row">
+          <div class="missing-tests-message">
+            <strong>{missingTestCount}</strong> baseline image(s) are missing test screenshots.
+          </div>
+          <div class="missing-tests-actions">
+            <button
+              class="btn small"
+              onclick={() => {
+                activeTab = 'baselines';
+                setTagFilter('all');
+              }}
+            >
+              Review Baselines
+            </button>
+            <button
+              class="btn small warning"
+              onclick={rerunMissingTests}
+              disabled={!!testState}
+              title="Generate test screenshots for missing baseline pairs"
+            >
+              {testState ? 'Running Tests...' : `Run Missing Tests (${missingTestCount})`}
+            </button>
+          </div>
+        </div>
+      {/if}
 
       {#if project.lastRun}
         <div class="meta-row meta-row-secondary">
@@ -1392,6 +1517,33 @@
           onSetActiveTab={(tab) => activeTab = tab}
         />
       {:else}
+        {#if activeTab === 'tests' && hasTestDiagnostics}
+          <div class="warning test-warning test-warning-inline">
+            <div class="warning-header">
+              <strong>Pipeline diagnostics</strong>
+              {#if persistedTestWarning && !hasLiveTestWarnings}
+                <button class="warning-close" onclick={() => clearTestWarning(projectId)}>&times;</button>
+              {/if}
+            </div>
+            <ul class="warning-list">
+              {#each activeTestWarnings as warning}
+                <li>{warning}</li>
+              {/each}
+            </ul>
+            {#if testCaptureDiagnostics}
+              <div class="warning-meta">
+                Screenshots: {testCaptureDiagnostics.capturedScreenshots}/{testCaptureDiagnostics.expectedScreenshots}
+                · Snapshots: {testCaptureDiagnostics.capturedSnapshots}/{testCaptureDiagnostics.expectedSnapshots}
+              </div>
+              {#if testCaptureDiagnostics.missingSnapshotSamples.length > 0}
+                <div class="warning-samples">
+                  Missing snapshot samples:
+                  {testCaptureDiagnostics.missingSnapshotSamples.join(', ')}
+                </div>
+              {/if}
+            {/if}
+          </div>
+        {/if}
         <ImageGrid
           {currentList}
           {fullList}
@@ -1553,9 +1705,9 @@
 {/if}
 
 <!-- Fullscreen Gallery -->
-{#if showGallery && filteredGalleryQueue.length > 0}
+{#if showGallery && orderedGalleryQueue.length > 0}
   <FullscreenGallery
-    queue={filteredGalleryQueue}
+    queue={orderedGalleryQueue}
     initialIndex={galleryStartIndex}
     baselines={store.baselines}
     diffs={store.diffs}
@@ -1709,6 +1861,61 @@
     font-size: 0.8rem;
     white-space: pre-wrap;
     color: #fca5a5;
+  }
+
+  .warning {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.6);
+    border-left: 3px solid #f59e0b;
+    padding: 0.75rem 1rem;
+    border-radius: 0;
+    margin-bottom: 1rem;
+    font-family: var(--font-mono);
+    color: #fcd34d;
+  }
+
+  .warning-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .warning-close {
+    background: none;
+    border: none;
+    color: #f59e0b;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .warning-list {
+    margin: 0;
+    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.76rem;
+  }
+
+  .warning-meta {
+    margin-top: 0.45rem;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  .warning-samples {
+    margin-top: 0.3rem;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    word-break: break-word;
+  }
+
+  .test-warning-inline {
+    margin-bottom: 0.75rem;
   }
 
   .loading, .empty {
@@ -2674,6 +2881,26 @@
     justify-content: flex-start;
   }
 
+  .missing-tests-row {
+    border: 1px solid rgba(245, 158, 11, 0.5);
+    background: rgba(245, 158, 11, 0.08);
+    padding: 0.6rem 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .missing-tests-message {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: #f59e0b;
+  }
+
+  .missing-tests-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
   .config-summary {
     display: flex;
     gap: 1.5rem;
@@ -2877,6 +3104,13 @@
 
     .meta-row {
       align-items: flex-start;
+    }
+
+    .missing-tests-actions {
+      margin-left: 0;
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap;
     }
 
     .selection-controls {

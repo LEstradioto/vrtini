@@ -698,11 +698,15 @@
   }
 
   // Filter logic
+  function isCrossSmartPass(item: CrossResultItem): boolean {
+    return item.smartPass ?? (item.match && item.diffPercentage > 0);
+  }
+
   function matchesCrossStatus(item: CrossResultItem, status: CrossStatusFilter): boolean {
     switch (status) {
       case 'diffs': return !item.match;
       case 'matches': return item.match;
-      case 'smart': return item.match && item.diffPercentage > 0;
+      case 'smart': return isCrossSmartPass(item);
       case 'approved': return !!item.accepted;
       case 'unapproved': return !item.accepted;
       case 'flagged': return !!item.flagged;
@@ -790,8 +794,9 @@
       if (item.flagged) summary.flagged += 1;
       if (item.outdated) summary.outdated += 1;
       if (item.accepted) { summary.approved += 1; continue; }
-      const smartPass = item.match && item.diffPercentage > 0;
-      if (item.match) { if (smartPass) summary.smart += 1; else summary.match += 1; continue; }
+      const smartPass = isCrossSmartPass(item);
+      if (smartPass) { summary.smart += 1; continue; }
+      if (item.match) { summary.match += 1; continue; }
       if (item.reason === 'diff') summary.diff += 1; else summary.issue += 1;
     }
     return summary;
@@ -1213,6 +1218,15 @@
         {/if}
       </div>
     {/if}
+    <details class="pipeline-flow-help">
+      <summary>Pipeline flow guide</summary>
+      <div class="pipeline-flow-copy">
+        <p><strong>Run Tests</strong> captures screenshots for the selected scope.</p>
+        <p><strong>Run Compare</strong> computes diff and diagnostics (pixel/SSIM/pHash/DOM).</p>
+        <p><strong>AI Triage</strong> adds AI reasoning and may increase/decrease confidence.</p>
+        <p><strong>Smart Pass</strong> is recalculated after AI triage with explicit reason in fullscreen diagnostics.</p>
+      </div>
+    </details>
   </div>
 
   {#if crossCompareRunning}
@@ -1251,7 +1265,7 @@
       <button class="tag-filter tag-all" class:active={isCrossStatusActive('all')} onclick={(event) => toggleCrossStatusFilter('all', event)} title="Show all items regardless of status">All</button>
       <button class="tag-filter tag-diff" class:active={isCrossStatusActive('diffs')} onclick={(event) => toggleCrossStatusFilter('diffs', event)} title="Items with visual diffs">Diffs</button>
       <button class="tag-filter tag-passed" class:active={isCrossStatusActive('matches')} onclick={(event) => toggleCrossStatusFilter('matches', event)} title="Items that match">Matches</button>
-      <button class="tag-filter tag-smart" class:active={isCrossStatusActive('smart')} onclick={(event) => toggleCrossStatusFilter('smart', event)} title="Matches with non-zero diffs (smart pass)">Smart Pass</button>
+      <button class="tag-filter tag-smart" class:active={isCrossStatusActive('smart')} onclick={(event) => toggleCrossStatusFilter('smart', event)} title="Confidence-based smart pass candidates">Smart Pass</button>
       <button class="tag-filter tag-approved" class:active={isCrossStatusActive('approved')} onclick={(event) => toggleCrossStatusFilter('approved', event)} title="Items you have approved">Approved</button>
       <button class="tag-filter tag-flagged" class:active={isCrossStatusActive('flagged')} onclick={(event) => toggleCrossStatusFilter('flagged', event)} title="Items flagged for later review">Flagged</button>
       <button class="tag-filter tag-unapproved" class:active={isCrossStatusActive('unapproved')} onclick={(event) => toggleCrossStatusFilter('unapproved', event)} title="Items not yet approved">Unapproved</button>
@@ -1346,8 +1360,8 @@
       {#if crossViewMode === 'grid'}
         <div class="cross-grid">
           {#each crossCurrentList as item}
-            {@const smartPass = item.match && item.diffPercentage > 0}
-            {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
+            {@const smartPass = isCrossSmartPass(item)}
+            {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : smartPass ? 'smart' : item.match ? 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
             {@const lastUpdated = getCrossItemLastUpdatedAt(item)}
             <div class="cross-card tag-{crossTag}">
               <div class="cross-card-top">
@@ -1371,7 +1385,7 @@
                 </div>
                 <div class="cross-badge-group">
                   <div class="cross-badge tag-{crossTag}">
-                    {item.flagged ? 'Flagged' : item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
+                    {item.flagged ? 'Flagged' : item.accepted ? 'Approved' : smartPass ? 'Smart Pass' : item.match ? 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
                   </div>
                   {#if item.outdated}
                     <div class="cross-badge tag-outdated">Outdated</div>
@@ -1451,8 +1465,8 @@
       {:else}
         <div class="cross-list">
           {#each crossCurrentList as item}
-            {@const smartPass = item.match && item.diffPercentage > 0}
-            {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : item.match ? smartPass ? 'smart' : 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
+            {@const smartPass = isCrossSmartPass(item)}
+            {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : smartPass ? 'smart' : item.match ? 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
             <div
               class="cross-list-row"
               class:multi-selected={selectedCrossItems.has(getItemKey(item))}
@@ -1485,7 +1499,7 @@
                 </span>
               {/if}
               <div class="cross-badge tag-{crossTag}">
-                {item.flagged ? 'Flagged' : item.accepted ? 'Approved' : item.match ? smartPass ? 'Smart Pass' : 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
+                {item.flagged ? 'Flagged' : item.accepted ? 'Approved' : smartPass ? 'Smart Pass' : item.match ? 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
               </div>
               {#if item.outdated}
                 <div class="cross-badge tag-outdated">Outdated</div>
@@ -1733,6 +1747,37 @@
   .pipeline-warning.tone-warning {
     border-color: rgba(245, 158, 11, 0.5);
     color: #facc15;
+  }
+
+  .pipeline-flow-help {
+    border: 1px solid var(--border);
+    background: var(--panel-strong);
+  }
+
+  .pipeline-flow-help summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.4rem 0.5rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    color: var(--text);
+  }
+
+  .pipeline-flow-help summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .pipeline-flow-copy {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0 0.5rem 0.5rem;
+  }
+
+  .pipeline-flow-copy p {
+    margin: 0;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.35;
   }
 
   .cross-run-progress {

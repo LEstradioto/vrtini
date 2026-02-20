@@ -262,6 +262,23 @@
 
 <section class="section">
   <h2>AI Analysis (Optional)</h2>
+  <details class="flow-explainer">
+    <summary>How AI triage and Smart Pass work</summary>
+    <div class="flow-body">
+      <p>
+        1) Cross compare computes technical signals (pixel diff, SSIM, pHash, DOM/text snapshot).
+      </p>
+      <p>
+        2) Confidence is calculated from these signals, then AI triage can adjust this confidence up/down based on visual reasoning.
+      </p>
+      <p>
+        3) Smart Pass is recomputed after AI analysis. It is not a blind auto-approve, it is a review shortcut candidate.
+      </p>
+      <p>
+        4) Full justification is shown in fullscreen diagnostics (Smart Pass reason + AI recommendation details).
+      </p>
+    </div>
+  </details>
   <label class="checkbox">
     <input
       type="checkbox"
@@ -563,6 +580,39 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
+
+  .flow-explainer {
+    margin: 0 0 0.8rem;
+    border: 1px solid var(--border);
+    background: var(--panel-strong);
+  }
+
+  .flow-explainer summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.55rem 0.65rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    color: var(--text);
+  }
+
+  .flow-explainer summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .flow-body {
+    padding: 0 0.65rem 0.65rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .flow-body p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.45;
   }
 
   .btn {

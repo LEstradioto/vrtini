@@ -27,6 +27,7 @@ const FALLBACK_MAX_ISSUES = 12
 const FALLBACK_TIMEOUT_MS = 45000
 const FALLBACK_SEED = 7
 const FALLBACK_CHUNKS = 1
+const FALLBACK_ALIGN_MAX_SHIFT = 220
 const DRY_RUN = (process.env.UI_VISION_DRY_RUN ?? "0") === "1"
 
 const VALID_SEVERITIES = new Set(["blocker", "major", "minor", "suggestion"])
@@ -57,6 +58,14 @@ function parsePositiveInt(value, fallback) {
   return parsed
 }
 
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback
+  const normalized = String(value).trim().toLowerCase()
+  if (["1", "true", "yes", "y", "on"].includes(normalized)) return true
+  if (["0", "false", "no", "n", "off"].includes(normalized)) return false
+  return fallback
+}
+
 function parseArgs(argv) {
   const parsed = {
     report: null,
@@ -69,6 +78,8 @@ function parseArgs(argv) {
     model: null,
     chunks: null,
     chunkHeight: null,
+    useDiff: null,
+    alignMaxShift: null,
   }
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -93,6 +104,8 @@ function parseArgs(argv) {
     else if (token === "--model") parsed.model = value
     else if (token === "--chunks") parsed.chunks = value
     else if (token === "--chunk-height") parsed.chunkHeight = value
+    else if (token === "--use-diff") parsed.useDiff = value
+    else if (token === "--align-max-shift") parsed.alignMaxShift = value
     else throw new Error(`Unknown argument: ${token}`)
 
     i += 1
@@ -434,6 +447,9 @@ function normalizeCompareChunk(payload, route, chunk, maxIssues) {
       chunkIndex: chunk.index,
       chunkY: chunk.y,
       chunkHeight: chunk.height,
+      chunkBaselineY: chunk.baselineY ?? chunk.y,
+      chunkTestY: chunk.testY ?? chunk.y,
+      chunkAlignedHeight: chunk.alignedHeight ?? chunk.height,
       title: cleanText(issue?.title, "Comparison finding"),
       evidence: cleanText(issue?.evidence),
       recommendation: cleanText(issue?.recommendation),
@@ -451,6 +467,9 @@ function normalizeCompareChunk(payload, route, chunk, maxIssues) {
     index: chunk.index,
     y: chunk.y,
     height: chunk.height,
+    baselineY: chunk.baselineY ?? chunk.y,
+    testY: chunk.testY ?? chunk.y,
+    alignedHeight: chunk.alignedHeight ?? chunk.height,
     verdict,
     confidence,
     summary,
@@ -514,66 +533,233 @@ function buildChunkRanges(totalHeight, chunks, chunkHeight) {
   return ranges.filter((range) => range.y < totalHeight)
 }
 
-function prepareCompareChunks({ baselinePath, testPath, diffPath, chunks, chunkHeight }) {
+function buildRowSignatureSeries(png) {
+  const sampleStep = Math.max(1, Math.floor(png.width / 256))
+  const rows = new Array(png.height)
+
+  for (let y = 0; y < png.height; y += 1) {
+    let luminanceSum = 0
+    let alphaSum = 0
+    let count = 0
+
+    for (let x = 0; x < png.width; x += sampleStep) {
+      const idx = (y * png.width + x) * 4
+      const r = png.data[idx]
+      const g = png.data[idx + 1]
+      const b = png.data[idx + 2]
+      const a = png.data[idx + 3] / 255
+      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+
+      luminanceSum += luminance * a
+      alphaSum += a
+      count += 1
+    }
+
+    rows[y] = {
+      luma: count > 0 ? luminanceSum / count : 0,
+      alpha: count > 0 ? alphaSum / count : 0,
+    }
+  }
+
+  return rows
+}
+
+function estimateVerticalOffset(baselinePng, testPng, requestedMaxShift) {
+  const safeMaxShift = Math.max(
+    0,
+    Math.min(
+      requestedMaxShift,
+      Math.floor(Math.min(baselinePng.height, testPng.height) * 0.2)
+    )
+  )
+  if (safeMaxShift === 0) return 0
+
+  const baselineRows = buildRowSignatureSeries(baselinePng)
+  const testRows = buildRowSignatureSeries(testPng)
+  const minOverlapRows = Math.max(
+    120,
+    Math.floor(Math.min(baselinePng.height, testPng.height) * 0.35)
+  )
+
+  let bestShift = 0
+  let bestScore = Number.POSITIVE_INFINITY
+
+  for (let shift = -safeMaxShift; shift <= safeMaxShift; shift += 1) {
+    const baselineStart = Math.max(0, -shift)
+    const testStart = Math.max(0, shift)
+    const overlap = Math.min(
+      baselinePng.height - baselineStart,
+      testPng.height - testStart
+    )
+
+    if (overlap < minOverlapRows) continue
+
+    let score = 0
+    for (let row = 0; row < overlap; row += 1) {
+      const b = baselineRows[baselineStart + row]
+      const t = testRows[testStart + row]
+      const lumaDelta = Math.abs(b.luma - t.luma)
+      const alphaDelta = Math.abs(b.alpha - t.alpha)
+      score += lumaDelta * 0.85 + alphaDelta * 0.15
+    }
+
+    score /= overlap
+    if (score < bestScore) {
+      bestScore = score
+      bestShift = shift
+    } else if (score === bestScore && Math.abs(shift) < Math.abs(bestShift)) {
+      bestShift = shift
+    }
+  }
+
+  return bestShift
+}
+
+function resolveAlignedRange(range, baselineHeight, testHeight, verticalOffset) {
+  let baselineY = range.y
+  let testY = baselineY + verticalOffset
+  let height = range.height
+
+  if (testY < 0) {
+    const trim = -testY
+    baselineY += trim
+    height -= trim
+    testY = 0
+  }
+
+  if (baselineY < 0) {
+    const trim = -baselineY
+    testY += trim
+    height -= trim
+    baselineY = 0
+  }
+
+  if (baselineY >= baselineHeight || testY >= testHeight) return null
+
+  const maxBaselineHeight = baselineHeight - baselineY
+  const maxTestHeight = testHeight - testY
+  const alignedHeight = Math.min(height, maxBaselineHeight, maxTestHeight)
+  if (alignedHeight <= 0) return null
+
+  return {
+    baselineY,
+    testY,
+    height: alignedHeight,
+  }
+}
+
+function prepareCompareChunks({
+  baselinePath,
+  testPath,
+  diffPath,
+  chunks,
+  chunkHeight,
+  alignMaxShift,
+}) {
   const baselinePng = readPngSafely(baselinePath)
   const testPng = readPngSafely(testPath)
   const diffPng = readPngSafely(diffPath)
 
-  if (!testPng) {
+  if (!baselinePng || !testPng) {
     return {
       chunked: false,
       chunkDir: null,
+      verticalOffset: 0,
       chunks: [{ index: 1, y: 0, height: 0, baselinePath, testPath, diffPath }],
-      reason: "Chunking disabled because test image is not PNG.",
+      reason: "Chunking disabled because baseline/test image is not PNG.",
     }
   }
 
-  const ranges = buildChunkRanges(testPng.height, chunks, chunkHeight)
+  const verticalOffset = estimateVerticalOffset(
+    baselinePng,
+    testPng,
+    alignMaxShift
+  )
+  const ranges = buildChunkRanges(baselinePng.height, chunks, chunkHeight)
   if (ranges.length <= 1) {
     return {
       chunked: false,
       chunkDir: null,
-      chunks: [{ index: 1, y: 0, height: testPng.height, baselinePath, testPath, diffPath }],
+      verticalOffset,
+      chunks: [
+        {
+          index: 1,
+          y: 0,
+          height: Math.min(baselinePng.height, testPng.height),
+          baselinePath,
+          testPath,
+          diffPath,
+        },
+      ],
       reason: null,
     }
   }
 
   const chunkDir = mkdtempSync(join(tmpdir(), "ui-vision-compare-"))
-  const chunkSpecs = ranges.map((range) => {
+  const chunkSpecs = []
+
+  for (const range of ranges) {
+    const aligned = resolveAlignedRange(
+      range,
+      baselinePng.height,
+      testPng.height,
+      verticalOffset
+    )
+    if (!aligned) continue
+
     const spec = {
       index: range.index,
       y: range.y,
       height: range.height,
+      baselineY: aligned.baselineY,
+      testY: aligned.testY,
+      alignedHeight: aligned.height,
       baselinePath,
       testPath,
       diffPath,
     }
 
-    if (baselinePng && range.y < baselinePng.height) {
-      const cropped = cropPng(baselinePng, range.y, Math.min(range.height, baselinePng.height - range.y))
-      const outPath = join(chunkDir, `chunk-${range.index}-baseline.png`)
-      writePng(outPath, cropped)
-      spec.baselinePath = outPath
+    const baselineCrop = cropPng(baselinePng, aligned.baselineY, aligned.height)
+    const baselineOutPath = join(chunkDir, `chunk-${range.index}-baseline.png`)
+    writePng(baselineOutPath, baselineCrop)
+    spec.baselinePath = baselineOutPath
+
+    const testCrop = cropPng(testPng, aligned.testY, aligned.height)
+    const testOutPath = join(chunkDir, `chunk-${range.index}-test.png`)
+    writePng(testOutPath, testCrop)
+    spec.testPath = testOutPath
+
+    if (diffPng && aligned.baselineY < diffPng.height) {
+      const diffCrop = cropPng(
+        diffPng,
+        aligned.baselineY,
+        Math.min(aligned.height, diffPng.height - aligned.baselineY)
+      )
+      const diffOutPath = join(chunkDir, `chunk-${range.index}-diff.png`)
+      writePng(diffOutPath, diffCrop)
+      spec.diffPath = diffOutPath
     }
 
-    if (testPng && range.y < testPng.height) {
-      const cropped = cropPng(testPng, range.y, Math.min(range.height, testPng.height - range.y))
-      const outPath = join(chunkDir, `chunk-${range.index}-test.png`)
-      writePng(outPath, cropped)
-      spec.testPath = outPath
+    chunkSpecs.push(spec)
+  }
+
+  if (chunkSpecs.length === 0) {
+    return {
+      chunked: false,
+      chunkDir: null,
+      verticalOffset,
+      chunks: [{ index: 1, y: 0, height: 0, baselinePath, testPath, diffPath }],
+      reason: "Chunking produced no overlapping regions after vertical alignment.",
     }
+  }
 
-    if (diffPng && range.y < diffPng.height) {
-      const cropped = cropPng(diffPng, range.y, Math.min(range.height, diffPng.height - range.y))
-      const outPath = join(chunkDir, `chunk-${range.index}-diff.png`)
-      writePng(outPath, cropped)
-      spec.diffPath = outPath
-    }
-
-    return spec
-  })
-
-  return { chunked: true, chunkDir, chunks: chunkSpecs, reason: null }
+  return {
+    chunked: true,
+    chunkDir,
+    verticalOffset,
+    chunks: chunkSpecs,
+    reason: null,
+  }
 }
 
 function aggregateCompareChunks(chunkResults, maxIssues, route) {
@@ -717,16 +903,35 @@ async function runLegacySingleMode({ args, route, model, maxIssues, timeoutMs, s
 async function runCompareMode({ args, route, model, maxIssues, timeoutMs, seed }) {
   const baselinePath = resolve(args.baseline)
   const testPath = resolve(args.test)
-  const diffPath = args.diff ? resolve(args.diff) : null
+  const providedDiffPath = args.diff ? resolve(args.diff) : null
 
   if (!existsSync(baselinePath)) throw new Error(`Baseline image not found: ${baselinePath}`)
   if (!existsSync(testPath)) throw new Error(`Test image not found: ${testPath}`)
-  if (diffPath && !existsSync(diffPath)) throw new Error(`Diff image not found: ${diffPath}`)
+  if (providedDiffPath && !existsSync(providedDiffPath)) {
+    throw new Error(`Diff image not found: ${providedDiffPath}`)
+  }
+
+  const useDiff = parseBoolean(
+    args.useDiff ?? process.env.UI_VISION_USE_DIFF ?? "0",
+    false
+  )
+  const diffPath = useDiff ? providedDiffPath : null
 
   const chunks = parsePositiveInt(args.chunks || process.env.UI_VISION_CHUNKS, FALLBACK_CHUNKS)
   const chunkHeight = parsePositiveInt(args.chunkHeight || process.env.UI_VISION_CHUNK_HEIGHT, 0)
+  const alignMaxShift = parsePositiveInt(
+    args.alignMaxShift || process.env.UI_VISION_ALIGN_MAX_SHIFT,
+    FALLBACK_ALIGN_MAX_SHIFT
+  )
 
-  const prepared = prepareCompareChunks({ baselinePath, testPath, diffPath, chunks, chunkHeight })
+  const prepared = prepareCompareChunks({
+    baselinePath,
+    testPath,
+    diffPath,
+    chunks,
+    chunkHeight,
+    alignMaxShift,
+  })
   const totalChunks = prepared.chunks.length
 
   if (DRY_RUN) {
@@ -761,6 +966,10 @@ async function runCompareMode({ args, route, model, maxIssues, timeoutMs, seed }
       baselinePath,
       testPath,
       diffPath,
+      providedDiffPath,
+      useDiff,
+      alignMaxShift,
+      verticalOffset: prepared.verticalOffset ?? 0,
       chunked: prepared.chunked,
       chunkDir: prepared.chunkDir,
       chunkingNote: prepared.reason,
@@ -783,7 +992,7 @@ async function runCompareMode({ args, route, model, maxIssues, timeoutMs, seed }
       { label: "BASELINE image", dataUrl: toDataUrl(chunk.baselinePath) },
       { label: "TEST image", dataUrl: toDataUrl(chunk.testPath) },
     ]
-    if (chunk.diffPath && existsSync(chunk.diffPath)) {
+    if (useDiff && chunk.diffPath && existsSync(chunk.diffPath)) {
       images.push({ label: "DIFF MAP image", dataUrl: toDataUrl(chunk.diffPath) })
     }
 
@@ -806,6 +1015,10 @@ async function runCompareMode({ args, route, model, maxIssues, timeoutMs, seed }
     baselinePath,
     testPath,
     diffPath,
+    providedDiffPath,
+    useDiff,
+    alignMaxShift,
+    verticalOffset: prepared.verticalOffset ?? 0,
     chunked: prepared.chunked,
     chunkDir: prepared.chunkDir,
     chunkingNote: prepared.reason,
@@ -854,6 +1067,8 @@ async function run() {
 
   if (payload.mode === "compare") {
     console.log(`Mode: compare (${payload.chunked ? "chunked" : "single-pass"})`)
+    console.log(`Diff helper image: ${payload.useDiff && payload.diffPath ? "enabled" : "disabled"}`)
+    console.log(`Estimated vertical offset: ${payload.verticalOffset ?? 0}px`)
     console.log(`Aggregate verdict: ${payload.aggregate.verdict} (${payload.aggregate.confidence})`)
     console.log(`Chunk count: ${payload.chunks.length}`)
   } else {

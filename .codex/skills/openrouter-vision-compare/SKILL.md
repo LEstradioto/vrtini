@@ -10,6 +10,7 @@ description: Compares baseline/test/diff screenshots with OpenRouter Gemini and 
 Use this skill to run structured visual comparison between `baseline` and `test` screenshots (optionally with a `diff` map), using OpenRouter Gemini models.
 
 This version supports chunked analysis for very tall pages (`--chunks` or `--chunk-height`) and produces an aggregated verdict.
+It also estimates a global vertical offset before chunking to reduce false positives from long-page vertical drift.
 
 ## When To Use
 
@@ -35,9 +36,11 @@ Detailed note: `references/env-security.md`
 .codex/skills/openrouter-vision-compare/scripts/run-openrouter-vision.sh \
   --baseline /path/to/baseline.png \
   --test /path/to/test.png \
-  --diff /path/to/diff.png \
   --route /my-route
 ```
+
+Note: by default the comparison uses only `baseline + test`.  
+`diff` is optional and only included when explicitly enabled with `--use-diff 1`.
 
 ### Compare using vertical chunks (recommended for long pages)
 
@@ -45,7 +48,18 @@ Detailed note: `references/env-security.md`
 .codex/skills/openrouter-vision-compare/scripts/run-openrouter-vision.sh \
   --baseline /path/to/baseline.png \
   --test /path/to/test.png \
+  --route /my-route \
+  --chunks 6
+```
+
+Optional diff helper:
+
+```bash
+.codex/skills/openrouter-vision-compare/scripts/run-openrouter-vision.sh \
+  --baseline /path/to/baseline.png \
+  --test /path/to/test.png \
   --diff /path/to/diff.png \
+  --use-diff 1 \
   --route /my-route \
   --chunks 6
 ```

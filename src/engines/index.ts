@@ -5,7 +5,7 @@ import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 import * as ImageSSIM from 'image-ssim';
 import { comparePerceptualHash } from '../phash.js';
-import { compareWithOdiff, isOdiffAvailable } from './odiff.js';
+import { compareWithOdiff } from './odiff.js';
 import { getErrorMessage } from '../core/errors.js';
 import type { EngineResult, EnginesConfig, EngineName, PixelmatchConfig } from './types.js';
 import { DEFAULT_ENGINES_CONFIG } from './types.js';
@@ -271,7 +271,7 @@ export async function runEnabledEngines(
     tasks.push(runPixelmatch(baseline, test, `${diffOutputBase}-pixelmatch.png`, cfg.pixelmatch));
   }
 
-  if (cfg.odiff.enabled && (await isOdiffAvailable())) {
+  if (cfg.odiff.enabled) {
     tasks.push(compareWithOdiff(baseline, test, `${diffOutputBase}-odiff.png`, cfg.odiff));
   }
 

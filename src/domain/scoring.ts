@@ -65,6 +65,13 @@ export interface ScoringInputs {
   aiRecommendation?: 'approve' | 'review' | 'reject';
   aiCategory?: ChangeCategory;
   domCategory?: ChangeCategory;
+  domSummary?: {
+    text_changed?: number;
+    text_moved?: number;
+    layout_shift?: number;
+    element_added?: number;
+    element_removed?: number;
+  };
 }
 
 export interface ScoreFactor {
@@ -93,6 +100,8 @@ export function pixelDiffToScore(diffPercent: number, decayFactor: number): numb
 
 const AI_APPROVE_BOOST = 0.1;
 const AI_REJECT_PENALTY = 0.2;
+const DOM_TEXT_CHANGE_REVIEW_CAP_OFFSET = 0.01;
+const DOM_TEXT_CHANGE_FAIL_CAP_COUNT = 5;
 
 /**
  * Calculate AI score adjusted by recommendation.
@@ -180,6 +189,18 @@ export function calculateWeightedScore(
     baseScore = clamp01(baseScore + adjustment);
   }
 
+  // DOM text changes are treated as critical review signals.
+  const textChanges = inputs.domSummary?.text_changed ?? 0;
+  if (textChanges > 0) {
+    const reviewCap = config.verdictThresholds.likelyPass - DOM_TEXT_CHANGE_REVIEW_CAP_OFFSET;
+    baseScore = Math.min(baseScore, reviewCap);
+
+    if (textChanges >= DOM_TEXT_CHANGE_FAIL_CAP_COUNT) {
+      const failCap = config.verdictThresholds.needsReview - DOM_TEXT_CHANGE_REVIEW_CAP_OFFSET;
+      baseScore = Math.min(baseScore, failCap);
+    }
+  }
+
   return { score: baseScore, factors };
 }
 
@@ -229,6 +250,11 @@ export function buildExplanation(inputs: ScoringInputs, factors: ScoringFactors)
     parts.push(`AI: ${factors.ai.category}`);
   }
 
+  const textChanges = inputs.domSummary?.text_changed ?? 0;
+  if (textChanges > 0) {
+    parts.push(`DOM text changes: ${textChanges}`);
+  }
+
   return parts.join(', ');
 }
 
@@ -250,6 +276,7 @@ export interface RuleCondition {
   maxPixelDiff?: number;
   minSSIM?: number;
   minPHash?: number;
+  maxDomTextChanges?: number;
 }
 
 export interface AutoRule {
@@ -264,17 +291,20 @@ export interface RuleInputs {
   confidenceScore: number;
   aiCategory?: ChangeCategory;
   aiSeverity?: Severity;
+  domTextChanges?: number;
 }
 
 /**
  * Check if inputs match a rule condition.
  */
 export function matchesRuleCondition(inputs: RuleInputs, condition: RuleCondition): boolean {
-  if (condition.categories && inputs.aiCategory) {
+  if (condition.categories) {
+    if (!inputs.aiCategory) return false;
     if (!condition.categories.includes(inputs.aiCategory)) return false;
   }
 
-  if (condition.maxSeverity && inputs.aiSeverity) {
+  if (condition.maxSeverity) {
+    if (!inputs.aiSeverity) return false;
     const aiRank = SEVERITY_RANK[inputs.aiSeverity];
     const maxRank = SEVERITY_RANK[condition.maxSeverity];
     if (aiRank > maxRank) return false;
@@ -294,6 +324,10 @@ export function matchesRuleCondition(inputs: RuleInputs, condition: RuleConditio
 
   if (condition.minPHash !== undefined && inputs.phashSimilarity !== undefined) {
     if (inputs.phashSimilarity < condition.minPHash) return false;
+  }
+
+  if (condition.maxDomTextChanges !== undefined && inputs.domTextChanges !== undefined) {
+    if (inputs.domTextChanges > condition.maxDomTextChanges) return false;
   }
 
   return true;
@@ -320,6 +354,7 @@ export const DEFAULT_AUTO_RULES: AutoRule[] = [
       categories: ['cosmetic', 'noise'],
       maxSeverity: 'info',
       minConfidence: 0.85,
+      maxDomTextChanges: 0,
     },
     action: 'approve',
   },
@@ -334,6 +369,7 @@ export const DEFAULT_AUTO_RULES: AutoRule[] = [
     condition: {
       minPHash: 0.98,
       minSSIM: 0.98,
+      maxDomTextChanges: 0,
     },
     action: 'approve',
   },

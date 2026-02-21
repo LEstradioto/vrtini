@@ -114,6 +114,27 @@
     }
   }
 
+  function ensureVisionCompareConfig(): void {
+    if (!config.ai) return;
+    if (!config.ai.visionCompare || typeof config.ai.visionCompare !== 'object') {
+      config.ai.visionCompare = {
+        enabled: true,
+        chunks: 6,
+        minImageHeight: 1800,
+        maxVerticalAlignShift: 220,
+        includeDiffImage: false,
+      };
+      return;
+    }
+    if (typeof config.ai.visionCompare.enabled !== 'boolean') config.ai.visionCompare.enabled = true;
+    if (!Number.isFinite(config.ai.visionCompare.chunks)) config.ai.visionCompare.chunks = 6;
+    if (!Number.isFinite(config.ai.visionCompare.minImageHeight)) config.ai.visionCompare.minImageHeight = 1800;
+    if (!Number.isFinite(config.ai.visionCompare.maxVerticalAlignShift))
+      config.ai.visionCompare.maxVerticalAlignShift = 220;
+    if (typeof config.ai.visionCompare.includeDiffImage !== 'boolean')
+      config.ai.visionCompare.includeDiffImage = false;
+  }
+
   function addAutoApproveRule(): void {
     ensureAutoApproveConfig();
     if (!config.ai) return;
@@ -291,6 +312,13 @@
             manualOnly: false,
             analyzeThreshold: { maxPHashSimilarity: 0.95, maxSSIM: 0.98, minPixelDiff: 0.1 },
             autoApprove: { enabled: false, rules: [] },
+            visionCompare: {
+              enabled: true,
+              chunks: 6,
+              minImageHeight: 1800,
+              maxVerticalAlignShift: 220,
+              includeDiffImage: false,
+            },
           };
         }
         config.ai.enabled = e.currentTarget.checked;
@@ -431,6 +459,91 @@
           <input type="number" min="0" step="0.1" bind:value={config.ai.analyzeThreshold.minPixelDiff} />
         </label>
       </fieldset>
+
+      <div class="auto-approve-head">
+        <h3>Vision Compare (Chunked)</h3>
+      </div>
+      <p class="hint">
+        Default enabled: AI compares long screenshots in vertically aligned chunks to reduce false
+        regressions from browser-specific page offsets.
+      </p>
+      <label class="manual-only">
+        <input
+          type="checkbox"
+          checked={config.ai.visionCompare?.enabled ?? true}
+          onchange={(e) => {
+            ensureVisionCompareConfig();
+            if (!config.ai?.visionCompare) return;
+            config.ai.visionCompare.enabled = e.currentTarget.checked;
+          }}
+        />
+        Enable aligned chunked AI compare
+      </label>
+      <fieldset class="form-row thresholds" disabled={!(config.ai.visionCompare?.enabled ?? true)}>
+        <label>
+          Chunk count
+          <input
+            type="number"
+            min="1"
+            max="12"
+            value={config.ai.visionCompare?.chunks ?? 6}
+            onchange={(e) => {
+              ensureVisionCompareConfig();
+              if (!config.ai?.visionCompare) return;
+              const parsed = parseOptionalNumber(e.currentTarget.value);
+              config.ai.visionCompare.chunks = Math.max(1, Math.min(12, Math.round(parsed ?? 6)));
+            }}
+          />
+        </label>
+        <label>
+          Min image height (px)
+          <input
+            type="number"
+            min="400"
+            max="12000"
+            value={config.ai.visionCompare?.minImageHeight ?? 1800}
+            onchange={(e) => {
+              ensureVisionCompareConfig();
+              if (!config.ai?.visionCompare) return;
+              const parsed = parseOptionalNumber(e.currentTarget.value);
+              config.ai.visionCompare.minImageHeight = Math.max(
+                400,
+                Math.min(12000, Math.round(parsed ?? 1800))
+              );
+            }}
+          />
+        </label>
+        <label>
+          Max vertical align shift (px)
+          <input
+            type="number"
+            min="0"
+            max="2000"
+            value={config.ai.visionCompare?.maxVerticalAlignShift ?? 220}
+            onchange={(e) => {
+              ensureVisionCompareConfig();
+              if (!config.ai?.visionCompare) return;
+              const parsed = parseOptionalNumber(e.currentTarget.value);
+              config.ai.visionCompare.maxVerticalAlignShift = Math.max(
+                0,
+                Math.min(2000, Math.round(parsed ?? 220))
+              );
+            }}
+          />
+        </label>
+      </fieldset>
+      <label class="manual-only">
+        <input
+          type="checkbox"
+          checked={config.ai.visionCompare?.includeDiffImage ?? false}
+          onchange={(e) => {
+            ensureVisionCompareConfig();
+            if (!config.ai?.visionCompare) return;
+            config.ai.visionCompare.includeDiffImage = e.currentTarget.checked;
+          }}
+        />
+        Include diff image as helper in AI prompt (off by default)
+      </label>
 
       <div class="auto-approve-head">
         <h3>Auto-Approve Rules</h3>

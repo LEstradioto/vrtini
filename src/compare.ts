@@ -74,6 +74,10 @@ async function writePNG(path: string, png: PNG): Promise<void> {
   await pipeline(png.pack(), createWriteStream(path));
 }
 
+function hasCriticalDomTextChanges(domDiff: ComparisonDiff['domDiff']): boolean {
+  return (domDiff?.summary.text_changed ?? 0) > 0;
+}
+
 export interface CompareOptions {
   threshold?: number;
   antialiasing?: boolean;
@@ -277,9 +281,26 @@ export async function compareImages(
     const effectiveMaxDiffPixels = tallPage ? undefined : options.maxDiffPixels;
     const withinPixels =
       effectiveMaxDiffPixels !== undefined && numDiffPixels <= effectiveMaxDiffPixels;
+    // DOM diff: compare snapshots when available. We run this before final match decision
+    // so text changes can be treated as a critical review signal.
+    let domDiff: ComparisonDiff['domDiff'];
+    if (options.baselineSnapshot && options.testSnapshot) {
+      try {
+        const [baseSnap, testSnap] = await Promise.all([
+          readFile(options.baselineSnapshot, 'utf-8').then((s) => JSON.parse(s) as DomSnapshot),
+          readFile(options.testSnapshot, 'utf-8').then((s) => JSON.parse(s) as DomSnapshot),
+        ]);
+        domDiff = compareDomSnapshots(baseSnap, testSnap);
+      } catch {
+        // Snapshot comparison failed, continue without it
+      }
+    }
+
+    const domTextGateFailed = hasCriticalDomTextChanges(domDiff);
     const isMatch =
       (determineMatch(numDiffPixels, sizeMismatchForMatch) || withinPct || withinPixels) &&
-      !sizeMismatchForMatch;
+      !sizeMismatchForMatch &&
+      !domTextGateFailed;
 
     if (isMatch) {
       // For matches, only compute SSIM/pHash if requested (quick check)
@@ -355,20 +376,6 @@ export async function compareImages(
       engineResults,
       options.confidenceThresholds
     );
-
-    // DOM diff: compare snapshots if both paths provided
-    let domDiff: ComparisonDiff['domDiff'];
-    if (options.baselineSnapshot && options.testSnapshot) {
-      try {
-        const [baseSnap, testSnap] = await Promise.all([
-          readFile(options.baselineSnapshot, 'utf-8').then((s) => JSON.parse(s) as DomSnapshot),
-          readFile(options.testSnapshot, 'utf-8').then((s) => JSON.parse(s) as DomSnapshot),
-        ]);
-        domDiff = compareDomSnapshots(baseSnap, testSnap);
-      } catch {
-        // Snapshot comparison failed, continue without it
-      }
-    }
 
     return {
       reason: 'diff',

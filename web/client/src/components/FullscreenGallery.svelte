@@ -385,10 +385,28 @@
       observedPercent: thresholdTrack.observed,
       pass: thresholdTrack.pass,
     },
+    smartPass: {
+      enabled: !!(activeCompareItem?.smartPass ?? (effectiveCompareBadge?.tone === 'smart')),
+      reason:
+        activeCompareItem?.smartPassReason ??
+        effectiveCompareBadge?.detail ??
+        null,
+    },
     domSnapshotStatus: activeCompareItem?.domSnapshotStatus ?? null,
     domDiff: effectiveCompareDomDiff ?? null,
     hasTextDiff: textDiffItems.length > 0,
   }));
+  let smartPassDiagnostics = $derived.by(() => {
+    if (!isCompareMode) return null;
+    const smartPass = !!(activeCompareItem?.smartPass ?? (effectiveCompareBadge?.tone === 'smart'));
+    const reason =
+      activeCompareItem?.smartPassReason ??
+      effectiveCompareBadge?.detail ??
+      (smartPass
+        ? 'Marked as Smart Pass candidate from confidence/perceptual signals.'
+        : 'Not marked as Smart Pass for this comparison.');
+    return { smartPass, reason };
+  });
   let engineSignals = $derived.by(() => {
     const metrics = effectiveCompareMetrics;
     const dom = effectiveCompareDomDiff;
@@ -1518,6 +1536,18 @@
       </div>
 
       <div class="threshold-report">
+        {#if smartPassDiagnostics}
+          <section class="diagnostic-section">
+            <h4>Smart Pass Decision</h4>
+            <div class="smartpass-decision" class:pass={smartPassDiagnostics.smartPass} class:fail={!smartPassDiagnostics.smartPass}>
+              <span class="smartpass-status">
+                {smartPassDiagnostics.smartPass ? 'Smart Pass: yes' : 'Smart Pass: no'}
+              </span>
+              <p class="diagnostic-note">{smartPassDiagnostics.reason}</p>
+            </div>
+          </section>
+        {/if}
+
         <div class="threshold-head">
           <span>Threshold Timeline (0-100)</span>
           <span class="threshold-status" class:pass={thresholdTrack.pass} class:fail={!thresholdTrack.pass}>
@@ -1914,6 +1944,31 @@
     letter-spacing: 0.07em;
     text-transform: uppercase;
     color: var(--text-strong, #f8fafc);
+  }
+
+  .smartpass-decision {
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    padding: 10px 12px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .smartpass-decision.pass {
+    border-color: rgba(20, 184, 166, 0.6);
+    background: rgba(20, 184, 166, 0.1);
+  }
+
+  .smartpass-decision.fail {
+    border-color: rgba(148, 163, 184, 0.45);
+  }
+
+  .smartpass-status {
+    font-family: var(--font-mono, monospace);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .diagnostic-note {

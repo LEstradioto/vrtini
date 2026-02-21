@@ -20,6 +20,13 @@ export interface ConfidenceInputs {
   pixelDiffPercent: number;
   aiAnalysis?: AIAnalysisResult;
   domCategory?: ChangeCategory;
+  domSummary?: {
+    text_changed?: number;
+    text_moved?: number;
+    layout_shift?: number;
+    element_added?: number;
+    element_removed?: number;
+  };
 }
 
 function buildScoringInputs(inputs: ConfidenceInputs) {
@@ -31,6 +38,7 @@ function buildScoringInputs(inputs: ConfidenceInputs) {
     aiRecommendation: inputs.aiAnalysis?.recommendation,
     aiCategory: inputs.aiAnalysis?.category,
     domCategory: inputs.domCategory,
+    domSummary: inputs.domSummary,
   };
 }
 
@@ -42,6 +50,7 @@ function buildRuleInputs(inputs: ConfidenceInputs, confidence: ConfidenceResult)
     confidenceScore: confidence.score,
     aiCategory: inputs.aiAnalysis?.category,
     aiSeverity: inputs.aiAnalysis?.severity,
+    domTextChanges: inputs.domSummary?.text_changed,
   };
 }
 

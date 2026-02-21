@@ -190,6 +190,30 @@ describe('calculateWeightedScore', () => {
     expect(score).toBe(1.0);
   });
 
+  it('forces review cap when DOM text changes are present', () => {
+    const inputs: ScoringInputs = {
+      ssimScore: 1.0,
+      phashSimilarity: 1.0,
+      pixelDiffPercent: 0.01,
+      aiConfidence: 1.0,
+      domSummary: { text_changed: 1 },
+    };
+    const { score } = calculateWeightedScore(inputs);
+    expect(score).toBeLessThan(0.75);
+  });
+
+  it('forces fail cap when many DOM text changes are present', () => {
+    const inputs: ScoringInputs = {
+      ssimScore: 1.0,
+      phashSimilarity: 1.0,
+      pixelDiffPercent: 0.01,
+      aiConfidence: 1.0,
+      domSummary: { text_changed: 6 },
+    };
+    const { score } = calculateWeightedScore(inputs);
+    expect(score).toBeLessThan(0.5);
+  });
+
   it('returns 0 when totalWeight is 0', () => {
     // Edge case: no inputs contribute (shouldn't happen in practice)
     const inputs: ScoringInputs = {
@@ -383,7 +407,7 @@ describe('matchesRuleCondition', () => {
     expect(matchesRuleCondition(inputs, condition)).toBe(false);
   });
 
-  it('ignores category condition when aiCategory not provided', () => {
+  it('does not match category condition when aiCategory not provided', () => {
     const inputs: RuleInputs = {
       pixelDiffPercent: 5,
       confidenceScore: 0.8,
@@ -391,7 +415,7 @@ describe('matchesRuleCondition', () => {
     const condition: RuleCondition = {
       categories: ['cosmetic', 'noise'],
     };
-    expect(matchesRuleCondition(inputs, condition)).toBe(true);
+    expect(matchesRuleCondition(inputs, condition)).toBe(false);
   });
 
   it('matches severity when within max', () => {
@@ -542,6 +566,26 @@ describe('matchesRuleCondition', () => {
       minPHash: 0.98,
     };
     expect(matchesRuleCondition(inputs, condition)).toBe(true);
+  });
+
+  it('matches maxDomTextChanges when value is within limit', () => {
+    const inputs: RuleInputs = {
+      pixelDiffPercent: 1,
+      confidenceScore: 0.9,
+      domTextChanges: 0,
+    };
+    const condition: RuleCondition = { maxDomTextChanges: 0 };
+    expect(matchesRuleCondition(inputs, condition)).toBe(true);
+  });
+
+  it('rejects maxDomTextChanges when value exceeds limit', () => {
+    const inputs: RuleInputs = {
+      pixelDiffPercent: 1,
+      confidenceScore: 0.9,
+      domTextChanges: 2,
+    };
+    const condition: RuleCondition = { maxDomTextChanges: 0 };
+    expect(matchesRuleCondition(inputs, condition)).toBe(false);
   });
 
   it('requires all conditions to match', () => {
@@ -715,6 +759,18 @@ describe('DEFAULT_AUTO_RULES', () => {
     const result = evaluateRules(inputs, DEFAULT_AUTO_RULES);
     // Second rule requires minConfidence: 0.70, which fails
     // Third rule requires minPHash/minSSIM: 0.98, which fails
+    expect(result.action).toBeNull();
+  });
+
+  it('does not auto-approve when DOM text changes exist', () => {
+    const inputs: RuleInputs = {
+      pixelDiffPercent: 0.2,
+      confidenceScore: 0.95,
+      ssimScore: 0.99,
+      phashSimilarity: 0.99,
+      domTextChanges: 1,
+    };
+    const result = evaluateRules(inputs, DEFAULT_AUTO_RULES);
     expect(result.action).toBeNull();
   });
 });

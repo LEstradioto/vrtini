@@ -493,53 +493,59 @@
     if (!results) return [];
     const baselineLabel = results.baselineLabel || 'Baseline';
     const testLabel = results.testLabel || 'Test';
-    return filteredItems.map((item) => ({
-      images: {
-        left: { src: getFileUrl(item.baseline), label: baselineLabel, updatedAt: item.baselineUpdatedAt },
-        right: { src: getFileUrl(item.test), label: testLabel, updatedAt: item.testUpdatedAt },
-        diff: item.diff ? { src: getFileUrl(item.diff), label: 'Diff', updatedAt: item.diffUpdatedAt } : undefined,
-      },
-      title: `${item.scenario} · ${item.viewport}`,
-      metrics: {
-        pixelDiff: item.pixelDiff,
-        diffPercentage: item.diffPercentage,
-        ssimScore: item.ssimScore,
-        engineResults: item.engineResults,
-        phash: item.phash,
-      },
-      domDiff: toCompareDomDiffFromCrossItem(item),
-      domSnapshotStatus: item.domSnapshot,
-      viewport: item.viewport,
-      badge: {
-        label: item.flagged
-          ? 'Flagged'
-          : item.accepted
-            ? 'Approved'
-            : item.match
-              ? item.diffPercentage > 0
+    return filteredItems.map((item) => {
+      const smartPass = item.smartPass ?? (item.match && item.diffPercentage > 0);
+      return {
+        images: {
+          left: { src: getFileUrl(item.baseline), label: baselineLabel, updatedAt: item.baselineUpdatedAt },
+          right: { src: getFileUrl(item.test), label: testLabel, updatedAt: item.testUpdatedAt },
+          diff: item.diff ? { src: getFileUrl(item.diff), label: 'Diff', updatedAt: item.diffUpdatedAt } : undefined,
+        },
+        title: `${item.scenario} · ${item.viewport}`,
+        metrics: {
+          pixelDiff: item.pixelDiff,
+          diffPercentage: item.diffPercentage,
+          ssimScore: item.ssimScore,
+          engineResults: item.engineResults,
+          phash: item.phash,
+        },
+        domDiff: toCompareDomDiffFromCrossItem(item),
+        domSnapshotStatus: item.domSnapshot,
+        viewport: item.viewport,
+        badge: {
+          label: item.flagged
+            ? 'Flagged'
+            : item.accepted
+              ? 'Approved'
+              : smartPass
                 ? 'Smart Pass'
-                : 'Match'
-              : item.reason === 'diff'
-                ? 'Diff'
-                : 'Issue',
-        tone: item.flagged
-          ? 'flagged'
-          : item.accepted
-            ? 'approved'
-            : item.match
-              ? item.diffPercentage > 0
+                : item.match
+                  ? 'Match'
+                  : item.reason === 'diff'
+                    ? 'Diff'
+                    : 'Issue',
+          tone: item.flagged
+            ? 'flagged'
+            : item.accepted
+              ? 'approved'
+              : smartPass
                 ? 'smart'
-                : 'passed'
-              : item.reason === 'diff'
-                ? 'diff'
-                : 'unapproved',
-      },
-      accepted: item.accepted,
-      flagged: item.flagged,
-      aiRecommendation: item.aiAnalysis?.recommendation,
-      aiCategory: item.aiAnalysis?.category,
-      aiConfidence: item.aiAnalysis?.confidence,
-    }));
+                : item.match
+                  ? 'passed'
+                  : item.reason === 'diff'
+                    ? 'diff'
+                    : 'unapproved',
+          detail: smartPass ? item.smartPassReason : undefined,
+        },
+        accepted: item.accepted,
+        flagged: item.flagged,
+        smartPass,
+        smartPassReason: item.smartPassReason,
+        aiRecommendation: item.aiAnalysis?.recommendation,
+        aiCategory: item.aiAnalysis?.category,
+        aiConfidence: item.aiAnalysis?.confidence,
+      };
+    });
   });
 
 

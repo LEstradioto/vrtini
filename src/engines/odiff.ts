@@ -1,5 +1,9 @@
 import { compare, type ODiffResult, type ODiffOptions } from 'odiff-bin';
-import { existsSync } from 'fs';
+import { existsSync, chmodSync } from 'fs';
+import { execFile } from 'child_process';
+import { dirname, join } from 'path';
+import { promisify } from 'util';
+import { createRequire } from 'module';
 import type { EngineResult, OdiffConfig } from './types.js';
 import { getErrorMessage } from '../core/errors.js';
 
@@ -36,11 +40,89 @@ function toOdiffOptions(config: OdiffConfig): ODiffOptions {
   };
 }
 
-function withBinaryPath(options: ODiffOptions): ODiffOptions {
-  // `odiff-bin` defaults to a bundled Windows binary (`odiff.exe`), which fails with
-  // ENOEXEC on macOS/Linux. When running on non-Windows, force execution via PATH.
-  if (process.platform === 'win32') return options;
-  return { ...(options as Record<string, unknown>), __binaryPath: 'odiff' } as ODiffOptions;
+const execFileAsync = promisify(execFile);
+const require = createRequire(import.meta.url);
+
+let resolvedBinaryPathPromise: Promise<string | null> | null = null;
+
+function getBundledRawBinaryPath(): string | null {
+  try {
+    const pkgJson = require.resolve('odiff-bin/package.json');
+    const pkgDir = dirname(pkgJson);
+    const key = `${process.platform}-${process.arch}`;
+    const binaries: Record<string, string> = {
+      'linux-x64': 'odiff-linux-x64',
+      'linux-arm64': 'odiff-linux-arm64',
+      'linux-risc64': 'odiff-linux-risc64',
+      'darwin-arm64': 'odiff-macos-arm64',
+      'darwin-x64': 'odiff-macos-x64',
+      'win32-x64': 'odiff-windows-x64.exe',
+      'win32-arm64': 'odiff-windows-arm64.exe',
+    };
+    const filename = binaries[key];
+    if (!filename) return null;
+    return join(pkgDir, 'raw_binaries', filename);
+  } catch {
+    return null;
+  }
+}
+
+async function canRunBinary(binaryPath: string): Promise<boolean> {
+  try {
+    await execFileAsync(binaryPath, ['--help']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveOdiffBinaryPath(): Promise<string | null> {
+  const override = process.env.VRT_ODIFF_BINARY?.trim();
+  if (override) {
+    return (await canRunBinary(override)) ? override : null;
+  }
+
+  // Prefer odiff-bin's platform raw binary directly; avoids stale post-install links.
+  const rawBinary = getBundledRawBinaryPath();
+  if (rawBinary && existsSync(rawBinary)) {
+    try {
+      chmodSync(rawBinary, 0o755);
+    } catch {
+      // ignore chmod failure; canRunBinary below will fail if not executable.
+    }
+    if (await canRunBinary(rawBinary)) {
+      return rawBinary;
+    }
+  }
+
+  // Fallback to linked binary created by odiff-bin postinstall.
+  try {
+    const pkgJson = require.resolve('odiff-bin/package.json');
+    const linkedBinary = join(dirname(pkgJson), 'bin', 'odiff.exe');
+    if (existsSync(linkedBinary) && (await canRunBinary(linkedBinary))) {
+      return linkedBinary;
+    }
+  } catch {
+    // ignore
+  }
+
+  // Final fallback: PATH binary.
+  if (await canRunBinary('odiff')) {
+    return 'odiff';
+  }
+
+  return null;
+}
+
+async function getResolvedBinaryPath(): Promise<string | null> {
+  if (!resolvedBinaryPathPromise) {
+    resolvedBinaryPathPromise = resolveOdiffBinaryPath();
+  }
+  return resolvedBinaryPathPromise;
+}
+
+function withBinaryPath(options: ODiffOptions, binaryPath: string): ODiffOptions {
+  return { ...(options as Record<string, unknown>), __binaryPath: binaryPath } as ODiffOptions;
 }
 
 function resultToEngineResult(result: ODiffResult, diffOutput: string): EngineResult {
@@ -59,15 +141,7 @@ function resultToEngineResult(result: ODiffResult, diffOutput: string): EngineRe
 }
 
 export async function isOdiffAvailable(): Promise<boolean> {
-  try {
-    const { execFile } = await import('child_process');
-    const { promisify } = await import('util');
-    const exec = promisify(execFile);
-    await exec('odiff', ['--help']);
-    return true;
-  } catch {
-    return false;
-  }
+  return (await getResolvedBinaryPath()) !== null;
 }
 
 export async function compareWithOdiff(
@@ -81,11 +155,15 @@ export async function compareWithOdiff(
   }
 
   try {
+    const binaryPath = await getResolvedBinaryPath();
+    if (!binaryPath) {
+      return makeErrorResult(`odiff binary not available for ${process.platform}-${process.arch}`);
+    }
     const result = await compare(
       baseline,
       test,
       diffOutput,
-      withBinaryPath(toOdiffOptions(config))
+      withBinaryPath(toOdiffOptions(config), binaryPath)
     );
     return resultToEngineResult(result, diffOutput);
   } catch (err: unknown) {

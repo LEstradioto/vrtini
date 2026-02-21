@@ -64,8 +64,11 @@ export interface CompareQueueItem {
   badge?: {
     label: string;
     tone: 'approved' | 'smart' | 'passed' | 'diff' | 'unapproved' | 'issue' | 'flagged';
+    detail?: string;
   };
   flagged?: boolean;
+  smartPass?: boolean;
+  smartPassReason?: string;
   viewport?: string;
   aiRecommendation?: 'approve' | 'review' | 'reject';
   aiCategory?: string;

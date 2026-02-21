@@ -56,6 +56,13 @@ export function getDefaultConfig(): Partial<VRTConfig> {
         enabled: false,
         rules: [],
       },
+      visionCompare: {
+        enabled: true,
+        chunks: 6,
+        minImageHeight: 1800,
+        maxVerticalAlignShift: 220,
+        includeDiffImage: false,
+      },
     },
     engines: {
       pixelmatch: { enabled: true, threshold: 0.1, antialiasing: true, alpha: 0.1 },

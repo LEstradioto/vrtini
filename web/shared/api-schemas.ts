@@ -237,6 +237,8 @@ export const CrossResultItemSchema = z.object({
   flagged: z.boolean().optional(),
   flaggedAt: z.string().optional(),
   aiAnalysis: AIAnalysisResultSchema.optional(),
+  smartPass: z.boolean().optional(),
+  smartPassReason: z.string().optional(),
   outdated: z.boolean().optional(),
 });
 
@@ -399,6 +401,15 @@ export const VRTConfigSchema = z
           enabled: z.boolean(),
           rules: z.array(z.unknown()),
         }),
+        visionCompare: z
+          .object({
+            enabled: z.boolean().optional(),
+            chunks: z.number().optional(),
+            minImageHeight: z.number().optional(),
+            maxVerticalAlignShift: z.number().optional(),
+            includeDiffImage: z.boolean().optional(),
+          })
+          .optional(),
       })
       .optional(),
   })

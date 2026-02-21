@@ -232,6 +232,8 @@ export interface CrossResultItem {
   flagged?: boolean;
   flaggedAt?: string;
   aiAnalysis?: AIAnalysisResult;
+  smartPass?: boolean;
+  smartPassReason?: string;
   outdated?: boolean;
 }
 
@@ -401,6 +403,13 @@ export interface VRTConfig {
     autoApprove: {
       enabled: boolean;
       rules: unknown[];
+    };
+    visionCompare?: {
+      enabled?: boolean;
+      chunks?: number;
+      minImageHeight?: number;
+      maxVerticalAlignShift?: number;
+      includeDiffImage?: boolean;
     };
   };
   domSnapshot?: {

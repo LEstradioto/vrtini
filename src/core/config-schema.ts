@@ -51,6 +51,7 @@ const AutoApproveRuleSchema = z.object({
     maxPixelDiff: z.number().min(0).optional(),
     minSSIM: z.number().min(0).max(1).optional(),
     minPHash: z.number().min(0).max(1).optional(),
+    maxDomTextChanges: z.number().int().min(0).optional(),
   }),
   action: z.enum(['approve', 'flag', 'reject']),
 });
@@ -131,6 +132,16 @@ const AIAnalysisSchema = z.object({
     .object({
       enabled: z.boolean().default(false),
       rules: z.array(AutoApproveRuleSchema).default([]),
+    })
+    .default({}),
+  // Vision compare tuning for long pages (baseline/test chunking + vertical alignment)
+  visionCompare: z
+    .object({
+      enabled: z.boolean().default(true),
+      chunks: z.number().int().min(1).max(12).default(6),
+      minImageHeight: z.number().int().min(400).max(12000).default(1800),
+      maxVerticalAlignShift: z.number().int().min(0).max(2000).default(220),
+      includeDiffImage: z.boolean().default(false),
     })
     .default({}),
 });

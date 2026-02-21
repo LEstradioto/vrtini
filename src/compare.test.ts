@@ -49,6 +49,28 @@ function writeSolidPng(
   writeFileSync(path, PNG.sync.write(png));
 }
 
+function writeDomSnapshot(path: string, text: string): void {
+  writeFileSync(
+    path,
+    JSON.stringify({
+      version: 1,
+      viewport: { width: 100, height: 100 },
+      scrollSize: { width: 100, height: 100 },
+      capturedAt: new Date().toISOString(),
+      elements: [
+        {
+          path: 'body > h1',
+          tag: 'h1',
+          box: { x: 10, y: 10, w: 80, h: 20 },
+          text,
+          styles: { color: '#000', fontSize: '16px' },
+          children: [],
+        },
+      ],
+    })
+  );
+}
+
 describe('compareImages', () => {
   beforeAll(() => {
     // Verify fixtures exist
@@ -204,5 +226,36 @@ describe('compareImages', () => {
     expect(result.match).toBe(false);
     expect(result.reason).toBe('diff');
     expect(result.pixelDiff).toBeGreaterThan(0);
+  });
+
+  it('treats DOM text changes as diff even when pixel threshold would pass', async () => {
+    const a = getDiffPath('dom-gate-a.png');
+    const b = getDiffPath('dom-gate-b.png');
+    const diffPath = getDiffPath('dom-gate-diff.png');
+    const baseSnapshot = getDiffPath('dom-gate-baseline.snap.json');
+    const testSnapshot = getDiffPath('dom-gate-test.snap.json');
+
+    writeSolidPng(a, 10, 10, WHITE);
+    writeSolidPng(b, 10, 10, WHITE);
+    writeDomSnapshot(baseSnapshot, 'Old CTA text');
+    writeDomSnapshot(testSnapshot, 'New CTA text');
+
+    const result = await compareImages(a, b, diffPath, {
+      threshold: 1,
+      maxDiffPercentage: 100,
+      baselineSnapshot: baseSnapshot,
+      testSnapshot: testSnapshot,
+      engines: {
+        odiff: { enabled: false },
+        ssim: { enabled: false },
+        phash: { enabled: false },
+      },
+    });
+
+    expect(result.match).toBe(false);
+    expect(result.reason).toBe('diff');
+    if (result.reason === 'diff') {
+      expect(result.domDiff?.summary.text_changed).toBeGreaterThan(0);
+    }
   });
 });

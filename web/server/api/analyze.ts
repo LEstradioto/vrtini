@@ -35,6 +35,13 @@ interface LoadedAIConfig {
   authToken?: string;
   model?: string;
   baseUrl?: string;
+  visionCompare?: {
+    enabled?: boolean;
+    chunks?: number;
+    minImageHeight?: number;
+    maxVerticalAlignShift?: number;
+    includeDiffImage?: boolean;
+  };
 }
 
 interface ProviderStatus {
@@ -280,6 +287,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
           authToken: config.ai.authToken,
           model: config.ai.model,
           baseUrl: config.ai.baseUrl,
+          visionCompare: config.ai.visionCompare,
         };
       }
     } catch {
@@ -349,6 +357,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
             authToken: config.ai.authToken,
             model: config.ai.model,
             baseUrl: config.ai.baseUrl,
+            visionCompare: config.ai.visionCompare,
           };
         }
       } catch {
@@ -393,6 +402,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
             authToken: aiConfig?.authToken,
             model: aiConfig?.model,
             baseUrl: aiConfig?.baseUrl,
+            visionCompare: aiConfig?.visionCompare,
             scenarioName: item.name || item.test.filename,
           });
 
@@ -427,6 +437,7 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
             authToken: aiConfig?.authToken,
             model: aiConfig?.model,
             baseUrl: aiConfig?.baseUrl,
+            visionCompare: aiConfig?.visionCompare,
           },
           3 // concurrency
         );

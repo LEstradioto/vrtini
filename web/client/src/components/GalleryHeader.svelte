@@ -4,7 +4,7 @@
   interface Props {
     isCompareMode: boolean;
     displayTitle: string;
-    effectiveCompareBadge: { label: string; tone: string } | null;
+    effectiveCompareBadge: { label: string; tone: string; detail?: string } | null;
     effectiveCompareAIBadge: {
       label: string;
       tone: string;
@@ -149,7 +149,10 @@
           <div class="compare-left-title">
             <span class="filename" title={displayTitle}>{displayTitle}</span>
             {#if effectiveCompareBadge}
-              <span class="compare-badge {`tone-${effectiveCompareBadge.tone}`.trim()}">
+              <span
+                class="compare-badge {`tone-${effectiveCompareBadge.tone}`.trim()}"
+                title={effectiveCompareBadge.detail || undefined}
+              >
                 {effectiveCompareBadge.label}
               </span>
             {/if}

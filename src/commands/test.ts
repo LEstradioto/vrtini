@@ -238,6 +238,7 @@ async function enrichDiffResult(
         authToken: ai.config?.authToken,
         model: ai.config?.model,
         baseUrl: ai.config?.baseUrl,
+        visionCompare: ai.config?.visionCompare,
         scenarioName: scenario.name,
         url: scenario.url,
         pixelDiff: result.pixelDiff,
@@ -257,6 +258,7 @@ async function enrichDiffResult(
     pixelDiffPercent: enriched.diffPercentage,
     aiAnalysis: isDiff(enriched) ? enriched.aiAnalysis : undefined,
     domCategory,
+    domSummary: enriched.domDiff?.summary,
   });
   return { ...enriched, confidence };
 }

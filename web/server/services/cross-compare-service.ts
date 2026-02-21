@@ -16,6 +16,8 @@ import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';
 import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
 import type { DomDiffResult } from '../../../src/engines/dom-diff.js';
+import { calculateConfidence } from '../../../src/confidence.js';
+import { classifyFindings, classificationToCategory } from '../../../src/domain/classification.js';
 
 function buildCrossComparePairs(
   browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[]
@@ -99,6 +101,8 @@ export interface CrossResultItem {
   flagged?: boolean;
   flaggedAt?: string;
   aiAnalysis?: AIAnalysisResult;
+  smartPass?: boolean;
+  smartPassReason?: string;
   outdated?: boolean;
 }
 
@@ -300,6 +304,92 @@ function buildItemKey(scenario: string, viewport: string): string {
   return `${scenario}__${viewport}`;
 }
 
+interface CrossSmartPassEvaluation {
+  smartPass: boolean;
+  reason: string;
+}
+
+function evaluateCrossSmartPass(item: CrossResultItem): CrossSmartPassEvaluation {
+  if (item.reason !== 'match' && item.reason !== 'diff') {
+    return { smartPass: false, reason: 'Item is not a match/diff comparison result.' };
+  }
+  if (item.diffPercentage <= 0) {
+    return {
+      smartPass: false,
+      reason: 'Diff percentage is zero; Smart Pass only applies to non-zero deltas.',
+    };
+  }
+
+  let domCategory:
+    | 'cosmetic'
+    | 'noise'
+    | 'content_change'
+    | 'layout_shift'
+    | 'regression'
+    | undefined;
+  if (item.domDiff) {
+    const classification = classifyFindings(item.domDiff);
+    domCategory = classificationToCategory(classification);
+  }
+
+  const confidence = calculateConfidence({
+    ssimScore: item.ssimScore,
+    phashSimilarity: item.phash?.similarity,
+    pixelDiffPercent: item.diffPercentage,
+    aiAnalysis: item.aiAnalysis,
+    domCategory,
+    domSummary: item.domDiff?.summary,
+  });
+
+  if (confidence.verdict === 'pass' || confidence.verdict === 'likely-pass') {
+    return {
+      smartPass: true,
+      reason: `Confidence ${confidence.verdict} (${(confidence.score * 100).toFixed(1)}%). ${confidence.explanation || 'Signals are within Smart Pass confidence band.'}`,
+    };
+  }
+
+  // Fallback for cross-browser rendering drift:
+  // if no textual/structural DOM changes are detected and perceptual hash remains high,
+  // classify as Smart Pass candidate even when pixel/SSIM are noisy.
+  const summary = item.domDiff?.summary;
+  const hasTextOrStructuralChange =
+    (summary?.text_changed ?? 0) > 0 ||
+    (summary?.element_added ?? 0) > 0 ||
+    (summary?.element_removed ?? 0) > 0;
+  const layoutShiftCount = summary?.layout_shift ?? 0;
+  const phashSimilarity = item.phash?.similarity ?? 0;
+  const rejectedByAI = item.aiAnalysis?.recommendation === 'reject';
+
+  if (
+    !rejectedByAI &&
+    !hasTextOrStructuralChange &&
+    phashSimilarity >= 0.93 &&
+    item.diffPercentage <= 18 &&
+    layoutShiftCount <= 450
+  ) {
+    return {
+      smartPass: true,
+      reason: `Cross-browser heuristic: no DOM text/structural additions-removals, pHash ${(phashSimilarity * 100).toFixed(1)}%, diff ${item.diffPercentage.toFixed(2)}%, layout shifts ${layoutShiftCount}.`,
+    };
+  }
+
+  if (rejectedByAI) {
+    return { smartPass: false, reason: 'AI recommendation is reject, so Smart Pass is blocked.' };
+  }
+  if (hasTextOrStructuralChange) {
+    return { smartPass: false, reason: 'DOM text/structure changed, so Smart Pass is blocked.' };
+  }
+  return {
+    smartPass: false,
+    reason: `Confidence ${confidence.verdict} (${(confidence.score * 100).toFixed(1)}) below Smart Pass gate.`,
+  };
+}
+
+function withSmartPassMetadata(item: CrossResultItem): CrossResultItem {
+  const evaluation = evaluateCrossSmartPass(item);
+  return { ...item, smartPass: evaluation.smartPass, smartPassReason: evaluation.reason };
+}
+
 function toComparisonResult(item: CrossResultItem, projectPath: string): ComparisonResult {
   const baseline = resolve(projectPath, item.baseline);
   const test = resolve(projectPath, item.test);
@@ -410,10 +500,13 @@ function summarizeCrossItems(
       continue;
     }
 
-    const smartPass = item.match && item.diffPercentage > 0;
+    const smartPass = item.smartPass ?? evaluateCrossSmartPass(item).smartPass;
+    if (smartPass) {
+      summary.smartPassCount += 1;
+      continue;
+    }
     if (item.match) {
-      if (smartPass) summary.smartPassCount += 1;
-      else summary.matchCount += 1;
+      summary.matchCount += 1;
       continue;
     }
 
@@ -612,7 +705,7 @@ export async function runCrossCompare(
         });
 
         const diffPathValue = getDiffPath(result);
-        const item: CrossResultItem = {
+        const itemBase: CrossResultItem = {
           itemKey,
           name: scenario.name,
           scenario: scenario.name,
@@ -646,6 +739,7 @@ export async function runCrossCompare(
           domDiff: result.reason === 'diff' ? result.domDiff : undefined,
           error: result.reason === 'error' ? result.error : undefined,
         };
+        const item: CrossResultItem = withSmartPassMetadata(itemBase);
 
         items.push(item);
         updatedItemKeys.push(itemKey);
@@ -709,6 +803,8 @@ export async function runCrossCompare(
       }
       finalItems = orderedItems;
     }
+
+    finalItems = finalItems.map((item) => withSmartPassMetadata(item));
 
     const reportResults: ComparisonResult[] = finalItems.map((item) =>
       toComparisonResult(item, projectPath)
@@ -818,7 +914,7 @@ export async function loadCrossResults(
     const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
     const acceptanceRecord = pairAcceptances[itemKey];
     const flagRecord = pairFlags[itemKey];
-    return {
+    const enriched: CrossResultItem = {
       ...item,
       itemKey,
       accepted: !!acceptanceRecord,
@@ -826,6 +922,7 @@ export async function loadCrossResults(
       flagged: !!flagRecord,
       flaggedAt: flagRecord?.flaggedAt,
     };
+    return withSmartPassMetadata(enriched);
   });
 
   results.items = results.items.filter(
@@ -857,7 +954,13 @@ export async function loadCrossResults(
       );
       const outdated = generatedAtMs > 0 && latestMtime > generatedAtMs;
 
-      return { ...item, baselineUpdatedAt, testUpdatedAt, diffUpdatedAt, outdated };
+      return withSmartPassMetadata({
+        ...item,
+        baselineUpdatedAt,
+        testUpdatedAt,
+        diffUpdatedAt,
+        outdated,
+      });
     })
   );
 
@@ -1248,7 +1351,8 @@ export async function saveCrossItemAIResults(
       const analysis = updates.get(itemKey);
       if (!analysis) return item;
       changed = true;
-      return { ...item, itemKey, aiAnalysis: analysis };
+      const updated: CrossResultItem = { ...item, itemKey, aiAnalysis: analysis };
+      return withSmartPassMetadata(updated);
     });
 
     if (changed) {

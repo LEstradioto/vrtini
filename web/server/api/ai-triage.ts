@@ -50,6 +50,7 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
         authToken: aiConfig.authToken,
         model: aiConfig.model,
         baseUrl: (aiConfig as Record<string, unknown>).baseUrl as string | undefined,
+        visionCompare: aiConfig.visionCompare,
       };
 
       const results: { itemKey: string; analysis?: AIAnalysisResult; error?: string }[] = [];

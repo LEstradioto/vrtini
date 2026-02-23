@@ -156,17 +156,17 @@ Core stack:
 ## 7. Quality, Security, and Operational Guardrails
 
 - CI gates:
-  - gitleaks scan
-  - lint
-  - format check
-  - typecheck
-  - unit tests
-  - build
-  - UI tests
+  - gitleaks scan: `docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:latest git --config /repo/.gitleaks.toml /repo`
+  - lint: `npm run lint`
+  - format check: `npm run format:check`
+  - typecheck: `npm run typecheck`
+  - unit tests: `npm run test:unit`
+  - build: `npm run build:all`
+  - UI tests: `npx playwright install --with-deps && npm run test:ui`
 - Current test inventory: 17 `*.test.ts` files across core/domain/engine units, server service tests, and integration/UI flows.
 - Git hooks:
-  - pre-commit secret scan + lint-staged
-  - pre-push lint/format/typecheck/unit-tests
+  - pre-commit secret scan (`gitleaks`, with Docker fallback) + `lint-staged`
+  - pre-push quality checks: `npm run lint && npm run format:check && npm run typecheck && npm run test:unit`
 - Server protections:
   - CSP and security headers
   - path restrictions for file serving

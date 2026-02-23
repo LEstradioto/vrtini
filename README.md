@@ -147,11 +147,15 @@ Optional: set `BROWSER=webkit` to launch WebKit instead of Chromium.
 npm run build
 npm run lint
 npm run format:check
+npm run typecheck
 npm run test:unit
 npm run test:ui
 ```
 
-Git hooks enforce secret scanning with `gitleaks` on commit. Install either:
+Git hooks enforce secret scanning with `gitleaks` on commit (`.husky/pre-commit`) and run quality checks on push (`.husky/pre-push`: lint, format, typecheck, unit tests).
+The pre-commit hook also runs `lint-staged` (ESLint + Prettier on staged files).
+
+Install either:
 
 ```bash
 brew install gitleaks

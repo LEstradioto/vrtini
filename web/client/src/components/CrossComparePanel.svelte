@@ -117,6 +117,38 @@
     if (pct <= 5) return '#f59e0b';
     return '#ef4444';
   }
+  function getTextDiffCount(item: CrossResultItem): number {
+    const summaryCountRaw = item.domDiff?.summary?.text_changed;
+    const summaryCount = Number.isFinite(summaryCountRaw) ? Number(summaryCountRaw) : 0;
+    const findingCount =
+      item.domDiff?.findings?.reduce(
+        (count, finding) => count + (finding.type === 'text_changed' ? 1 : 0),
+        0
+      ) ?? 0;
+    return Math.max(summaryCount, findingCount);
+  }
+  function getTextDiffState(item: CrossResultItem): 'changed' | 'unchanged' | 'unknown' {
+    const count = getTextDiffCount(item);
+    if (count > 0) return 'changed';
+    if (item.domDiff) return 'unchanged';
+    return 'unknown';
+  }
+  function getTextDiffLabel(item: CrossResultItem): string {
+    const count = getTextDiffCount(item);
+    if (count > 0) return `Text Δ${count}`;
+    if (item.domDiff) return 'Text ok';
+    return 'Text n/a';
+  }
+  function getTextDiffTitle(item: CrossResultItem): string {
+    const count = getTextDiffCount(item);
+    if (count > 0) {
+      return `${count} text change${count === 1 ? '' : 's'} detected (text nodes only).`;
+    }
+    if (item.domDiff) {
+      return 'No text changes detected. Differences are layout/style/positioning only.';
+    }
+    return 'Text diff unavailable (no DOM diff payload for this item).';
+  }
   function getPipelineStatusLabel(status: PipelineStageState): string {
     switch (status) {
       case 'running':
@@ -346,6 +378,99 @@
 
   function getItemKey(item: CrossResultItem): string {
     return item.itemKey ?? `${item.scenario}__${item.viewport}`;
+  }
+
+  function computeCrossSummary(items: CrossResultItem[]) {
+    const summary = {
+      total: 0,
+      approved: 0,
+      smart: 0,
+      match: 0,
+      diff: 0,
+      issue: 0,
+      flagged: 0,
+      outdated: 0,
+    };
+    for (const item of items) {
+      summary.total += 1;
+      if (item.flagged) summary.flagged += 1;
+      if (item.outdated) summary.outdated += 1;
+      if (item.accepted) {
+        summary.approved += 1;
+        continue;
+      }
+      const smartPass = isCrossSmartPass(item);
+      if (smartPass) {
+        summary.smart += 1;
+        continue;
+      }
+      if (item.match) {
+        summary.match += 1;
+        continue;
+      }
+      if (item.reason === 'diff') summary.diff += 1;
+      else summary.issue += 1;
+    }
+    return summary;
+  }
+
+  function syncSelectedReportSummaryFromCrossResults(items?: CrossResultItem[]) {
+    if (!selectedCrossKey || !crossResults) return;
+    const summary = computeCrossSummary(items ?? crossResults.items);
+    crossReports = crossReports.map((report) =>
+      report.key !== selectedCrossKey
+        ? report
+        : {
+            ...report,
+            generatedAt: crossResults?.generatedAt ?? report.generatedAt,
+            baselineLabel: crossResults?.baselineLabel ?? report.baselineLabel,
+            testLabel: crossResults?.testLabel ?? report.testLabel,
+            itemCount: summary.total,
+            approvedCount: summary.approved,
+            smartPassCount: summary.smart,
+            matchCount: summary.match,
+            diffCount: summary.diff,
+            issueCount: summary.issue,
+            flaggedCount: summary.flagged,
+            outdatedCount: summary.outdated,
+          }
+    );
+  }
+
+  function updateCrossItemOptimistically(
+    itemKey: string,
+    updater: (item: CrossResultItem) => CrossResultItem
+  ): CrossResultItem | null {
+    if (!crossResults) return null;
+    let previous: CrossResultItem | null = null;
+    const items = crossResults.items.map((item) => {
+      if (getItemKey(item) !== itemKey) return item;
+      previous = item;
+      return updater(item);
+    });
+    if (!previous) return null;
+    crossResults = { ...crossResults, items };
+    syncSelectedReportSummaryFromCrossResults(items);
+    return previous;
+  }
+
+  function restoreCrossItemOptimistic(itemKey: string, previous: CrossResultItem | null): void {
+    if (!crossResults || !previous) return;
+    const items = crossResults.items.map((item) =>
+      getItemKey(item) === itemKey ? previous : item
+    );
+    crossResults = { ...crossResults, items };
+    syncSelectedReportSummaryFromCrossResults(items);
+  }
+
+  let crossSummaryRefreshHandle: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleCrossSummaryRefresh(delayMs = 250) {
+    if (crossSummaryRefreshHandle) clearTimeout(crossSummaryRefreshHandle);
+    crossSummaryRefreshHandle = setTimeout(async () => {
+      crossSummaryRefreshHandle = null;
+      await refreshCrossReports({ silent: true });
+    }, delayMs);
   }
 
   function getFilenameFromRelativePath(path: string): string {
@@ -624,12 +749,14 @@
     }
   }
 
-  async function refreshCrossReports() {
+  async function refreshCrossReports(options: { silent?: boolean } = {}) {
     try {
       const list = await crossCompare.list(projectId);
       crossReports = list.results;
     } catch (err) {
-      crossResultsError = getErrorMessage(err, 'Failed to refresh cross compare pairs');
+      if (!options.silent) {
+        crossResultsError = getErrorMessage(err, 'Failed to refresh cross compare pairs');
+      }
     }
   }
 
@@ -652,13 +779,26 @@
   ) {
     if (!selectedCrossKey || !item.itemKey) return;
     const shouldRefresh = options.refresh ?? true;
+    const itemKey = item.itemKey;
+    const optimisticAcceptedAt = new Date().toISOString();
+    const previous = updateCrossItemOptimistically(itemKey, (current) => ({
+      ...current,
+      accepted: true,
+      acceptedAt: optimisticAcceptedAt,
+    }));
     try {
-      await crossCompare.accept(projectId, selectedCrossKey, item.itemKey);
+      const result = await crossCompare.accept(projectId, selectedCrossKey, itemKey);
+      const acceptedAt = result.acceptance?.acceptedAt ?? optimisticAcceptedAt;
+      updateCrossItemOptimistically(itemKey, (current) => ({
+        ...current,
+        accepted: true,
+        acceptedAt,
+      }));
       if (shouldRefresh) {
-        await loadCrossResults(selectedCrossKey);
-        await refreshCrossReports();
+        scheduleCrossSummaryRefresh();
       }
     } catch (err) {
+      restoreCrossItemOptimistic(itemKey, previous);
       crossResultsError = getErrorMessage(err, 'Failed to approve cross item');
       throw err;
     }
@@ -666,33 +806,58 @@
 
   async function revokeCrossItem(item: CrossResultItem) {
     if (!selectedCrossKey || !item.itemKey) return;
+    const itemKey = item.itemKey;
+    const previous = updateCrossItemOptimistically(itemKey, (current) => ({
+      ...current,
+      accepted: false,
+      acceptedAt: undefined,
+    }));
     try {
-      await crossCompare.revoke(projectId, selectedCrossKey, item.itemKey);
-      await loadCrossResults(selectedCrossKey);
-      await refreshCrossReports();
+      await crossCompare.revoke(projectId, selectedCrossKey, itemKey);
+      scheduleCrossSummaryRefresh();
     } catch (err) {
+      restoreCrossItemOptimistic(itemKey, previous);
       crossResultsError = getErrorMessage(err, 'Failed to revoke cross approval');
     }
   }
 
   async function flagCrossItem(item: CrossResultItem) {
     if (!selectedCrossKey || !item.itemKey) return;
+    const itemKey = item.itemKey;
+    const optimisticFlaggedAt = new Date().toISOString();
+    const previous = updateCrossItemOptimistically(itemKey, (current) => ({
+      ...current,
+      flagged: true,
+      flaggedAt: optimisticFlaggedAt,
+    }));
     try {
-      await crossCompare.flag(projectId, selectedCrossKey, item.itemKey);
-      await loadCrossResults(selectedCrossKey);
-      await refreshCrossReports();
+      const result = await crossCompare.flag(projectId, selectedCrossKey, itemKey);
+      const flaggedAt = result.flag?.flaggedAt ?? optimisticFlaggedAt;
+      updateCrossItemOptimistically(itemKey, (current) => ({
+        ...current,
+        flagged: true,
+        flaggedAt,
+      }));
+      scheduleCrossSummaryRefresh();
     } catch (err) {
+      restoreCrossItemOptimistic(itemKey, previous);
       crossResultsError = getErrorMessage(err, 'Failed to flag cross item');
     }
   }
 
   async function unflagCrossItem(item: CrossResultItem) {
     if (!selectedCrossKey || !item.itemKey) return;
+    const itemKey = item.itemKey;
+    const previous = updateCrossItemOptimistically(itemKey, (current) => ({
+      ...current,
+      flagged: false,
+      flaggedAt: undefined,
+    }));
     try {
-      await crossCompare.unflag(projectId, selectedCrossKey, item.itemKey);
-      await loadCrossResults(selectedCrossKey);
-      await refreshCrossReports();
+      await crossCompare.unflag(projectId, selectedCrossKey, itemKey);
+      scheduleCrossSummaryRefresh();
     } catch (err) {
+      restoreCrossItemOptimistic(itemKey, previous);
       crossResultsError = getErrorMessage(err, 'Failed to unflag cross item');
     }
   }
@@ -779,27 +944,7 @@
 
   let crossPairSummary = $derived.by(() => {
     if (!crossResults) return null;
-    const summary = {
-      total: 0,
-      approved: 0,
-      smart: 0,
-      match: 0,
-      diff: 0,
-      issue: 0,
-      flagged: 0,
-      outdated: 0,
-    };
-    for (const item of crossResults.items) {
-      summary.total += 1;
-      if (item.flagged) summary.flagged += 1;
-      if (item.outdated) summary.outdated += 1;
-      if (item.accepted) { summary.approved += 1; continue; }
-      const smartPass = isCrossSmartPass(item);
-      if (smartPass) { summary.smart += 1; continue; }
-      if (item.match) { summary.match += 1; continue; }
-      if (item.reason === 'diff') summary.diff += 1; else summary.issue += 1;
-    }
-    return summary;
+    return computeCrossSummary(crossResults.items);
   });
 
   let aiAnalyzedCount = $derived(crossResults?.items.filter((i) => i.aiAnalysis).length ?? 0);
@@ -1361,6 +1506,7 @@
         <div class="cross-grid">
           {#each crossCurrentList as item}
             {@const smartPass = isCrossSmartPass(item)}
+            {@const textDiffState = getTextDiffState(item)}
             {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : smartPass ? 'smart' : item.match ? 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
             {@const lastUpdated = getCrossItemLastUpdatedAt(item)}
             <div class="cross-card tag-{crossTag}">
@@ -1421,6 +1567,9 @@
                 {#if item.phash}
                   <span>pHash {(item.phash.similarity * 100).toFixed(1)}%</span>
                 {/if}
+                <span class="cross-text-signal text-{textDiffState}" title={getTextDiffTitle(item)}>
+                  {getTextDiffLabel(item)}
+                </span>
                 {#if item.aiAnalysis}
                   <span>AI {(item.aiAnalysis.confidence * 100).toFixed(0)}%</span>
                 {/if}
@@ -1466,6 +1615,7 @@
         <div class="cross-list">
           {#each crossCurrentList as item}
             {@const smartPass = isCrossSmartPass(item)}
+            {@const textDiffState = getTextDiffState(item)}
             {@const crossTag = item.flagged ? 'flagged' : item.accepted ? 'approved' : smartPass ? 'smart' : item.match ? 'passed' : item.reason === 'diff' ? 'diff' : 'unapproved'}
             <div
               class="cross-list-row"
@@ -1498,6 +1648,9 @@
                   SSIM {(item.ssimScore * 100).toFixed(1)}%
                 </span>
               {/if}
+              <span class="cross-list-text-signal text-{textDiffState}" title={getTextDiffTitle(item)}>
+                {getTextDiffLabel(item)}
+              </span>
               <div class="cross-badge tag-{crossTag}">
                 {item.flagged ? 'Flagged' : item.accepted ? 'Approved' : smartPass ? 'Smart Pass' : item.match ? 'Match' : item.reason === 'diff' ? 'Diff' : 'Issue'}
               </div>
@@ -2039,6 +2192,27 @@
     line-height: 1.2;
   }
 
+  .cross-text-signal {
+    padding: 0 0.25rem;
+    border: 1px solid var(--border-soft);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .cross-text-signal.text-changed {
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.45);
+  }
+
+  .cross-text-signal.text-unchanged {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.35);
+  }
+
+  .cross-text-signal.text-unknown {
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+
   .cross-images {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2279,6 +2453,31 @@
   .cross-list-ssim {
     font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono, monospace);
     white-space: nowrap; flex-shrink: 0;
+  }
+
+  .cross-list-text-signal {
+    font-size: 0.68rem;
+    font-family: var(--font-mono, monospace);
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 0.12rem 0.35rem;
+    border: 1px solid var(--border-soft);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .cross-list-text-signal.text-changed {
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.45);
+  }
+
+  .cross-list-text-signal.text-unchanged {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.35);
+  }
+
+  .cross-list-text-signal.text-unknown {
+    color: var(--text-muted);
+    border-color: var(--border);
   }
 
   /* Badge group for stacking multiple badges */

@@ -359,6 +359,49 @@
       .map(toTextDiffFinding)
       .filter((finding): finding is NonNullable<typeof finding> => !!finding);
   });
+  let textDiffSignal = $derived.by(() => {
+    const summaryCountRaw = effectiveCompareDomDiff?.summary?.text_changed;
+    const summaryCount = Number.isFinite(summaryCountRaw) ? Number(summaryCountRaw) : 0;
+    const textCount = Math.max(summaryCount, textDiffItems.length);
+    if (textCount > 0) {
+      return {
+        state: 'changed' as const,
+        known: true,
+        count: textCount,
+        detail: `${textCount} text change${textCount === 1 ? '' : 's'} detected in DOM diff (text nodes only).`,
+      };
+    }
+    if (effectiveCompareDomDiff) {
+      return {
+        state: 'unchanged' as const,
+        known: true,
+        count: 0,
+        detail: 'No text changes detected. Differences are layout/style/positioning only.',
+      };
+    }
+    const domSnapshotStatus = activeCompareItem?.domSnapshotStatus;
+    if (domSnapshotStatus?.enabled) {
+      const missing = [
+        domSnapshotStatus.baselineFound ? null : 'baseline',
+        domSnapshotStatus.testFound ? null : 'test',
+      ].filter((v): v is string => !!v);
+      return {
+        state: 'unknown' as const,
+        known: false,
+        count: 0,
+        detail:
+          missing.length > 0
+            ? `Text diff unavailable: missing ${missing.join(' + ')} DOM snapshot${missing.length > 1 ? 's' : ''}.`
+            : 'Text diff unavailable for this item.',
+      };
+    }
+    return {
+      state: 'unknown' as const,
+      known: false,
+      count: 0,
+      detail: 'Text diff unavailable because DOM snapshot is disabled for this run.',
+    };
+  });
   let structuralTopFindings = $derived.by(() => {
     if (effectiveCompareDomDiff?.topFindings?.length) return effectiveCompareDomDiff.topFindings;
     const findings = effectiveCompareDomDiff?.findings ?? [];
@@ -395,6 +438,7 @@
     domSnapshotStatus: activeCompareItem?.domSnapshotStatus ?? null,
     domDiff: effectiveCompareDomDiff ?? null,
     hasTextDiff: textDiffItems.length > 0,
+    textDiffSignal,
   }));
   let smartPassDiagnostics = $derived.by(() => {
     if (!isCompareMode) return null;
@@ -1288,6 +1332,7 @@
     {compareIndexValue}
     compareQueueLength={compareQueue.length}
     {effectiveCompareMetrics}
+    compareTextDiffSignal={isCompareMode ? textDiffSignal : undefined}
     {currentImage}
     {currentIndex}
     queueLength={queue.length}
@@ -1532,6 +1577,17 @@
           <span class="diagnostic-label">Pixel Diff Count</span>
           <span class="diagnostic-value">{effectiveCompareMetrics.pixelDiff.toLocaleString()}</span>
           <span class="diagnostic-hint">{getMetricHint('pixels', effectiveCompareMetrics.pixelDiff)}</span>
+        </div>
+        <div class="diagnostic-item">
+          <span class="diagnostic-label">Text Changes</span>
+          <span class="diagnostic-value">
+            {#if textDiffSignal.known}
+              {textDiffSignal.count}
+            {:else}
+              N/A
+            {/if}
+          </span>
+          <span class="diagnostic-hint">{textDiffSignal.detail}</span>
         </div>
       </div>
 

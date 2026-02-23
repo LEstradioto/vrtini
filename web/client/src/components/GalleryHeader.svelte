@@ -21,6 +21,12 @@
     compareIndexValue: number;
     compareQueueLength: number;
     effectiveCompareMetrics: CompareMetrics | undefined;
+    compareTextDiffSignal?: {
+      state: 'changed' | 'unchanged' | 'unknown';
+      known: boolean;
+      count: number;
+      detail: string;
+    };
     currentImage: GalleryImage | undefined;
     currentIndex: number;
     queueLength: number;
@@ -66,6 +72,7 @@
     compareIndexValue,
     compareQueueLength,
     effectiveCompareMetrics,
+    compareTextDiffSignal,
     currentImage,
     currentIndex,
     queueLength,
@@ -139,6 +146,13 @@
     if (tone === 'ai-rejected') return '#fb7185';
     return 'var(--text-strong)';
   }
+
+  function getTextSignalColor(
+    signal?: { state: 'changed' | 'unchanged' | 'unknown'; known: boolean }
+  ): string {
+    if (!signal || !signal.known || signal.state === 'unknown') return 'var(--text-muted)';
+    return signal.state === 'changed' ? '#fb7185' : '#4ade80';
+  }
 </script>
 
 <div class="gallery-header">
@@ -209,6 +223,18 @@
                   <span class="metric-label">pHash</span>
                   <span class="metric-value" style="color: {getPHashColor(effectiveCompareMetrics.phash.similarity * 100)}">
                     {(effectiveCompareMetrics.phash.similarity * 100).toFixed(1)}%
+                  </span>
+                </span>
+              {/if}
+              {#if compareTextDiffSignal}
+                <span class="metric" title={compareTextDiffSignal.detail}>
+                  <span class="metric-label">Text Δ</span>
+                  <span class="metric-value" style="color: {getTextSignalColor(compareTextDiffSignal)}">
+                    {#if compareTextDiffSignal.known}
+                      {compareTextDiffSignal.count}
+                    {:else}
+                      N/A
+                    {/if}
                   </span>
                 </span>
               {/if}

@@ -125,11 +125,18 @@ describe('cross-compare integration', () => {
     expect(acceptedItem?.acceptedAt).toBeTruthy();
 
     const resultsPath = join(tempDir, '.vrt', 'output', 'cross-reports', key, 'results.json');
-    const persisted = JSON.parse(await readFile(resultsPath, 'utf-8')) as {
+    const persistedResults = JSON.parse(await readFile(resultsPath, 'utf-8')) as {
       items: { itemKey?: string; accepted?: boolean; acceptedAt?: string }[];
     };
-    const persistedItem = persisted.items.find((item) => item.itemKey === itemKey);
-    expect(persistedItem?.accepted).toBe(true);
-    expect(persistedItem?.acceptedAt).toBeTruthy();
+    const persistedItem = persistedResults.items.find((item) => item.itemKey === itemKey);
+    expect(persistedItem?.accepted).toBeUndefined();
+    expect(persistedItem?.acceptedAt).toBeUndefined();
+
+    const acceptancesPath = join(tempDir, '.vrt', 'acceptances', 'cross.json');
+    const persistedAcceptances = JSON.parse(await readFile(acceptancesPath, 'utf-8')) as Record<
+      string,
+      Record<string, { acceptedAt: string; reason?: string }>
+    >;
+    expect(persistedAcceptances[key]?.[itemKey]?.acceptedAt).toBeTruthy();
   });
 });

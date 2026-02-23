@@ -115,7 +115,17 @@
     if (!currentCrossItem || !crossPanel) return;
     const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
-    await crossPanel.approveCrossFromModal(currentCrossItem);
+    const previous = currentCrossItem;
+    currentCrossItem = {
+      ...currentCrossItem,
+      accepted: true,
+      acceptedAt: new Date().toISOString(),
+    };
+    try {
+      await crossPanel.approveCrossFromModal(currentCrossItem);
+    } catch {
+      currentCrossItem = previous;
+    }
     syncCrossModalSelection(prevKey, prevIndex);
   }
 
@@ -123,7 +133,17 @@
     if (!currentCrossItem || !crossPanel) return;
     const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
-    await crossPanel.revokeCrossFromModal(currentCrossItem);
+    const previous = currentCrossItem;
+    currentCrossItem = {
+      ...currentCrossItem,
+      accepted: false,
+      acceptedAt: undefined,
+    };
+    try {
+      await crossPanel.revokeCrossFromModal(currentCrossItem);
+    } catch {
+      currentCrossItem = previous;
+    }
     syncCrossModalSelection(prevKey, prevIndex);
   }
 
@@ -131,7 +151,17 @@
     if (!currentCrossItem || !crossPanel) return;
     const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
-    await crossPanel.flagCrossFromModal(currentCrossItem);
+    const previous = currentCrossItem;
+    currentCrossItem = {
+      ...currentCrossItem,
+      flagged: true,
+      flaggedAt: new Date().toISOString(),
+    };
+    try {
+      await crossPanel.flagCrossFromModal(currentCrossItem);
+    } catch {
+      currentCrossItem = previous;
+    }
     syncCrossModalSelection(prevKey, prevIndex);
   }
 
@@ -139,7 +169,17 @@
     if (!currentCrossItem || !crossPanel) return;
     const prevKey = getCrossItemKey(currentCrossItem);
     const prevIndex = crossQueueIndex;
-    await crossPanel.unflagCrossFromModal(currentCrossItem);
+    const previous = currentCrossItem;
+    currentCrossItem = {
+      ...currentCrossItem,
+      flagged: false,
+      flaggedAt: undefined,
+    };
+    try {
+      await crossPanel.unflagCrossFromModal(currentCrossItem);
+    } catch {
+      currentCrossItem = previous;
+    }
     syncCrossModalSelection(prevKey, prevIndex);
   }
 

@@ -256,14 +256,9 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       reply.code(400);
       return { error: 'key and itemKey are required' };
     }
-    const { config } = await loadConfig(project.path, project.configFile);
-    const record = await setCrossAcceptance(
-      project.path,
-      key,
-      itemKey,
-      reason,
-      config as VRTConfig
-    );
+    // Keep accept path fast: we persist to acceptances store only.
+    // Cross results are enriched from acceptances at read-time.
+    const record = await setCrossAcceptance(project.path, key, itemKey, reason);
     return reply.send({ success: true, acceptance: { itemKey, ...record } });
   });
 
@@ -277,8 +272,8 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
         return { error: 'Project not found' };
       }
       const { key, itemKey } = request.params;
-      const { config } = await loadConfig(project.path, project.configFile);
-      const revoked = await revokeCrossAcceptance(project.path, key, itemKey, config as VRTConfig);
+      // Keep revoke path fast; avoid rewriting large results.json payloads.
+      const revoked = await revokeCrossAcceptance(project.path, key, itemKey);
       return reply.send({ success: revoked });
     }
   );
@@ -297,8 +292,8 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       reply.code(400);
       return { error: 'key and itemKey are required' };
     }
-    const { config } = await loadConfig(project.path, project.configFile);
-    const record = await setCrossFlag(project.path, key, itemKey, reason, config as VRTConfig);
+    // Keep flag path fast: persist flag store only.
+    const record = await setCrossFlag(project.path, key, itemKey, reason);
     return reply.send({ success: true, flag: { itemKey, ...record } });
   });
 
@@ -312,8 +307,8 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
         return { error: 'Project not found' };
       }
       const { key, itemKey } = request.params;
-      const { config } = await loadConfig(project.path, project.configFile);
-      const revoked = await revokeCrossFlag(project.path, key, itemKey, config as VRTConfig);
+      // Keep unflag path fast; avoid rewriting large results payload.
+      const revoked = await revokeCrossFlag(project.path, key, itemKey);
       return reply.send({ success: revoked });
     }
   );

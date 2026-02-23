@@ -35,6 +35,8 @@ Build a best‑in‑class visual regression platform that explains _what changed
 - [x] Add sticky/header “Select all rows” checkbox with consistent datatable behavior.
 - [x] Ensure test runs always show live progress feedback (same clarity level as compare progress).
 - [x] Add footer **Full Run** action: run tests first, then auto-run cross-compare pipeline.
+- [ ] Improve the confidence-level dashboard to be more readable/actionable by default.
+- [ ] Make UX more opinionated by default (simple happy-path), with Advanced/Details panels for power users.
 
 ## Analysis Pipeline (Spec v1)
 
@@ -45,6 +47,11 @@ Build a best‑in‑class visual regression platform that explains _what changed
 - Style diff: computed style changes (background, border, color, font metrics).
 - Classification rules: map changes to “content”, “layout”, “spacing”, “style”, “background”.
 - Output: per‑item findings with severity and a short explanation.
+- [ ] Expand multi-engine scoring pipeline with modern signals:
+  - LPIPS
+  - CLIP-based semantic similarity
+  - Apple Vision features (where available)
+  - DINOv3-style visual embeddings
 
 ## Diff Studio (Front‑End Tool)
 
@@ -73,6 +80,13 @@ Build a best‑in‑class visual regression platform that explains _what changed
 - [ ] Multi‑browser normalization heuristics (font metrics, subpixel rounding, rendering differences).
 - [ ] Per‑component tolerance thresholds (e.g., “button label kerning acceptable”).
 - [ ] Explainability heatmaps for layout vs style vs content changes.
+- [ ] Modularize architecture for cross-product reuse:
+  - `core` (jobs/config/io/contracts)
+  - `capture` (playwright/docker/browser adapters)
+  - `scorer` (pixel/perceptual/semantic engines + aggregation)
+  - `vision` (AI triage/reasoning/chunking providers)
+  - `tokens` (theme/style/design tokens integration)
+  - target reuse across sibling apps (Designmux / Eyeball).
 
 ## Research Tracks (Foundation)
 

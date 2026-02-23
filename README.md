@@ -53,7 +53,9 @@ vrtini test
 vrtini serve
 ```
 
-Open the UI at `http://0.0.0.0:4173`.
+Open the UI at `http://127.0.0.1:4173` (or `http://localhost:4173`).
+To expose on LAN (`--host 0.0.0.0`), set `VRT_AUTH_TOKEN` first
+(or explicitly allow insecure remote bind with `VRT_ALLOW_INSECURE_REMOTE=1`).
 
 ## Configuration
 

@@ -26,6 +26,30 @@ export interface ServerOptions {
   open?: boolean;
 }
 
+export function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return (
+    normalized === '127.0.0.1' ||
+    normalized === 'localhost' ||
+    normalized === '::1' ||
+    normalized === '::ffff:127.0.0.1'
+  );
+}
+
+export function assertSecureHostBinding(options: {
+  host: string;
+  authToken?: string;
+  allowInsecureRemote?: boolean;
+}): void {
+  const exposingRemoteHost = !isLoopbackHost(options.host);
+  if (exposingRemoteHost && !options.authToken?.trim() && !options.allowInsecureRemote) {
+    throw new Error(
+      `Refusing to bind to non-loopback host "${options.host}" without VRT_AUTH_TOKEN. ` +
+        'Set VRT_AUTH_TOKEN, use a loopback host, or set VRT_ALLOW_INSECURE_REMOTE=1 explicitly.'
+    );
+  }
+}
+
 function getOpenCommand(platform: NodeJS.Platform): string {
   if (platform === 'darwin') return 'open';
   if (platform === 'win32') return 'start';
@@ -34,8 +58,11 @@ function getOpenCommand(platform: NodeJS.Platform): string {
 
 export async function startServer(options: ServerOptions): Promise<void> {
   const { port, open } = options;
-  const host = options.host ?? process.env.VRT_HOST ?? '0.0.0.0';
+  const host = options.host ?? process.env.VRT_HOST ?? '127.0.0.1';
   const isDev = process.env.NODE_ENV !== 'production';
+  const authToken = process.env.VRT_AUTH_TOKEN?.trim();
+  const allowInsecureRemote = process.env.VRT_ALLOW_INSECURE_REMOTE === '1';
+  assertSecureHostBinding({ host, authToken, allowInsecureRemote });
 
   const fastify = Fastify({
     maxParamLength: 256, // Allow longer filenames in routes (default is 100)
@@ -54,6 +81,7 @@ export async function startServer(options: ServerOptions): Promise<void> {
   });
 
   // Optional bearer-token auth (enabled when VRT_AUTH_TOKEN is set)
+  // Remote bind without token is blocked above unless explicitly overridden.
   registerAuth(fastify);
 
   // Security headers

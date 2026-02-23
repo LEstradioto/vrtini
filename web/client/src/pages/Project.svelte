@@ -123,8 +123,9 @@
     };
     try {
       await crossPanel.approveCrossFromModal(currentCrossItem);
-    } catch {
+    } catch (err) {
       currentCrossItem = previous;
+      showToast(getErrorMessage(err, 'Failed to approve cross item'), 'error');
     }
     syncCrossModalSelection(prevKey, prevIndex);
   }
@@ -141,8 +142,9 @@
     };
     try {
       await crossPanel.revokeCrossFromModal(currentCrossItem);
-    } catch {
+    } catch (err) {
       currentCrossItem = previous;
+      showToast(getErrorMessage(err, 'Failed to revoke cross approval'), 'error');
     }
     syncCrossModalSelection(prevKey, prevIndex);
   }
@@ -159,8 +161,9 @@
     };
     try {
       await crossPanel.flagCrossFromModal(currentCrossItem);
-    } catch {
+    } catch (err) {
       currentCrossItem = previous;
+      showToast(getErrorMessage(err, 'Failed to flag cross item'), 'error');
     }
     syncCrossModalSelection(prevKey, prevIndex);
   }
@@ -177,8 +180,9 @@
     };
     try {
       await crossPanel.unflagCrossFromModal(currentCrossItem);
-    } catch {
+    } catch (err) {
       currentCrossItem = previous;
+      showToast(getErrorMessage(err, 'Failed to unflag cross item'), 'error');
     }
     syncCrossModalSelection(prevKey, prevIndex);
   }

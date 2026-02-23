@@ -30,6 +30,18 @@ const config = {
   quickMode: true,
 };
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+interface AsyncCrossJobStatus {
+  status: 'running' | 'completed' | 'failed';
+  reports: { key: string }[];
+  error?: string;
+  completedAt?: string;
+  pairTotal: number;
+}
+
 describe('cross-compare integration', () => {
   let tempDir = '';
   let fastify: FastifyInstance;
@@ -138,5 +150,61 @@ describe('cross-compare integration', () => {
       Record<string, { acceptedAt: string; reason?: string }>
     >;
     expect(persistedAcceptances[key]?.[itemKey]?.acceptedAt).toBeTruthy();
+  });
+
+  it('runs async cross-compare job and exposes status/report outputs', async () => {
+    const projectResponse = await fastify.inject({
+      method: 'POST',
+      url: '/api/projects',
+      payload: { name: 'Demo', path: tempDir, configFile: 'vrt.config.json' },
+    });
+
+    expect(projectResponse.statusCode).toBe(201);
+    const projectPayload = JSON.parse(projectResponse.payload) as { project: { id: string } };
+    const projectId = projectPayload.project.id;
+
+    const startResponse = await fastify.inject({
+      method: 'POST',
+      url: `/api/projects/${projectId}/cross-compare`,
+      payload: { async: true },
+    });
+
+    expect(startResponse.statusCode).toBe(202);
+    const startPayload = JSON.parse(startResponse.payload) as { jobId: string; status: string };
+    expect(startPayload.jobId).toBeTruthy();
+    expect(startPayload.status).toBe('running');
+
+    let finalStatus: AsyncCrossJobStatus | null = null;
+
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const statusResponse = await fastify.inject({
+        method: 'GET',
+        url: `/api/projects/${projectId}/cross-compare-jobs/${startPayload.jobId}`,
+      });
+      expect(statusResponse.statusCode).toBe(200);
+      finalStatus = JSON.parse(statusResponse.payload) as AsyncCrossJobStatus;
+      if (!finalStatus) continue;
+      if (finalStatus.status === 'completed' || finalStatus.status === 'failed') break;
+      await sleep(25);
+    }
+
+    expect(finalStatus).toBeTruthy();
+    if (!finalStatus) throw new Error('Expected final async job status');
+    expect(finalStatus.status).toBe('completed');
+    expect(finalStatus.error).toBeFalsy();
+    expect(finalStatus.completedAt).toBeTruthy();
+    expect(finalStatus.pairTotal).toBeGreaterThan(0);
+    expect(finalStatus.reports.length).toBeGreaterThan(0);
+
+    const key = finalStatus.reports[0].key;
+    const resultsResponse = await fastify.inject({
+      method: 'GET',
+      url: `/api/projects/${projectId}/cross-results/${key}`,
+    });
+    expect(resultsResponse.statusCode).toBe(200);
+    const resultsPayload = JSON.parse(resultsResponse.payload) as {
+      results: { items: unknown[] };
+    };
+    expect(resultsPayload.results.items.length).toBeGreaterThan(0);
   });
 });

@@ -121,7 +121,59 @@ describe('project service integration', () => {
     expect(configPayload.valid).toBe(true);
     expect(configPayload.config.baselineDir).toBe(config.baselineDir);
 
-    const updatedConfig = { ...config, threshold: 0.2 };
+    const updatedConfig = {
+      ...config,
+      threshold: 0.2,
+      keepDiffOnMatch: true,
+      autoThresholds: {
+        enabled: true,
+        percentile: 0.97,
+        minSampleSize: 8,
+      },
+      confidence: {
+        passThreshold: 96,
+        warnThreshold: 84,
+      },
+      domSnapshot: {
+        enabled: true,
+        maxElements: 3000,
+      },
+      engines: {
+        pixelmatch: { enabled: true, threshold: 0.12, alpha: 0.8 },
+        odiff: { enabled: true, threshold: 0.15, failOnLayoutDiff: false, outputDiffMask: true },
+        ssim: { enabled: true, threshold: 0.95 },
+        phash: { enabled: true, threshold: 0.9 },
+      },
+      crossCompare: {
+        normalization: 'resize',
+        mismatch: 'ignore',
+        pairs: ['chromium-vs-webkit'],
+      },
+      ai: {
+        enabled: true,
+        provider: 'openrouter',
+        apiKey: 'test-key',
+        model: 'openrouter/auto',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        manualOnly: false,
+        analyzeThreshold: {
+          maxPHashSimilarity: 0.9,
+          maxSSIM: 0.95,
+          minPixelDiff: 0.2,
+        },
+        autoApprove: {
+          enabled: false,
+          rules: [],
+        },
+        visionCompare: {
+          enabled: true,
+          chunks: 5,
+          minImageHeight: 2000,
+          maxVerticalAlignShift: 160,
+          includeDiffImage: true,
+        },
+      },
+    };
     const saveResponse = await fastify.inject({
       method: 'PUT',
       url: `/api/projects/${projectId}/config`,
@@ -129,8 +181,40 @@ describe('project service integration', () => {
     });
 
     expect(saveResponse.statusCode).toBe(200);
-    const savePayload = JSON.parse(saveResponse.payload) as { config: { threshold: number } };
+    const savePayload = JSON.parse(saveResponse.payload) as {
+      config: {
+        threshold: number;
+        keepDiffOnMatch: boolean;
+        autoThresholds?: { enabled: boolean; percentile?: number; minSampleSize?: number };
+        confidence?: { passThreshold?: number; warnThreshold?: number };
+        domSnapshot?: { enabled?: boolean; maxElements?: number };
+        engines?: {
+          pixelmatch?: { threshold?: number };
+          odiff?: { outputDiffMask?: boolean };
+        };
+        crossCompare?: { normalization?: string; mismatch?: string };
+        ai?: {
+          provider?: string;
+          baseUrl?: string;
+          visionCompare?: { chunks?: number; includeDiffImage?: boolean };
+        };
+      };
+    };
     expect(savePayload.config.threshold).toBe(0.2);
+    expect(savePayload.config.keepDiffOnMatch).toBe(true);
+    expect(savePayload.config.autoThresholds?.enabled).toBe(true);
+    expect(savePayload.config.autoThresholds?.percentile).toBe(0.97);
+    expect(savePayload.config.confidence?.passThreshold).toBe(96);
+    expect(savePayload.config.domSnapshot?.enabled).toBe(true);
+    expect(savePayload.config.domSnapshot?.maxElements).toBe(3000);
+    expect(savePayload.config.engines?.pixelmatch?.threshold).toBe(0.12);
+    expect(savePayload.config.engines?.odiff?.outputDiffMask).toBe(true);
+    expect(savePayload.config.crossCompare?.normalization).toBe('resize');
+    expect(savePayload.config.crossCompare?.mismatch).toBe('ignore');
+    expect(savePayload.config.ai?.provider).toBe('openrouter');
+    expect(savePayload.config.ai?.baseUrl).toBe('https://openrouter.ai/api/v1');
+    expect(savePayload.config.ai?.visionCompare?.chunks).toBe(5);
+    expect(savePayload.config.ai?.visionCompare?.includeDiffImage).toBe(true);
 
     const refreshedConfig = await fastify.inject({
       method: 'GET',
@@ -139,9 +223,22 @@ describe('project service integration', () => {
 
     expect(refreshedConfig.statusCode).toBe(200);
     const refreshedPayload = JSON.parse(refreshedConfig.payload) as {
-      config: { threshold: number };
+      config: {
+        threshold: number;
+        keepDiffOnMatch: boolean;
+        domSnapshot?: { enabled?: boolean; maxElements?: number };
+        crossCompare?: { normalization?: string; mismatch?: string };
+        ai?: { provider?: string; visionCompare?: { chunks?: number } };
+      };
     };
     expect(refreshedPayload.config.threshold).toBe(0.2);
+    expect(refreshedPayload.config.keepDiffOnMatch).toBe(true);
+    expect(refreshedPayload.config.domSnapshot?.enabled).toBe(true);
+    expect(refreshedPayload.config.domSnapshot?.maxElements).toBe(3000);
+    expect(refreshedPayload.config.crossCompare?.normalization).toBe('resize');
+    expect(refreshedPayload.config.crossCompare?.mismatch).toBe('ignore');
+    expect(refreshedPayload.config.ai?.provider).toBe('openrouter');
+    expect(refreshedPayload.config.ai?.visionCompare?.chunks).toBe(5);
 
     const imagesResponse = await fastify.inject({
       method: 'GET',

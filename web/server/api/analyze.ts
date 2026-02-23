@@ -68,6 +68,34 @@ interface ProviderValidationResponse {
 }
 
 const PROVIDERS: AIProvider[] = ['anthropic', 'openai', 'openrouter', 'google'];
+const OPENROUTER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+const OPENROUTER_ALLOWED_HOSTS = new Set(['openrouter.ai', 'www.openrouter.ai']);
+
+export function resolveOpenRouterValidationBaseUrl(input?: string): {
+  baseUrl: string;
+  warning?: string;
+} {
+  const trimmed = input?.trim();
+  if (!trimmed) return { baseUrl: OPENROUTER_DEFAULT_BASE_URL };
+
+  try {
+    const parsed = new URL(trimmed);
+    const hostname = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== 'https:' || !OPENROUTER_ALLOWED_HOSTS.has(hostname)) {
+      return {
+        baseUrl: OPENROUTER_DEFAULT_BASE_URL,
+        warning: 'Custom baseUrl ignored for security; using official OpenRouter endpoint.',
+      };
+    }
+    const normalized = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+    return { baseUrl: normalized || OPENROUTER_DEFAULT_BASE_URL };
+  } catch {
+    return {
+      baseUrl: OPENROUTER_DEFAULT_BASE_URL,
+      warning: 'Invalid baseUrl ignored; using official OpenRouter endpoint.',
+    };
+  }
+}
 
 function hasEnvCredential(provider: AIProvider): boolean {
   switch (provider) {
@@ -191,6 +219,7 @@ async function validateProviderCredential(
     signal: AbortSignal.timeout(8000),
   };
   let url = '';
+  let providerWarning = '';
 
   if (provider === 'anthropic') {
     url = 'https://api.anthropic.com/v1/models';
@@ -209,7 +238,8 @@ async function validateProviderCredential(
       Authorization: `Bearer ${credential.apiKey}`,
     };
   } else if (provider === 'openrouter') {
-    const baseUrl = (body.baseUrl?.trim() || 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    const { baseUrl, warning } = resolveOpenRouterValidationBaseUrl(body.baseUrl);
+    if (warning) providerWarning = ` ${warning}`;
     url = `${baseUrl}/models`;
     requestInit.headers = {
       Authorization: `Bearer ${credential.apiKey}`,
@@ -228,7 +258,7 @@ async function validateProviderCredential(
         provider,
         valid: true,
         source: credential.source,
-        message: 'Credential is valid and reachable.',
+        message: `Credential is valid and reachable.${providerWarning}`,
       };
     }
 
@@ -237,7 +267,7 @@ async function validateProviderCredential(
         provider,
         valid: true,
         source: credential.source,
-        message: 'Credential appears valid (rate limited).',
+        message: `Credential appears valid (rate limited).${providerWarning}`,
       };
     }
 
@@ -246,7 +276,7 @@ async function validateProviderCredential(
         provider,
         valid: false,
         source: credential.source,
-        message: 'Credential was rejected by provider (401/403).',
+        message: `Credential was rejected by provider (401/403).${providerWarning}`,
       };
     }
 
@@ -254,7 +284,7 @@ async function validateProviderCredential(
       provider,
       valid: false,
       source: credential.source,
-      message: `${baseMessage}. Provider returned ${response.status}.`,
+      message: `${baseMessage}. Provider returned ${response.status}.${providerWarning}`,
     };
   } catch (err) {
     const message = getErrorMessage(err);
@@ -262,7 +292,7 @@ async function validateProviderCredential(
       provider,
       valid: false,
       source: credential.source,
-      message: `${baseMessage}. ${message}`,
+      message: `${baseMessage}. ${message}${providerWarning}`,
     };
   }
 }

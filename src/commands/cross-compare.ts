@@ -253,6 +253,7 @@ async function runPairComparison(
         keepDiffOnMatch: true,
         sizeNormalization: crossCompare?.normalization,
         sizeMismatchHandling: crossCompare?.mismatch,
+        verticalAlign: crossCompare?.verticalAlign,
         antialiasing: config.engines?.pixelmatch?.antialiasing,
         maxDiffPercentage:
           scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,

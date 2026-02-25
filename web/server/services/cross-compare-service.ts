@@ -694,6 +694,7 @@ export async function runCrossCompare(
           keepDiffOnMatch: true,
           sizeNormalization: config.crossCompare?.normalization,
           sizeMismatchHandling: config.crossCompare?.mismatch,
+          verticalAlign: config.crossCompare?.verticalAlign,
           antialiasing: config.engines?.pixelmatch?.antialiasing,
           maxDiffPercentage:
             scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,

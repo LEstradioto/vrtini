@@ -81,6 +81,13 @@ const CrossCompareSchema = z
     pairs: z.array(z.string()).optional(),
     normalization: z.enum(['pad', 'resize', 'crop']).default('pad'),
     mismatch: z.enum(['strict', 'ignore']).default('strict'),
+    verticalAlign: z
+      .object({
+        enabled: z.boolean().default(false),
+        maxShift: z.number().int().min(0).max(2000).default(260),
+        minConfidence: z.number().min(0).max(1).default(0.12),
+      })
+      .default({}),
   })
   .default({});
 

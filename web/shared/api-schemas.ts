@@ -334,6 +334,13 @@ export const VRTConfigSchema = z
         pairs: z.array(z.string()).optional(),
         normalization: z.enum(['pad', 'resize', 'crop']).optional(),
         mismatch: z.enum(['strict', 'ignore']).optional(),
+        verticalAlign: z
+          .object({
+            enabled: z.boolean().optional(),
+            maxShift: z.number().optional(),
+            minConfidence: z.number().optional(),
+          })
+          .optional(),
       })
       .optional(),
     engines: z

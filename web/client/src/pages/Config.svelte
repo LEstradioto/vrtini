@@ -295,6 +295,25 @@
     return Number.isFinite(parsed) ? parsed : undefined;
   }
 
+  function ensureCrossCompareConfig(): NonNullable<VRTConfig['crossCompare']> {
+    if (!configData!.crossCompare || typeof configData!.crossCompare !== 'object') {
+      configData!.crossCompare = {};
+    }
+    return configData!.crossCompare as NonNullable<VRTConfig['crossCompare']>;
+  }
+
+  function ensureCrossCompareVerticalAlignConfig(): NonNullable<
+    NonNullable<VRTConfig['crossCompare']>['verticalAlign']
+  > {
+    const crossCompare = ensureCrossCompareConfig();
+    if (!crossCompare.verticalAlign || typeof crossCompare.verticalAlign !== 'object') {
+      crossCompare.verticalAlign = { enabled: false, maxShift: 260, minConfidence: 0.12 };
+    }
+    return crossCompare.verticalAlign as NonNullable<
+      NonNullable<VRTConfig['crossCompare']>['verticalAlign']
+    >;
+  }
+
   async function deleteProject() {
     const confirmed = confirm(
       'Remove this project from vrtini?\n\n' +
@@ -702,10 +721,9 @@
                 <select
                   value={configData.crossCompare?.normalization ?? 'pad'}
                   onchange={(e) => {
-                    if (!configData!.crossCompare || typeof configData!.crossCompare !== 'object') {
-                      configData!.crossCompare = {};
-                    }
-                    configData!.crossCompare.normalization = (e.currentTarget as HTMLSelectElement).value as 'pad' | 'resize' | 'crop';
+                    ensureCrossCompareConfig().normalization = (
+                      e.currentTarget as HTMLSelectElement
+                    ).value as 'pad' | 'resize' | 'crop';
                   }}
                 >
                   <option value="pad">pad</option>
@@ -718,10 +736,9 @@
                 <select
                   value={configData.crossCompare?.mismatch ?? 'strict'}
                   onchange={(e) => {
-                    if (!configData!.crossCompare || typeof configData!.crossCompare !== 'object') {
-                      configData!.crossCompare = {};
-                    }
-                    configData!.crossCompare.mismatch = (e.currentTarget as HTMLSelectElement).value as 'strict' | 'ignore';
+                    ensureCrossCompareConfig().mismatch = (
+                      e.currentTarget as HTMLSelectElement
+                    ).value as 'strict' | 'ignore';
                   }}
                 >
                   <option value="strict">strict</option>
@@ -734,18 +751,66 @@
                   type="text"
                   value={configData.crossCompare?.pairs?.join(', ') ?? ''}
                   onchange={(e) => {
-                    if (!configData!.crossCompare || typeof configData!.crossCompare !== 'object') {
-                      configData!.crossCompare = {};
-                    }
+                    const crossCompare = ensureCrossCompareConfig();
                     const raw = (e.currentTarget as HTMLInputElement).value;
                     const pairs = raw
                       .split(',')
                       .map((part) => part.trim())
                       .filter(Boolean);
                     if (pairs.length === 0) {
-                      delete configData!.crossCompare.pairs;
+                      delete crossCompare.pairs;
                     } else {
-                      configData!.crossCompare.pairs = pairs;
+                      crossCompare.pairs = pairs;
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            <div class="form-row">
+              <label class="checkbox">
+                <input
+                  type="checkbox"
+                  checked={configData.crossCompare?.verticalAlign?.enabled ?? false}
+                  onchange={(e) => {
+                    ensureCrossCompareVerticalAlignConfig().enabled = (
+                      e.currentTarget as HTMLInputElement
+                    ).checked;
+                  }}
+                />
+                Vertical Align Long Pages
+              </label>
+              <label>
+                Vertical Align Max Shift (px)
+                <input
+                  type="number"
+                  min="0"
+                  max="2000"
+                  step="1"
+                  value={configData.crossCompare?.verticalAlign?.maxShift ?? ''}
+                  onchange={(e) => {
+                    const parsed = parseOptionalInt((e.currentTarget as HTMLInputElement).value);
+                    if (parsed === undefined) {
+                      delete ensureCrossCompareVerticalAlignConfig().maxShift;
+                    } else {
+                      ensureCrossCompareVerticalAlignConfig().maxShift = parsed;
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Vertical Align Min Confidence (0-1)
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={configData.crossCompare?.verticalAlign?.minConfidence ?? ''}
+                  onchange={(e) => {
+                    const parsed = parseOptionalFloat((e.currentTarget as HTMLInputElement).value);
+                    if (parsed === undefined) {
+                      delete ensureCrossCompareVerticalAlignConfig().minConfidence;
+                    } else {
+                      ensureCrossCompareVerticalAlignConfig().minConfidence = parsed;
                     }
                   }}
                 />

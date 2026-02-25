@@ -49,6 +49,27 @@ function writeSolidPng(
   writeFileSync(path, PNG.sync.write(png));
 }
 
+function writeShiftedGradientPng(
+  path: string,
+  width: number,
+  height: number,
+  shiftY: number
+): void {
+  const png = new PNG({ width, height });
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = y - shiftY;
+    for (let x = 0; x < width; x += 1) {
+      const idx = (width * y + x) << 2;
+      const v = sourceY >= 0 && sourceY < height ? sourceY % 251 : 255;
+      png.data[idx] = v;
+      png.data[idx + 1] = v;
+      png.data[idx + 2] = v;
+      png.data[idx + 3] = 255;
+    }
+  }
+  writeFileSync(path, PNG.sync.write(png));
+}
+
 function writeDomSnapshot(path: string, text: string): void {
   writeFileSync(
     path,
@@ -211,6 +232,30 @@ describe('compareImages', () => {
     expect(result.match).toBe(true);
     expect(result.reason).toBe('match');
     expect(result.pixelDiff).toBe(0);
+  });
+
+  it('can vertically align long-page drift before diffing', async () => {
+    const baseline = getDiffPath('vertical-align-baseline.png');
+    const shifted = getDiffPath('vertical-align-shifted.png');
+    const diffWithoutAlign = getDiffPath('vertical-align-diff-off.png');
+    const diffWithAlign = getDiffPath('vertical-align-diff-on.png');
+
+    writeShiftedGradientPng(baseline, 60, 300, 0);
+    writeShiftedGradientPng(shifted, 60, 300, 26);
+
+    const withoutAlign = await compareImages(baseline, shifted, diffWithoutAlign, {
+      threshold: 0,
+      engines: { odiff: { enabled: false }, ssim: { enabled: false }, phash: { enabled: false } },
+    });
+    expect(withoutAlign.reason).toBe('diff');
+
+    const withAlign = await compareImages(baseline, shifted, diffWithAlign, {
+      threshold: 0,
+      verticalAlign: { enabled: true, maxShift: 60, minConfidence: 0.02 },
+      engines: { odiff: { enabled: false }, ssim: { enabled: false }, phash: { enabled: false } },
+    });
+    expect(withAlign.match).toBe(true);
+    expect(withAlign.reason).toBe('match');
   });
 
   it('does not trim when extra bottom region is not uniform', async () => {

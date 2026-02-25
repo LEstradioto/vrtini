@@ -89,6 +89,18 @@ export interface CompareOptions {
   sizeNormalization?: 'pad' | 'resize' | 'crop';
   sizeMismatchHandling?: 'strict' | 'ignore';
   /**
+   * Vertical alignment for long/full-page cross-browser comparisons.
+   * Finds a small Y-offset between baseline and test and crops to overlapping
+   * content before computing pixel diff.
+   */
+  verticalAlign?:
+    | boolean
+    | {
+        enabled?: boolean;
+        maxShift?: number;
+        minConfidence?: number;
+      };
+  /**
    * When baseline/test heights differ, allow trimming the taller image if the
    * extra bottom region is effectively uniform (usually just trailing
    * whitespace/background). This prevents noisy "height mismatch" diffs.
@@ -169,6 +181,158 @@ function modeFractionInRegion(
   return sampled === 0 ? 0 : maxCount / sampled;
 }
 
+function cropVerticalRegion(
+  srcData: Buffer,
+  srcWidth: number,
+  srcHeight: number,
+  startY: number,
+  targetHeight: number
+): Buffer {
+  const safeStartY = Math.max(0, Math.min(startY, srcHeight));
+  const safeTargetHeight = Math.max(0, Math.min(targetHeight, srcHeight - safeStartY));
+  const rowBytes = srcWidth * 4;
+  const result = Buffer.alloc(srcWidth * safeTargetHeight * 4);
+  for (let y = 0; y < safeTargetHeight; y += 1) {
+    const srcStart = (safeStartY + y) * rowBytes;
+    const dstStart = y * rowBytes;
+    srcData.copy(result, dstStart, srcStart, srcStart + rowBytes);
+  }
+  return result;
+}
+
+interface RowSignature {
+  luma: number;
+  alpha: number;
+}
+
+function buildRowSignatureSeries(img: PNG): RowSignature[] {
+  const sampleStep = Math.max(1, Math.floor(img.width / 256));
+  const rows = new Array<RowSignature>(img.height);
+  for (let y = 0; y < img.height; y += 1) {
+    let lumaSum = 0;
+    let alphaSum = 0;
+    let count = 0;
+    for (let x = 0; x < img.width; x += sampleStep) {
+      const idx = (y * img.width + x) * 4;
+      const r = img.data[idx] ?? 0;
+      const g = img.data[idx + 1] ?? 0;
+      const b = img.data[idx + 2] ?? 0;
+      const a = (img.data[idx + 3] ?? 255) / 255;
+      const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      lumaSum += luma * a;
+      alphaSum += a;
+      count += 1;
+    }
+    rows[y] = {
+      luma: count > 0 ? lumaSum / count : 0,
+      alpha: count > 0 ? alphaSum / count : 0,
+    };
+  }
+  return rows;
+}
+
+function scoreRowAlignment(
+  baselineRows: RowSignature[],
+  testRows: RowSignature[],
+  baselineHeight: number,
+  testHeight: number,
+  shift: number,
+  minOverlapRows: number
+): number {
+  const baselineStart = Math.max(0, -shift);
+  const testStart = Math.max(0, shift);
+  const overlap = Math.min(baselineHeight - baselineStart, testHeight - testStart);
+  if (overlap < minOverlapRows) return Number.POSITIVE_INFINITY;
+
+  let score = 0;
+  for (let row = 0; row < overlap; row += 1) {
+    const b = baselineRows[baselineStart + row];
+    const t = testRows[testStart + row];
+    score += Math.abs((b?.luma ?? 0) - (t?.luma ?? 0)) * 0.85;
+    score += Math.abs((b?.alpha ?? 0) - (t?.alpha ?? 0)) * 0.15;
+  }
+  return score / overlap;
+}
+
+function resolveVerticalAlignOptions(
+  raw: CompareOptions['verticalAlign'],
+  minHeight: number
+): { enabled: boolean; maxShift: number; minConfidence: number } {
+  if (!raw) return { enabled: false, maxShift: 0, minConfidence: 0.12 };
+
+  const requestedEnabled = raw === true ? true : (raw.enabled ?? true);
+  if (!requestedEnabled) return { enabled: false, maxShift: 0, minConfidence: 0.12 };
+
+  const requestedMaxShift = raw === true ? 260 : (raw.maxShift ?? 260);
+  const safeMaxShift = Math.max(0, Math.min(requestedMaxShift, Math.floor(minHeight * 0.25)));
+  if (safeMaxShift < 1) return { enabled: false, maxShift: 0, minConfidence: 0.12 };
+
+  const minConfidence = raw === true ? 0.12 : (raw.minConfidence ?? 0.12);
+  return { enabled: true, maxShift: safeMaxShift, minConfidence };
+}
+
+function maybeApplyVerticalAlignment(img1: PNG, img2: PNG, options: CompareOptions): void {
+  const minHeight = Math.min(img1.height, img2.height);
+  const cfg = resolveVerticalAlignOptions(options.verticalAlign, minHeight);
+  if (!cfg.enabled) return;
+
+  const baselineRows = buildRowSignatureSeries(img1);
+  const testRows = buildRowSignatureSeries(img2);
+  const minOverlapRows = Math.max(120, Math.floor(minHeight * 0.35));
+
+  let bestShift = 0;
+  let bestScore = Number.POSITIVE_INFINITY;
+  let secondBestScore = Number.POSITIVE_INFINITY;
+
+  for (let shift = -cfg.maxShift; shift <= cfg.maxShift; shift += 1) {
+    const score = scoreRowAlignment(
+      baselineRows,
+      testRows,
+      img1.height,
+      img2.height,
+      shift,
+      minOverlapRows
+    );
+    if (!Number.isFinite(score)) continue;
+
+    if (score < bestScore) {
+      secondBestScore = bestScore;
+      bestScore = score;
+      bestShift = shift;
+    } else if (score < secondBestScore) {
+      secondBestScore = score;
+    }
+  }
+
+  if (!Number.isFinite(bestScore) || bestShift === 0) return;
+
+  const zeroScore = scoreRowAlignment(
+    baselineRows,
+    testRows,
+    img1.height,
+    img2.height,
+    0,
+    minOverlapRows
+  );
+  const improvement =
+    Number.isFinite(zeroScore) && zeroScore > 0 ? (zeroScore - bestScore) / zeroScore : 0;
+  const confidence = Number.isFinite(secondBestScore)
+    ? Math.max(0, Math.min(1, (secondBestScore - bestScore) / (secondBestScore || 1)))
+    : 1;
+
+  if (improvement < cfg.minConfidence && confidence < cfg.minConfidence) return;
+
+  const baselineStart = Math.max(0, -bestShift);
+  const testStart = Math.max(0, bestShift);
+  const overlap = Math.min(img1.height - baselineStart, img2.height - testStart);
+  if (overlap < minOverlapRows) return;
+
+  img1.data = cropVerticalRegion(img1.data, img1.width, img1.height, baselineStart, overlap);
+  img1.height = overlap;
+  img2.data = cropVerticalRegion(img2.data, img2.width, img2.height, testStart, overlap);
+  img2.height = overlap;
+}
+
 function maybeTrimUniformBottom(img1: PNG, img2: PNG, options: CompareOptions): void {
   const trim = getTrimUniformBottomOptions(options.trimUniformBottom);
   if (!trim.enabled) return;
@@ -233,6 +397,7 @@ export async function compareImages(
   try {
     const [img1, img2] = await Promise.all([loadPNG(baselinePath), loadPNG(testPath)]);
     maybeTrimUniformBottom(img1, img2, options);
+    maybeApplyVerticalAlignment(img1, img2, options);
     const maxOriginalHeight = Math.max(img1.height, img2.height);
     const tallPage = maxOriginalHeight >= 4000;
 

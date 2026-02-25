@@ -92,10 +92,16 @@
   // Controls how cross-compare handles size mismatches between browsers.
   // normalization: "pad" (default), "resize", "crop"
   // mismatch: "strict" (default) or "ignore"
+  // verticalAlign: aligns long pages by Y-offset before diff (useful for old WebKit)
 
   crossCompare: {
     normalization: 'pad',
     mismatch: 'strict',
+    verticalAlign: {
+      enabled: false,
+      maxShift: 260, // px search window
+      minConfidence: 0.12, // 0-1, lower is more permissive
+    },
   },
 
   // ───────────────────────────────────────────────────────────────────────────

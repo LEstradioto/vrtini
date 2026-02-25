@@ -386,6 +386,11 @@ export interface VRTConfig {
     pairs?: string[];
     normalization?: 'pad' | 'resize' | 'crop';
     mismatch?: 'strict' | 'ignore';
+    verticalAlign?: {
+      enabled?: boolean;
+      maxShift?: number;
+      minConfidence?: number;
+    };
   };
   ai?: {
     enabled: boolean;

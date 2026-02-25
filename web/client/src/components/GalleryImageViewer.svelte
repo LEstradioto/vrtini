@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import type { GalleryImage } from './gallery-types.js';
 
   interface Props {
@@ -24,6 +25,9 @@
     columnScrollHeight: number;
     effectiveColumns: number;
     columnIndexes: number[];
+    imageNaturalWidth: number;
+    imageNaturalHeight: number;
+    currentView: 'baseline' | 'test' | 'diff';
     getColumnOffset: (index: number) => number;
     onNavigatePrev: () => void;
     onNavigateNext: () => void;
@@ -59,6 +63,9 @@
     columnScrollHeight,
     effectiveColumns,
     columnIndexes,
+    imageNaturalWidth,
+    imageNaturalHeight,
+    currentView,
     getColumnOffset,
     onNavigatePrev,
     onNavigateNext,
@@ -70,11 +77,79 @@
   }: Props = $props();
 
   let imageContainer: HTMLDivElement | undefined = $state();
+  let previousBaseSrc = $state<string | null>(null);
+  let fadingPrevious = $state(false);
+  let lastBaseSrc = '';
+  let baseChangeToken = 0;
+  let previousFadeHandle = 0;
 
   $effect(() => {
     if (imageContainer) {
       onContainerReady(imageContainer);
     }
+  });
+
+  function clearPreviousFadeTimer() {
+    if (previousFadeHandle) {
+      clearTimeout(previousFadeHandle);
+      previousFadeHandle = 0;
+    }
+  }
+
+  $effect(() => {
+    if (!baseImageSrc) {
+      clearPreviousFadeTimer();
+      previousBaseSrc = null;
+      fadingPrevious = false;
+      lastBaseSrc = '';
+      return;
+    }
+
+    if (!lastBaseSrc) {
+      lastBaseSrc = baseImageSrc;
+      return;
+    }
+
+    if (baseImageSrc === lastBaseSrc) return;
+
+    // Keep previous frame visible only for baseline/test flips.
+    if (currentView === 'diff') {
+      clearPreviousFadeTimer();
+      previousBaseSrc = null;
+      fadingPrevious = false;
+      lastBaseSrc = baseImageSrc;
+      baseChangeToken += 1;
+      return;
+    }
+
+    previousBaseSrc = lastBaseSrc;
+    fadingPrevious = false;
+    clearPreviousFadeTimer();
+    lastBaseSrc = baseImageSrc;
+    baseChangeToken += 1;
+  });
+
+  async function handlePrimaryImageLoad(event: Event) {
+    onImageLoad(event);
+
+    if (!previousBaseSrc) return;
+    const tokenAtLoad = baseChangeToken;
+
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (tokenAtLoad !== baseChangeToken) return;
+
+    fadingPrevious = true;
+    clearPreviousFadeTimer();
+    previousFadeHandle = window.setTimeout(() => {
+      if (tokenAtLoad !== baseChangeToken) return;
+      previousBaseSrc = null;
+      fadingPrevious = false;
+      previousFadeHandle = 0;
+    }, 140);
+  }
+
+  onDestroy(() => {
+    clearPreviousFadeTimer();
   });
 </script>
 
@@ -131,17 +206,45 @@
           onload={onImageLoad}
         />
       {:else}
-        <div class="image-stack" style="width: {zoom * 100}%">
+        <div
+          class="image-stack"
+          style="width: {zoom * 100}%;{imageNaturalWidth > 0 && imageNaturalHeight > 0 ? ` aspect-ratio: ${imageNaturalWidth} / ${imageNaturalHeight};` : ''}"
+        >
           <img
+            class="img-main"
             src={baseImageSrc}
             alt={isCompareMode ? displayTitle : currentImage?.filename}
-            onload={onImageLoad}
+            width={imageNaturalWidth || undefined}
+            height={imageNaturalHeight || undefined}
+            decoding="async"
+            loading="eager"
+            draggable="false"
+            onload={handlePrimaryImageLoad}
           />
+          {#if previousBaseSrc}
+            <img
+              class="img-previous"
+              src={previousBaseSrc}
+              alt=""
+              aria-hidden="true"
+              width={imageNaturalWidth || undefined}
+              height={imageNaturalHeight || undefined}
+              decoding="async"
+              loading="eager"
+              draggable="false"
+              style="opacity: {fadingPrevious ? 0 : 1}"
+            />
+          {/if}
           {#if overlayImageSrc}
             <img
               class="img-overlay"
               src={overlayImageSrc}
               alt="Diff overlay"
+              width={imageNaturalWidth || undefined}
+              height={imageNaturalHeight || undefined}
+              decoding="async"
+              loading="eager"
+              draggable="false"
               style="opacity: {diffOpacity / 100}"
             />
           {/if}
@@ -240,7 +343,6 @@
 
   .image-stack {
     position: relative;
-    transition: width 0.1s ease-out;
     flex: 0 0 auto;
   }
 
@@ -250,10 +352,24 @@
     display: block;
   }
 
+  .img-main {
+    position: relative;
+    z-index: 1;
+  }
+
+  .img-previous {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    transition: opacity 120ms linear;
+  }
+
   .img-overlay {
     position: absolute;
     top: 0;
     left: 0;
+    z-index: 3;
     pointer-events: none;
   }
 

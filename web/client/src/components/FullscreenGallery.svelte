@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import FullscreenGalleryFooter from './FullscreenGalleryFooter.svelte';
   import GalleryHeader from './GalleryHeader.svelte';
   import GalleryImageViewer from './GalleryImageViewer.svelte';
@@ -208,6 +209,7 @@
   let panicResumeHandle = 0;
   let panicShowingDiff = false;
   let panicNextView: 'baseline' | 'test' = 'baseline';
+  let panicLoopKey = '';
 
   function toSafeText(value: unknown): string {
     if (typeof value === 'string') return value;
@@ -303,6 +305,28 @@
   // Image dimensions display (baseline & test)
   let baselineDims = $state<{ w: number; h: number } | null>(null);
   let testDims = $state<{ w: number; h: number } | null>(null);
+  let queueDimLoadToken = 0;
+  let compareDimLoadToken = 0;
+  const imageDimensionCache = new Map<string, { w: number; h: number }>();
+
+  function normalizeImageSrc(src: string): string {
+    try {
+      if (typeof window === 'undefined') return src;
+      return new URL(src, window.location.href).href;
+    } catch {
+      return src;
+    }
+  }
+
+  function getCachedDimensions(src: string | null | undefined): { w: number; h: number } | null {
+    if (!src) return null;
+    return imageDimensionCache.get(normalizeImageSrc(src)) ?? null;
+  }
+
+  function cacheDimensions(src: string, width: number, height: number): void {
+    if (!src || !width || !height) return;
+    imageDimensionCache.set(normalizeImageSrc(src), { w: width, h: height });
+  }
 
   // Save zoom and opacity to session on change
   $effect(() => {
@@ -608,44 +632,139 @@
   // Load baseline & test dimensions when image changes
   $effect(() => {
     if (isCompareMode || !currentImage || !getImageUrl) {
+      queueDimLoadToken += 1;
       baselineDims = null;
       testDims = null;
       return;
     }
+    const token = ++queueDimLoadToken;
     const filename = currentImage.filename;
+    const baselineSrc = baselines.includes(filename) ? getImageUrl('baseline', filename) : '';
+    const testSrc = getImageUrl('test', filename);
 
-    if (baselines.includes(filename)) {
-      const img = new Image();
-      img.onload = () => { baselineDims = { w: img.naturalWidth, h: img.naturalHeight }; };
-      img.onerror = () => { baselineDims = null; };
-      img.src = getImageUrl('baseline', filename);
+    if (baselineSrc) {
+      const cachedBaseline = getCachedDimensions(baselineSrc);
+      if (cachedBaseline) {
+        baselineDims = cachedBaseline;
+      } else {
+        const img = new Image();
+        img.decoding = 'async';
+        img.onload = () => {
+          void img.decode().catch(() => undefined).finally(() => {
+            if (token !== queueDimLoadToken) return;
+            cacheDimensions(baselineSrc, img.naturalWidth, img.naturalHeight);
+            baselineDims = { w: img.naturalWidth, h: img.naturalHeight };
+          });
+        };
+        img.onerror = () => {
+          if (token !== queueDimLoadToken) return;
+          baselineDims = null;
+        };
+        img.src = baselineSrc;
+      }
     } else {
       baselineDims = null;
     }
 
+    const cachedTest = getCachedDimensions(testSrc);
+    if (cachedTest) {
+      testDims = cachedTest;
+      return;
+    }
+
     const testImg = new Image();
-    testImg.onload = () => { testDims = { w: testImg.naturalWidth, h: testImg.naturalHeight }; };
-    testImg.onerror = () => { testDims = null; };
-    testImg.src = getImageUrl('test', filename);
+    testImg.decoding = 'async';
+    testImg.onload = () => {
+      void testImg.decode().catch(() => undefined).finally(() => {
+        if (token !== queueDimLoadToken) return;
+        cacheDimensions(testSrc, testImg.naturalWidth, testImg.naturalHeight);
+        testDims = { w: testImg.naturalWidth, h: testImg.naturalHeight };
+      });
+    };
+    testImg.onerror = () => {
+      if (token !== queueDimLoadToken) return;
+      testDims = null;
+    };
+    testImg.src = testSrc;
+  });
+
+  // Preload compare image dimensions so baseline/test flips do not wait on decode/load.
+  $effect(() => {
+    if (!isCompareMode || !effectiveCompareImages) return;
+    const srcs = [effectiveCompareImages.left.src, effectiveCompareImages.right.src];
+    for (const src of srcs) {
+      if (!src || getCachedDimensions(src)) continue;
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        void img.decode().catch(() => undefined).finally(() => {
+          cacheDimensions(src, img.naturalWidth, img.naturalHeight);
+        });
+      };
+      img.src = src;
+    }
+  });
+
+  // Prime natural dimensions immediately on view switches.
+  $effect(() => {
+    if (!baseImageSrc) return;
+    const cached = getCachedDimensions(baseImageSrc);
+    if (cached) {
+      imageNaturalWidth = cached.w;
+      imageNaturalHeight = cached.h;
+      return;
+    }
+    if (isCompareMode || !currentImage) return;
+    const queuedDims = currentView === 'test' ? testDims : baselineDims;
+    if (!queuedDims) return;
+    imageNaturalWidth = queuedDims.w;
+    imageNaturalHeight = queuedDims.h;
   });
 
   // Load base image dimensions for compare mode
   $effect(() => {
-    if (!isCompareMode || !baseImageSrc) return;
+    if (!isCompareMode || !baseImageSrc) {
+      compareDimLoadToken += 1;
+      return;
+    }
+    const cached = getCachedDimensions(baseImageSrc);
+    if (cached) {
+      imageNaturalWidth = cached.w;
+      imageNaturalHeight = cached.h;
+      return;
+    }
+    const token = ++compareDimLoadToken;
     const img = new Image();
+    img.decoding = 'async';
     img.onload = () => {
-      imageNaturalWidth = img.naturalWidth;
-      imageNaturalHeight = img.naturalHeight;
+      void img.decode().catch(() => undefined).finally(() => {
+        if (token !== compareDimLoadToken) return;
+        cacheDimensions(baseImageSrc, img.naturalWidth, img.naturalHeight);
+        imageNaturalWidth = img.naturalWidth;
+        imageNaturalHeight = img.naturalHeight;
+      });
     };
     img.onerror = () => {
+      if (token !== compareDimLoadToken) return;
       imageNaturalWidth = 0;
       imageNaturalHeight = 0;
     };
     img.src = baseImageSrc;
   });
 
+  function urlsMatch(candidate: string, expected: string): boolean {
+    try {
+      return new URL(candidate, window.location.href).href === new URL(expected, window.location.href).href;
+    } catch {
+      return candidate === expected;
+    }
+  }
+
   function handleImageLoad(e: Event) {
     const img = e.target as HTMLImageElement;
+    const loadedSrc = img.currentSrc || img.src;
+    if (!urlsMatch(loadedSrc, baseImageSrc)) return;
+    cacheDimensions(loadedSrc, img.naturalWidth, img.naturalHeight);
     imageNaturalWidth = img.naturalWidth;
     imageNaturalHeight = img.naturalHeight;
     scheduleScrollRestore();
@@ -715,6 +834,8 @@
     lastView = currentView;
 
     if (baseChanged) {
+      // Defer restore until dimensions are known to avoid sub-400ms switch jumps.
+      if (!getCachedDimensions(baseImageSrc)) return;
       if (!imageChanged && viewChanged) {
         scheduleScrollRestore('anchor');
       } else {
@@ -1098,8 +1219,7 @@
     }
   }
 
-  function stopPanic() {
-    panicActive = false;
+  function clearPanicTimers() {
     if (panicFlipHandle) {
       clearInterval(panicFlipHandle);
       panicFlipHandle = 0;
@@ -1112,6 +1232,12 @@
       clearTimeout(panicResumeHandle);
       panicResumeHandle = 0;
     }
+  }
+
+  function stopPanic() {
+    panicActive = false;
+    panicLoopKey = '';
+    clearPanicTimers();
     panicShowingDiff = false;
     currentView = panicPrevView;
   }
@@ -1126,12 +1252,16 @@
     panicActive = true;
   }
 
-  function startPanicLoop() {
+  function startPanicLoop(loopKey: string) {
     if (!hasBaseline) return;
-    panicNextView = 'baseline';
+    panicLoopKey = loopKey;
     panicShowingDiff = false;
-    currentView = panicNextView;
-    panicNextView = panicNextView === 'baseline' ? 'test' : 'baseline';
+
+    // Do not force a baseline jump on loop start; continue from current visual state.
+    if (currentView !== 'baseline' && currentView !== 'test') {
+      currentView = 'baseline';
+    }
+    panicNextView = currentView === 'baseline' ? 'test' : 'baseline';
 
     panicFlipHandle = window.setInterval(() => {
       if (!panicActive || panicShowingDiff) return;
@@ -1153,21 +1283,25 @@
   }
 
   $effect(() => {
-    if (!panicActive) return;
+    if (!panicActive) {
+      clearPanicTimers();
+      panicLoopKey = '';
+      panicShowingDiff = false;
+      return;
+    }
     const panicKey = isCompareMode
       ? `compare:${compareIndexValue}`
       : `queue:${currentImage?.filename ?? ''}`;
-    panicKey;
-    startPanicLoop();
-    return () => {
-      if (panicFlipHandle) clearInterval(panicFlipHandle);
-      if (panicDiffHandle) clearInterval(panicDiffHandle);
-      if (panicResumeHandle) clearTimeout(panicResumeHandle);
-      panicFlipHandle = 0;
-      panicDiffHandle = 0;
-      panicResumeHandle = 0;
-      panicShowingDiff = false;
-    };
+    if (!panicKey) return;
+    if (panicLoopKey === panicKey && panicFlipHandle) return;
+
+    clearPanicTimers();
+    panicShowingDiff = false;
+    startPanicLoop(panicKey);
+  });
+
+  onDestroy(() => {
+    clearPanicTimers();
   });
 
   // Close gallery if queue becomes empty (only in queue mode)
@@ -1467,6 +1601,9 @@
       {columnScrollHeight}
       {effectiveColumns}
       {columnIndexes}
+      imageNaturalWidth={imageNaturalWidth}
+      imageNaturalHeight={imageNaturalHeight}
+      {currentView}
       {getColumnOffset}
       onNavigatePrev={isCompareMode ? navigateComparePrev : navigatePrev}
       onNavigateNext={isCompareMode ? navigateCompareNext : navigateNext}

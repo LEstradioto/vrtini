@@ -1,9 +1,10 @@
 import type { Command } from 'commander';
 import { resolve, join, relative } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import { loadConfig } from '../config.js';
 import { normalizeBrowserConfig } from '../browser-versions.js';
-import { getProjectDirs, getScreenshotFilename } from '../core/paths.js';
+import { getProjectDirs, getScreenshotFilename, getSnapshotFilename } from '../core/paths.js';
 import { compareImages, getDiffPath } from '../compare.js';
 import { generateReport } from '../report.js';
 import { formatBrowser, type BrowserRef, type ComparisonResult } from '../types/index.js';
@@ -26,7 +27,20 @@ interface CrossResultItem {
   diffPercentage: number;
   pixelDiff: number;
   ssimScore?: number;
+  engineResults?: {
+    engine: string;
+    similarity: number;
+    diffPercent?: number;
+    diffPixels?: number;
+    error?: string;
+  }[];
   phash?: { similarity: number; baselineHash: string; testHash: string };
+  domSnapshot?: {
+    enabled: boolean;
+    baselineFound: boolean;
+    testFound: boolean;
+  };
+  domDiff?: ComparisonResult extends { domDiff?: infer T } ? T : unknown;
   error?: string;
 }
 
@@ -245,6 +259,11 @@ async function runPairComparison(
     comparisonTasks,
     concurrency,
     async ({ scenario, viewport, baselinePath, testPath, diffPath }) => {
+      const domSnapshotEnabled = !!config.domSnapshot?.enabled;
+      const baselineSnapshotPath = resolve(outputDir, getSnapshotFilename(baselinePath));
+      const testSnapshotPath = resolve(outputDir, getSnapshotFilename(testPath));
+      const baselineSnapshotFound = domSnapshotEnabled && existsSync(baselineSnapshotPath);
+      const testSnapshotFound = domSnapshotEnabled && existsSync(testSnapshotPath);
       const result = await compareImages(baselinePath, testPath, diffPath, {
         threshold: config.threshold,
         diffColor: config.diffColor,
@@ -258,6 +277,8 @@ async function runPairComparison(
         maxDiffPercentage:
           scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
         maxDiffPixels: scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
+        baselineSnapshot: baselineSnapshotFound ? baselineSnapshotPath : undefined,
+        testSnapshot: testSnapshotFound ? testSnapshotPath : undefined,
       });
 
       const diffPathValue = getDiffPath(result);
@@ -274,7 +295,25 @@ async function runPairComparison(
         diffPercentage: result.diffPercentage,
         pixelDiff: result.pixelDiff,
         ssimScore: 'ssimScore' in result ? result.ssimScore : undefined,
+        engineResults:
+          result.reason === 'diff' && Array.isArray(result.engineResults)
+            ? result.engineResults.map((engineResult) => ({
+                engine: engineResult.engine,
+                similarity: engineResult.similarity,
+                diffPercent: engineResult.diffPercent,
+                diffPixels: engineResult.diffPixels,
+                error: engineResult.error,
+              }))
+            : undefined,
         phash: 'phash' in result ? result.phash : undefined,
+        domSnapshot: domSnapshotEnabled
+          ? {
+              enabled: true,
+              baselineFound: baselineSnapshotFound,
+              testFound: testSnapshotFound,
+            }
+          : undefined,
+        domDiff: result.reason === 'diff' ? result.domDiff : undefined,
         error: result.reason === 'error' ? result.error : undefined,
       };
 

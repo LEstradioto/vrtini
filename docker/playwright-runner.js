@@ -14,6 +14,7 @@ const path = require('path');
 const INPUT_DIR = '/input';
 const OUTPUT_DIR = '/output';
 const CONFIG_FILE = path.join(INPUT_DIR, 'scenario.json');
+const MAX_SCREENSHOT_DIMENSION = 32767;
 
 /**
  * Sanitize a string for use in filenames.
@@ -27,6 +28,73 @@ function sanitizeForFilename(name) {
     .replace(/-+/g, '-') // Collapse multiple dashes
     .replace(/_+/g, '_') // Collapse multiple underscores
     .replace(/^[-_]+|[-_]+$/g, ''); // Trim leading/trailing dashes/underscores
+}
+
+function isScreenshotDimensionError(error) {
+  const message = error && typeof error.message === 'string' ? error.message : '';
+  return message.includes('Cannot take screenshot larger than 32767 pixels on any dimension');
+}
+
+async function capturePageScreenshot({ page, scenario, screenshotPath, viewport }) {
+  if (scenario.selector) {
+    console.log(`Capturing element: ${scenario.selector}`);
+    const element = await page.$(scenario.selector);
+    if (!element) {
+      throw new Error(`Selector not found: ${scenario.selector}`);
+    }
+    await element.screenshot({ path: screenshotPath });
+    return;
+  }
+
+  if (!scenario.fullPage) {
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+    return;
+  }
+
+  const pageSize = await page.evaluate(() => ({
+    width: Math.max(
+      document.documentElement?.scrollWidth || 0,
+      document.body?.scrollWidth || 0,
+      window.innerWidth || 0
+    ),
+    height: Math.max(
+      document.documentElement?.scrollHeight || 0,
+      document.body?.scrollHeight || 0,
+      window.innerHeight || 0
+    ),
+  }));
+
+  // WebKit cannot reliably capture screenshots above 32767px.
+  // When the page is taller than this, force a capped viewport capture.
+  if ((pageSize.height || 0) > MAX_SCREENSHOT_DIMENSION) {
+    const originalViewport = { width: viewport.width, height: viewport.height };
+    const cappedHeight = MAX_SCREENSHOT_DIMENSION;
+    await page.setViewportSize({ width: originalViewport.width, height: cappedHeight });
+    await page.waitForTimeout(50);
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+    await page.setViewportSize(originalViewport);
+    console.warn(
+      `FullPage height ${pageSize.height}px exceeded ${MAX_SCREENSHOT_DIMENSION}px; captured top section at capped height ${cappedHeight}px`
+    );
+    return;
+  }
+
+  try {
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+  } catch (error) {
+    if (!isScreenshotDimensionError(error)) {
+      throw error;
+    }
+    const originalViewport = { width: viewport.width, height: viewport.height };
+    const cappedHeight = MAX_SCREENSHOT_DIMENSION;
+    await page.setViewportSize({ width: originalViewport.width, height: cappedHeight });
+    await page.waitForTimeout(50);
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+    await page.setViewportSize(originalViewport);
+    console.warn(
+      `FullPage capture failed by dimension limit; captured top section at capped height ${cappedHeight}px`
+    );
+  }
 }
 
 async function main() {
@@ -153,21 +221,7 @@ async function main() {
     const screenshotName = `${sanitizedName}_${browserName}_${viewport.name}.png`;
     const screenshotPath = path.join(OUTPUT_DIR, screenshotName);
 
-    if (scenario.selector) {
-      // Capture specific element
-      console.log(`Capturing element: ${scenario.selector}`);
-      const element = await page.$(scenario.selector);
-      if (!element) {
-        throw new Error(`Selector not found: ${scenario.selector}`);
-      }
-      await element.screenshot({ path: screenshotPath });
-    } else {
-      // Capture viewport or full page
-      await page.screenshot({
-        path: screenshotPath,
-        fullPage: scenario.fullPage || false,
-      });
-    }
+    await capturePageScreenshot({ page, scenario, screenshotPath, viewport });
 
     console.log(`Screenshot saved: ${screenshotName}`);
 

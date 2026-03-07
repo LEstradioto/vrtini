@@ -555,6 +555,18 @@
 
   async function runSelectedCrossPair() {
     if (!selectedCrossKey) return;
+    const outdatedKeys =
+      crossResults?.items
+        .filter((item) => item.outdated)
+        .map((item) => item.itemKey ?? `${item.scenario}__${item.viewport}`) ?? [];
+    if (outdatedKeys.length > 0) {
+      await runCrossCompare({
+        key: selectedCrossKey,
+        itemKeys: outdatedKeys,
+        resetAcceptances: true,
+      });
+      return;
+    }
     await runCrossCompare({ key: selectedCrossKey });
   }
 
@@ -947,6 +959,26 @@
     return computeCrossSummary(crossResults.items);
   });
 
+  let selectedCrossReport = $derived.by(() =>
+    selectedCrossKey ? getReportByKey(selectedCrossKey) : null
+  );
+  let selectedCrossOutdatedCount = $derived.by(
+    () => crossPairSummary?.outdated ?? selectedCrossReport?.outdatedCount ?? 0
+  );
+  let selectedCrossPrimaryActionLabel = $derived.by(() => {
+    if (crossCompareRunning) return 'Running Cross Compare...';
+    if (selectedCrossOutdatedCount > 0) {
+      return `Revalidate Changed (${selectedCrossOutdatedCount})`;
+    }
+    return 'Run Cross Compare (Current Pair)';
+  });
+  let selectedCrossPrimaryActionHint = $derived.by(() => {
+    if (selectedCrossOutdatedCount > 0) {
+      return 'Only changed items are recomputed; approvals for unchanged items stay intact.';
+    }
+    return 'Recompute the current pair without clearing existing approvals.';
+  });
+
   let aiAnalyzedCount = $derived(crossResults?.items.filter((i) => i.aiAnalysis).length ?? 0);
   let selectedCrossHasResults = $derived(
     hasCrossReportResults(getReportByKey(selectedCrossKey)) ||
@@ -1317,9 +1349,19 @@
     <button class="btn" onclick={() => runCrossCompare()} disabled={crossCompareRunning}>
       {crossCompareRunning ? 'Running Cross Compare...' : 'Run Cross Compare (All Pairs)'}
     </button>
-    <button class="btn" onclick={runSelectedCrossPair} disabled={!selectedCrossKey || crossCompareRunning}>
-      {crossCompareRunning ? 'Running Cross Compare...' : 'Run Cross Compare (Current Pair)'}
-    </button>
+    <div class="cross-primary-action">
+      <button
+        class="btn"
+        onclick={runSelectedCrossPair}
+        disabled={!selectedCrossKey || crossCompareRunning}
+        title={selectedCrossPrimaryActionHint}
+      >
+        {selectedCrossPrimaryActionLabel}
+      </button>
+      {#if selectedCrossKey}
+        <div class="cross-primary-action-hint">{selectedCrossPrimaryActionHint}</div>
+      {/if}
+    </div>
     <button
       class="btn danger"
       onclick={clearCrossPair}
@@ -1758,6 +1800,19 @@
     flex-wrap: wrap;
     gap: 0.75rem;
     justify-content: space-between;
+  }
+
+  .cross-primary-action {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .cross-primary-action-hint {
+    max-width: 22rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--text-muted);
   }
 
   .cross-select label {

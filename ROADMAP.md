@@ -35,6 +35,10 @@ Build a best‑in‑class visual regression platform that explains _what changed
 - [x] Add sticky/header “Select all rows” checkbox with consistent datatable behavior.
 - [x] Ensure test runs always show live progress feedback (same clarity level as compare progress).
 - [x] Add footer **Full Run** action: run tests first, then auto-run cross-compare pipeline.
+- [ ] Add dashboard multi-project test runs:
+  - multi-select projects from the dashboard,
+  - trigger `Run Tests` for several projects in one action,
+  - track batch progress across projects without opening each project one by one.
 - [ ] Improve the confidence-level dashboard to be more readable/actionable by default.
 - [ ] Make UX more opinionated by default (simple happy-path), with Advanced/Details panels for power users.
 

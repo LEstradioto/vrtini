@@ -92,6 +92,71 @@ Key options:
 - Cross-compare results with diff overlays
 - Optional AI analysis panel
 
+## Use Cases
+
+### 1. Simple Project: one project, many URLs, one browser truth
+
+Use this when you only need one browser/project as your source of truth.
+
+Typical flow:
+
+1. Create one project with multiple scenarios/URLs.
+2. First run: `Run Tests` creates the initial screenshots.
+3. Review and approve them as baselines.
+4. Change the app.
+5. Re-run `Run Tests`.
+6. Review diffs and approve or reject them.
+
+Rule of thumb:
+
+- first run = baseline creation
+- later runs = regression detection against approved baselines
+
+If the app is simple and you do not need browser-to-browser auditing, tests alone are enough for day-to-day regression checking.
+
+### 2. Complex Project: cross-browser and old-browser compatibility
+
+Use this when `Chromium latest` is your source of truth, but you also need to keep `Chromium old`, `WebKit latest`, or `WebKit old` visually aligned.
+
+Recommended project setup:
+
+- `Latest Full (chromium)` for the main reference baseline
+- extra projects for legacy/alternate browsers with their own approved baselines
+- `Cross Compare` projects for browser-vs-browser auditing
+
+There are two common workflows here.
+
+#### A. Baselines already exist
+
+This is the steady-state workflow after the system is already aligned.
+
+1. Change the app.
+2. Run tests for `Latest Full (chromium)`.
+3. Run tests for the other browser projects.
+4. Review diffs and approve/reject as needed.
+5. Only run `Cross Compare` when you want to audit browser drift again or investigate suspicious differences.
+
+In this state, tests are the main safety net. Cross-compare becomes an auditing tool, not a mandatory step on every change.
+
+#### B. Baselines do not exist yet, or compatibility work is still in progress
+
+This is the heavier workflow used while building backward compatibility.
+
+1. Capture and approve the initial baselines per browser project.
+2. Run `Cross Compare` against the chosen source of truth (`Chromium latest` is the usual reference).
+3. Investigate the highest diffs first.
+4. Patch app code, scenario config, or capture behavior until the alternate browser becomes visually acceptable.
+5. Re-run tests for the affected project.
+6. Re-run `Cross Compare` to verify the reconciliation.
+7. Repeat until the browser-specific projects are stable.
+
+Once this alignment work is complete, go back to the simpler steady-state workflow:
+
+1. change app
+2. run tests for all browser projects
+3. review diffs
+4. use cross-compare only when you need cross-browser auditing again
+
 ### Shortcuts (viewer)
 
 | Key     | Action          |

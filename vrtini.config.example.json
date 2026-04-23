@@ -1,0 +1,137 @@
+{
+  "baselineDir": "./.vrtini/baselines",
+  "outputDir": "./.vrtini/output",
+  "browsers": ["chromium", { "name": "webkit", "version": "17.4" }],
+  "viewports": [
+    { "name": "desktop", "width": 1920, "height": 1080 },
+    { "name": "mobile", "width": 375, "height": 812 }
+  ],
+  "threshold": 0.1,
+  "diffThreshold": {
+    "maxDiffPercentage": 0.5,
+    "maxDiffPixels": 500
+  },
+  "disableAnimations": true,
+  "diffColor": "#ff00ff",
+  "concurrency": 5,
+  "quickMode": false,
+  "keepDiffOnMatch": false,
+  "scenarioDefaults": {
+    "waitFor": "networkidle",
+    "waitForTimeout": 0,
+    "postInteractionWait": 0,
+    "fullPage": false,
+    "hideSelectors": [],
+    "removeSelectors": [],
+    "blockUrls": []
+  },
+  "scenarios": [
+    {
+      "name": "home",
+      "url": "http://host.docker.internal:3000/",
+      "waitFor": "networkidle",
+      "waitForSelector": "main",
+      "waitForTimeout": 2000,
+      "beforeScreenshot": "document.querySelectorAll('.banner').forEach(el => el.remove())",
+      "postInteractionWait": 500,
+      "selector": "main",
+      "fullPage": true,
+      "hideSelectors": [".cookie-banner", ".live-chat"],
+      "removeSelectors": [".ad-slot"],
+      "blockUrls": ["google-analytics.com", "segment.io"],
+      "diffThreshold": {
+        "maxDiffPercentage": 1,
+        "maxDiffPixels": 1000
+      }
+    }
+  ],
+  "engines": {
+    "pixelmatch": {
+      "enabled": true,
+      "threshold": 0.1,
+      "antialiasing": true,
+      "alpha": 0.1
+    },
+    "odiff": {
+      "enabled": true,
+      "threshold": 0.1,
+      "antialiasing": true,
+      "failOnLayoutDiff": true,
+      "outputDiffMask": false
+    },
+    "ssim": {
+      "enabled": true,
+      "threshold": 0.98,
+      "antialiasing": true
+    },
+    "phash": {
+      "enabled": true,
+      "threshold": 0.95,
+      "antialiasing": true
+    }
+  },
+  "crossCompare": {
+    "pairs": ["chromium:desktop vs webkit:desktop"],
+    "normalization": "pad",
+    "mismatch": "strict",
+    "verticalAlign": {
+      "enabled": false,
+      "maxShift": 260,
+      "minConfidence": 0.12
+    }
+  },
+  "autoThresholds": {
+    "enabled": false,
+    "percentile": 0.95,
+    "minSampleSize": 5
+  },
+  "confidence": {
+    "passThreshold": 95,
+    "warnThreshold": 80
+  },
+  "domSnapshot": {
+    "enabled": false,
+    "maxElements": 2000
+  },
+  "report": {
+    "embedImages": false
+  },
+  "ai": {
+    "enabled": false,
+    "provider": "anthropic",
+    "apiKey": "",
+    "authToken": "",
+    "model": "claude-sonnet-4-6",
+    "baseUrl": "https://api.anthropic.com",
+    "manualOnly": false,
+    "analyzeThreshold": {
+      "maxPHashSimilarity": 0.95,
+      "maxSSIM": 0.98,
+      "minPixelDiff": 0.1
+    },
+    "autoApprove": {
+      "enabled": false,
+      "rules": [
+        {
+          "condition": {
+            "categories": ["cosmetic", "noise"],
+            "maxSeverity": "warning",
+            "minConfidence": 0.8,
+            "maxPixelDiff": 0.5,
+            "minSSIM": 0.98,
+            "minPHash": 0.95,
+            "maxDomTextChanges": 0
+          },
+          "action": "approve"
+        }
+      ]
+    },
+    "visionCompare": {
+      "enabled": true,
+      "chunks": 6,
+      "minImageHeight": 1800,
+      "maxVerticalAlignShift": 220,
+      "includeDiffImage": false
+    }
+  }
+}

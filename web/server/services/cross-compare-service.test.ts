@@ -23,8 +23,8 @@ const scenarioName = 'homepage';
 const viewportName = 'desktop';
 
 const config: VRTConfig = {
-  baselineDir: './.vrt/baselines',
-  outputDir: './.vrt/output',
+  baselineDir: './.vrtini/baselines',
+  outputDir: './.vrtini/output',
   browsers: ['chromium', { name: 'chromium', version: '90' }],
   viewports: [{ name: viewportName, width: 800, height: 600 }],
   threshold: 0.1,
@@ -55,7 +55,7 @@ async function seedCrossCompareImages(outputDir: string): Promise<void> {
 }
 
 describe('cross-compare smart pass rerun', () => {
-  const outputDir = resolve(TEMP_ROOT, '.vrt', 'output');
+  const outputDir = resolve(TEMP_ROOT, '.vrtini', 'output');
 
   beforeAll(async () => {
     await rm(TEMP_ROOT, { recursive: true, force: true });
@@ -108,7 +108,14 @@ describe('cross-compare smart pass rerun', () => {
 
     await setCrossAcceptance(TEMP_ROOT, key, itemKey, undefined, config);
 
-    const resultsPath = resolve(TEMP_ROOT, '.vrt', 'output', 'cross-reports', key, 'results.json');
+    const resultsPath = resolve(
+      TEMP_ROOT,
+      '.vrtini',
+      'output',
+      'cross-reports',
+      key,
+      'results.json'
+    );
     const acceptedData = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
     const acceptedItem = acceptedData.items.find((item) => item.itemKey === itemKey);
 
@@ -133,7 +140,14 @@ describe('cross-compare smart pass rerun', () => {
 
     await setCrossFlag(TEMP_ROOT, key, itemKey, 'Review later', config);
 
-    const resultsPath = resolve(TEMP_ROOT, '.vrt', 'output', 'cross-reports', key, 'results.json');
+    const resultsPath = resolve(
+      TEMP_ROOT,
+      '.vrtini',
+      'output',
+      'cross-reports',
+      key,
+      'results.json'
+    );
     const flaggedData = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
     const flaggedItem = flaggedData.items.find((item) => item.itemKey === itemKey);
 

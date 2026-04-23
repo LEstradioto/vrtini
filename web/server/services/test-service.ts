@@ -443,7 +443,7 @@ async function persistResults(job: TestJob, projectPath: string): Promise<void> 
     lastTiming: job.timing,
   });
 
-  const resultsPath = resolve(projectPath, '.vrt', 'last-results.json');
+  const resultsPath = resolve(projectPath, '.vrtini', 'last-results.json');
   const resultsData = buildResultsData(job.results);
   await writeFile(resultsPath, JSON.stringify(resultsData, null, 2));
 }

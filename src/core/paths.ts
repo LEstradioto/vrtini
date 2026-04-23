@@ -9,8 +9,8 @@ export interface PathConfig {
 }
 
 export const DEFAULT_PATHS: PathConfig = {
-  baselineDir: './.vrt/baselines',
-  outputDir: './.vrt/output',
+  baselineDir: './.vrtini/baselines',
+  outputDir: './.vrtini/output',
 };
 
 export type ImageType = 'baseline' | 'test' | 'diff' | 'custom-diff';
@@ -108,7 +108,7 @@ export function getSnapshotFilename(screenshotFilename: string): string {
 }
 
 export function getAcceptancesPath(projectPath: string): string {
-  return resolve(projectPath, '.vrt', 'acceptances.json');
+  return resolve(projectPath, '.vrtini', 'acceptances.json');
 }
 
 export function getReportPath(projectPath: string, config?: PathConfig): string {
@@ -116,11 +116,11 @@ export function getReportPath(projectPath: string, config?: PathConfig): string 
 }
 
 export function getVrtDir(projectPath: string): string {
-  return resolve(projectPath, '.vrt');
+  return resolve(projectPath, '.vrtini');
 }
 
 export function getProjectStorePath(cwd: string): string {
-  return resolve(cwd, '.vrt', 'projects.json');
+  return resolve(cwd, '.vrtini', 'projects.json');
 }
 
 export function getBatchResultsPath(outputDir: string): string {

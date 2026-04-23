@@ -53,8 +53,8 @@ Core stack:
 ### 3.1 Standard regression run
 
 1. `vrtini test` triggers capture in Docker.
-2. Screenshots are written to `.vrt/output`.
-3. Baselines are read from `.vrt/baselines`.
+2. Screenshots are written to `.vrtini/output`.
+3. Baselines are read from `.vrtini/baselines`.
 4. Diffs + metrics are computed.
 5. `last-results.json`, metadata indexes, and report output are written.
 6. UI loads status and enables approve/reject/flag actions.
@@ -64,12 +64,12 @@ Core stack:
 - Single/bulk approve copies test image to baseline.
 - Reject removes test/diff artifacts for an item.
 - Revert removes baseline to force re-baselining.
-- Acceptance records are persisted in `.vrt/acceptances.json`.
+- Acceptance records are persisted in `.vrtini/acceptances.json`.
 
 ### 3.3 Cross-compare (browser vs browser)
 
 - Pair generation is automatic from configured browsers/versions.
-- Per-pair reports + `results.json` are generated under `.vrt/output/cross-reports`.
+- Per-pair reports + `results.json` are generated under `.vrtini/output/cross-reports`.
 - Item-level approval and flagging are persisted (`cross.json`, `cross-flags.json`).
 - Outdated detection marks items when source screenshots changed after report generation.
 - Revalidation reruns only outdated/selected items.
@@ -233,7 +233,7 @@ Risks:
 ## 10. Practical Developer Notes
 
 - To test localhost targets from Dockerized browsers, use `host.docker.internal`.
-- Store artifacts and state under `.vrt/`:
+- Store artifacts and state under `.vrtini/`:
   - `baselines/`, `output/`, `output/diffs/`, `output/cross-reports/`
   - `acceptances.json`, `flags.json`, `cross*.json`
 - For faster local loops use `quickMode`; for release confidence use full engines + cross-compare + UI review.

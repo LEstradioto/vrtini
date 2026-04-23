@@ -2,7 +2,14 @@
   import Dashboard from './pages/Dashboard.svelte';
   import ProjectPage from './pages/Project.svelte';
   import Config from './pages/Config.svelte';
-  import { test, projects as projectsApi, images as imagesApi, type Project } from './lib/api';
+  import {
+    test,
+    projects as projectsApi,
+    images as imagesApi,
+    config as configApi,
+    type Project,
+    type ProfileConfig,
+  } from './lib/api';
   import { SvelteMap } from 'svelte/reactivity';
   import {
     setAppContext,
@@ -241,7 +248,10 @@
   let sidebarCollapsed = $state(false);
 
   type SidebarStatus = 'passed' | 'failed' | 'new' | 'not-run';
-  type SidebarProject = Project & { currentStatus: SidebarStatus };
+  type SidebarProject = Project & {
+    currentStatus: SidebarStatus;
+    profiles: ProfileConfig[];
+  };
 
   // Sidebar project list
   let sidebarProjects = $state<SidebarProject[]>([]);
@@ -271,23 +281,39 @@
       const res = await projectsApi.list();
       const enriched = await Promise.all(
         res.projects.map(async (project): Promise<SidebarProject> => {
-          try {
-            const imageData = await imagesApi.list(project.id);
-            return {
-              ...project,
-              currentStatus: computeSidebarStatus(imageData),
-            };
-          } catch {
-            return {
-              ...project,
-              currentStatus: fallbackSidebarStatus(project),
-            };
-          }
+          const [statusData, profilesData] = await Promise.allSettled([
+            imagesApi.list(project.id),
+            configApi.profiles(project.id),
+          ]);
+
+          const currentStatus =
+            statusData.status === 'fulfilled'
+              ? computeSidebarStatus(statusData.value)
+              : fallbackSidebarStatus(project);
+
+          const profiles =
+            profilesData.status === 'fulfilled' ? profilesData.value.profiles : [];
+
+          return { ...project, currentStatus, profiles };
         })
       );
       sidebarProjects = enriched;
     } catch {
       // silent - sidebar projects are best-effort
+    }
+  }
+
+  async function switchProfile(project: SidebarProject, profile: ProfileConfig) {
+    if (project.configFile === profile.filename) {
+      navigate(`/project/${project.id}`);
+      return;
+    }
+    try {
+      await projectsApi.update(project.id, { configFile: profile.filename });
+      window.location.hash = `#/project/${project.id}`;
+      window.location.reload();
+    } catch (err) {
+      log.error('Failed to switch profile:', getErrorMessage(err));
     }
   }
 
@@ -361,16 +387,34 @@
               {@const isRunning = runningTests.has(proj.id)}
               {@const isActive = projectId === proj.id && (page === 'project' || page === 'config')}
               {@const statusClass = isRunning ? 'running' : proj.currentStatus === 'failed' ? 'failed' : proj.currentStatus === 'new' ? 'new' : proj.currentStatus === 'passed' ? 'passed' : ''}
+              {@const showProfiles = proj.profiles.some((p) => p.name !== 'default') || proj.profiles.length > 1}
               <a
                 href="#/project/{proj.id}"
                 class="nav-project"
-                class:active={isActive}
+                class:active={isActive && !showProfiles}
                 onclick={(e) => { e.preventDefault(); navigate(`/project/${proj.id}`); }}
                 title="{proj.name}{isRunning ? ' (running)' : ` [${proj.currentStatus}]`}"
               >
                 <span class="nav-project-dot {statusClass}"></span>
                 <span class="nav-label">{proj.name}</span>
               </a>
+              {#if showProfiles}
+                <div class="nav-profile-list">
+                  {#each proj.profiles as profile}
+                    {@const profileActive = isActive && proj.configFile === profile.filename}
+                    <a
+                      href="#/project/{proj.id}"
+                      class="nav-profile"
+                      class:active={profileActive}
+                      onclick={(e) => { e.preventDefault(); switchProfile(proj, profile); }}
+                      title="{profile.filename}"
+                    >
+                      <span class="nav-profile-bullet">▸</span>
+                      <span class="nav-label">{profile.name}</span>
+                    </a>
+                  {/each}
+                </div>
+              {/if}
             {/each}
           </div>
         </div>
@@ -504,6 +548,7 @@
   .sidebar-collapsed .logo-text,
   .sidebar-collapsed .nav-label,
   .sidebar-collapsed .nav-project-list,
+  .sidebar-collapsed .nav-profile-list,
   .sidebar-collapsed .nav-section-label .nav-label {
     display: none;
   }
@@ -660,6 +705,47 @@
   .nav-project-dot.running {
     background: var(--color-new);
     animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .nav-profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-left: 14px;
+    border-left: 1px solid var(--border-soft);
+    margin-left: 3px;
+    margin-bottom: 2px;
+  }
+
+  .nav-profile {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .nav-profile:hover {
+    color: var(--text-strong);
+  }
+
+  .nav-profile.active {
+    color: var(--accent);
+  }
+
+  .nav-profile-bullet {
+    font-size: 9px;
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+
+  .nav-profile.active .nav-profile-bullet {
+    opacity: 1;
   }
 
   @keyframes pulse {

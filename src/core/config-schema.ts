@@ -154,8 +154,8 @@ const AIAnalysisSchema = z.object({
 });
 
 export const ConfigSchema = z.object({
-  baselineDir: z.string().default('./.vrt/baselines'),
-  outputDir: z.string().default('./.vrt/output'),
+  baselineDir: z.string().default('./.vrtini/baselines'),
+  outputDir: z.string().default('./.vrtini/output'),
   browsers: z.array(BrowserConfigSchema).default(['chromium']),
   viewports: z.array(ViewportSchema).default([{ name: 'desktop', width: 1920, height: 1080 }]),
   threshold: z.number().min(0).max(1).default(0.1),

@@ -1,0 +1,24 @@
+{
+  "viewports": [
+    { "name": "desktop", "width": 1920, "height": 1080 },
+    { "name": "mobile", "width": 375, "height": 812 }
+  ],
+  "threshold": 0.1,
+  "disableAnimations": true,
+  "concurrency": 5,
+  "engines": {
+    "pixelmatch": { "enabled": true, "threshold": 0.1, "antialiasing": true },
+    "odiff": { "enabled": true, "failOnLayoutDiff": true },
+    "ssim": { "enabled": true },
+    "phash": { "enabled": true }
+  },
+  "confidence": {
+    "passThreshold": 95,
+    "warnThreshold": 80
+  },
+  "ai": {
+    "enabled": false,
+    "provider": "anthropic"
+  },
+  "scenarios": [{ "name": "home", "url": "http://host.docker.internal:3000/" }]
+}

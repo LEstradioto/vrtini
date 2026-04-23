@@ -59,8 +59,16 @@ If you intentionally want an unauthenticated remote bind (not recommended), set 
 
 ## Configuration
 
-- Minimal example: `vrt.config.minimal.json`
-- Full reference: `vrt.config.full.json5`
+Config files live at the project root and follow this naming convention:
+
+- `vrtini.config.json` — the default config
+- `vrtini.<profile>.config.json` — a named profile (shows up as a tab in the web UI)
+
+Examples included:
+
+- `vrtini.config.minimal.json` — smallest valid config
+- `vrtini.config.example.json` — every option documented
+- `vrtini.base.config.example.json` + `vrtini.chrome.config.example.json` — `extends` pattern
 
 Key options:
 
@@ -68,6 +76,29 @@ Key options:
 - `scenarioDefaults` and per-scenario overrides
 - `engines` and thresholds
 - `crossCompare` for browser-to-browser diffs
+
+### Profiles
+
+Put as many `vrtini.<name>.config.json` files at the root as you need (e.g., `vrtini.chrome.config.json`, `vrtini.cross-webkit.config.json`). Each profile:
+
+- Is auto-discovered by the web UI and listed as a sidebar tab.
+- Can be selected on the CLI via `-c ./vrtini.<name>.config.json`.
+- Writes to its own artifacts directory by default: `./.vrtini/<name>/baselines` and `./.vrtini/<name>/output`, so profiles never clobber each other. Override by setting `baselineDir`/`outputDir` explicitly.
+
+### Extends
+
+Any config may declare an `extends` field (string or array) to inherit from another file:
+
+```json
+{
+  "extends": "./vrtini.base.config.json",
+  "browsers": [{ "name": "chromium", "version": "130" }]
+}
+```
+
+Paths are resolved relative to the file that declares `extends`. Merge rules: objects deep-merge, arrays replace, primitives replace. Chains are supported. Circular references throw.
+
+This lets you factor viewports, engines, AI settings, and shared scenarios into a base file and keep each profile lean.
 
 ## CLI
 

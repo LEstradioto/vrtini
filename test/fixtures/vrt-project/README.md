@@ -9,7 +9,7 @@ Small static site used for vrtini regression coverage. It provides 5 routes with
 
 2. Run vrtini using the fixture config:
    - `npm run build`
-   - `node dist/src/index.js test --config test/fixtures/vrt-project/vrt.config.json`
+   - `node dist/src/index.js test --config test/fixtures/vrt-project/vrtini.config.json`
 
 ## Configuration
 

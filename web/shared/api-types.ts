@@ -188,6 +188,16 @@ export interface ConfigGetResponse {
   errors: ConfigValidationIssue[] | null;
 }
 
+export interface ProfileConfig {
+  name: string;
+  filename: string;
+  path: string;
+}
+
+export interface ProfileListResponse {
+  profiles: ProfileConfig[];
+}
+
 export interface CrossReport {
   key: string;
   title: string;

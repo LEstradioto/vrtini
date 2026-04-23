@@ -23,7 +23,7 @@ export async function loadConfig(configPath?: string): Promise<VRTConfig> {
 
   if (!filepath) {
     throw new Error(
-      `No config file found. Create vrt.config.json or run \`vrt init\`. Searched for: ${CONFIG_FILE_LIST}`
+      `No config file found. Create vrtini.config.json or run \`vrtini init\`. Searched for: ${CONFIG_FILE_LIST}`
     );
   }
 
@@ -32,8 +32,8 @@ export async function loadConfig(configPath?: string): Promise<VRTConfig> {
 
 export function getDefaultConfig(): Partial<VRTConfig> {
   return {
-    baselineDir: './.vrt/baselines',
-    outputDir: './.vrt/output',
+    baselineDir: './.vrtini/baselines',
+    outputDir: './.vrtini/output',
     browsers: ['chromium', 'webkit'],
     viewports: [
       { name: 'desktop', width: 1920, height: 1080 },

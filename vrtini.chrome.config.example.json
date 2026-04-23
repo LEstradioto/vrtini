@@ -1,0 +1,4 @@
+{
+  "extends": "./vrtini.base.config.example.json",
+  "browsers": [{ "name": "chromium", "version": "130" }]
+}

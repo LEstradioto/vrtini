@@ -54,8 +54,8 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
       return { error: 'path query param is required' };
     }
 
-    const baselineRoot = resolve(project.path, configData.baselineDir ?? '.vrt/baselines');
-    const outputRoot = resolve(project.path, configData.outputDir ?? '.vrt/output');
+    const baselineRoot = resolve(project.path, configData.baselineDir ?? '.vrtini/baselines');
+    const outputRoot = resolve(project.path, configData.outputDir ?? '.vrtini/output');
     const resolved = isAbsolute(filePath) ? resolve(filePath) : resolve(project.path, filePath);
 
     const allowed =
@@ -84,7 +84,7 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     try {
-      const thumbDir = resolve(project.path, '.vrt', 'thumbs');
+      const thumbDir = resolve(project.path, '.vrtini', 'thumbs');
       const key = createHash('sha1').update(`${resolved}:${maxDimension}`).digest('hex');
       const thumbPath = resolve(thumbDir, `${key}.png`);
 
@@ -348,7 +348,7 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
         return { error: 'Project not found' };
       }
 
-      const resultsPath = resolve(project.path, '.vrt', 'last-results.json');
+      const resultsPath = resolve(project.path, '.vrtini', 'last-results.json');
       if (!existsSync(resultsPath)) {
         return { results: {} };
       }

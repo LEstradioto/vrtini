@@ -1,5 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { loadConfig, saveConfig, getConfigSchemaInfo } from '../services/project-service.js';
+import {
+  loadConfig,
+  saveConfig,
+  getConfigSchemaInfo,
+  listProjectProfiles,
+} from '../services/project-service.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
 import { requireProject } from '../plugins/project.js';
 
@@ -55,6 +60,27 @@ export const configRoutes: FastifyPluginAsync = async (fastify) => {
       return { error: 'Failed to save config', details: getErrorMessage(err) };
     }
   });
+
+  // List vrtini profiles (all vrtini*.config.json files) for a project
+  fastify.get<{ Params: { id: string } }>(
+    '/projects/:id/profiles',
+    { preHandler: requireProject },
+    async (request, reply) => {
+      const project = request.project;
+      if (!project) {
+        reply.code(404);
+        return { error: 'Project not found' };
+      }
+
+      try {
+        const profiles = await listProjectProfiles(project.path);
+        return { profiles };
+      } catch (err) {
+        reply.code(500);
+        return { error: 'Failed to list profiles', details: getErrorMessage(err) };
+      }
+    }
+  );
 
   // Get config schema info (for building forms)
   fastify.get('/schema', async () => {

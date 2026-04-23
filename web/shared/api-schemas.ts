@@ -442,6 +442,16 @@ export const ConfigGetResponseSchema = z.object({
   errors: z.array(z.object({ path: z.string(), message: z.string() })).nullable(),
 });
 
+export const ProfileConfigSchema = z.object({
+  name: z.string(),
+  filename: z.string(),
+  path: z.string(),
+});
+
+export const ProfileListResponseSchema = z.object({
+  profiles: z.array(ProfileConfigSchema),
+});
+
 export const ConfigSaveResponseSchema = z.object({
   success: z.boolean(),
   config: VRTConfigSchema,

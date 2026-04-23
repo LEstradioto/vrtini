@@ -9,7 +9,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let showModal = $state(false);
-  let newProject = $state({ name: '', path: '', configFile: 'vrt.config.json' });
+  let newProject = $state({ name: '', path: '', configFile: 'vrtini.config.json' });
   let serverInfo = $state<{ cwd: string; projectName: string; hasConfig: boolean; existingConfig: string | null } | null>(null);
 
   // Image data for each project (arrays for per-image status calculation)
@@ -59,7 +59,7 @@
       newProject = {
         name: serverInfo.projectName,
         path: serverInfo.cwd,
-        configFile: serverInfo.existingConfig || 'vrt.config.json',
+        configFile: serverInfo.existingConfig || 'vrtini.config.json',
       };
     }
     showModal = true;
@@ -95,7 +95,7 @@
         path: newProject.path,
         configFile: newProject.configFile,
       });
-      newProject = { name: '', path: '', configFile: 'vrt.config.json' };
+      newProject = { name: '', path: '', configFile: 'vrtini.config.json' };
       showModal = false;
       await loadProjects();
     } catch (err) {
@@ -366,7 +366,7 @@
 
       <label>
         config
-        <input type="text" bind:value={newProject.configFile} placeholder="vrt.config.json" />
+        <input type="text" bind:value={newProject.configFile} placeholder="vrtini.config.json" />
       </label>
 
       <div class="modal-actions">

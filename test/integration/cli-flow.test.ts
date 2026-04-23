@@ -18,8 +18,8 @@ vi.mock('../../src/docker.js', () => ({
 
 describe('CLI integration', () => {
   const config = {
-    baselineDir: './.vrt/baselines',
-    outputDir: './.vrt/output',
+    baselineDir: './.vrtini/baselines',
+    outputDir: './.vrtini/output',
     browsers: ['chromium'],
     viewports: [{ name: 'desktop', width: 800, height: 600 }],
     threshold: 0.1,
@@ -31,7 +31,7 @@ describe('CLI integration', () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'vrt-cli-'));
-    await writeFile(join(tempDir, 'vrt.config.json'), JSON.stringify(config, null, 2));
+    await writeFile(join(tempDir, 'vrtini.config.json'), JSON.stringify(config, null, 2));
 
     const { baselineDir, outputDir } = getProjectDirs(tempDir, config);
     await mkdir(baselineDir, { recursive: true });
@@ -53,7 +53,7 @@ describe('CLI integration', () => {
     try {
       const { createCli } = await import('../../src/cli.js');
       const program = createCli();
-      await program.parseAsync(['test', '--config', 'vrt.config.json'], { from: 'user' });
+      await program.parseAsync(['test', '--config', 'vrtini.config.json'], { from: 'user' });
 
       const docker = await import('../../src/docker.js');
       expect(vi.mocked(docker.runScreenshotTasks)).toHaveBeenCalledTimes(1);

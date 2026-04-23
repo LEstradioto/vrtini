@@ -6,11 +6,12 @@ import { getScreenshotFilename } from '../../src/core/paths.js';
 
 const FIXTURES_DIR = resolve(process.cwd(), 'test', 'fixtures');
 const TEMP_ROOT = resolve(process.cwd(), 'test', 'temp', 'ui-smoke-project');
-const STORE_PATH = process.env.VRT_PROJECTS_PATH ?? resolve(process.cwd(), '.vrt', 'projects.json');
+const STORE_PATH =
+  process.env.VRT_PROJECTS_PATH ?? resolve(process.cwd(), '.vrtini', 'projects.json');
 
 const PROJECT_ID = 'smoke1234';
 const PROJECT_NAME = 'UI Smoke Project';
-const CONFIG_FILE = 'vrt.config.json';
+const CONFIG_FILE = 'vrtini.config.json';
 const SCENARIO = 'homepage';
 const VIEWPORT = 'desktop';
 const BROWSER = 'chromium';
@@ -50,8 +51,8 @@ async function getBodyContrast(page: Page): Promise<ContrastSample> {
 }
 
 async function seedProject(): Promise<void> {
-  const baselineDir = resolve(TEMP_ROOT, '.vrt', 'baselines');
-  const outputDir = resolve(TEMP_ROOT, '.vrt', 'output');
+  const baselineDir = resolve(TEMP_ROOT, '.vrtini', 'baselines');
+  const outputDir = resolve(TEMP_ROOT, '.vrtini', 'output');
   const diffDir = resolve(outputDir, 'diffs');
 
   await mkdir(baselineDir, { recursive: true });
@@ -71,8 +72,8 @@ async function seedProject(): Promise<void> {
   await copyFile(modifiedPath, resolve(diffDir, filename));
 
   const config = {
-    baselineDir: './.vrt/baselines',
-    outputDir: './.vrt/output',
+    baselineDir: './.vrtini/baselines',
+    outputDir: './.vrtini/output',
     browsers: [BROWSER],
     viewports: [{ name: VIEWPORT, width: 800, height: 600 }],
     threshold: 0.1,
@@ -90,7 +91,7 @@ test.beforeAll(async () => {
     storeBackup = await readFile(STORE_PATH, 'utf-8');
   }
 
-  await mkdir(resolve(process.cwd(), '.vrt'), { recursive: true });
+  await mkdir(resolve(process.cwd(), '.vrtini'), { recursive: true });
 
   const project = {
     id: PROJECT_ID,

@@ -15,8 +15,8 @@ const scenarioName = 'homepage';
 const viewportName = 'desktop';
 
 const config = {
-  baselineDir: './.vrt/baselines',
-  outputDir: './.vrt/output',
+  baselineDir: './.vrtini/baselines',
+  outputDir: './.vrtini/output',
   browsers: [
     'chromium',
     { name: 'chromium', version: '90' },
@@ -52,9 +52,9 @@ describe('cross-compare integration', () => {
     originalCwd = process.cwd();
     process.chdir(tempDir);
 
-    await writeFile(join(tempDir, 'vrt.config.json'), JSON.stringify(config, null, 2));
+    await writeFile(join(tempDir, 'vrtini.config.json'), JSON.stringify(config, null, 2));
 
-    const outputDir = join(tempDir, '.vrt', 'output');
+    const outputDir = join(tempDir, '.vrtini', 'output');
     await mkdir(outputDir, { recursive: true });
 
     const latestChromium = getScreenshotFilename(scenarioName, 'chromium', viewportName);
@@ -83,7 +83,7 @@ describe('cross-compare integration', () => {
     const projectResponse = await fastify.inject({
       method: 'POST',
       url: '/api/projects',
-      payload: { name: 'Demo', path: tempDir, configFile: 'vrt.config.json' },
+      payload: { name: 'Demo', path: tempDir, configFile: 'vrtini.config.json' },
     });
 
     expect(projectResponse.statusCode).toBe(201);
@@ -136,7 +136,7 @@ describe('cross-compare integration', () => {
     expect(acceptedItem?.accepted).toBe(true);
     expect(acceptedItem?.acceptedAt).toBeTruthy();
 
-    const resultsPath = join(tempDir, '.vrt', 'output', 'cross-reports', key, 'results.json');
+    const resultsPath = join(tempDir, '.vrtini', 'output', 'cross-reports', key, 'results.json');
     const persistedResults = JSON.parse(await readFile(resultsPath, 'utf-8')) as {
       items: { itemKey?: string; accepted?: boolean; acceptedAt?: string }[];
     };
@@ -144,7 +144,7 @@ describe('cross-compare integration', () => {
     expect(persistedItem?.accepted).toBeUndefined();
     expect(persistedItem?.acceptedAt).toBeUndefined();
 
-    const acceptancesPath = join(tempDir, '.vrt', 'acceptances', 'cross.json');
+    const acceptancesPath = join(tempDir, '.vrtini', 'acceptances', 'cross.json');
     const persistedAcceptances = JSON.parse(await readFile(acceptancesPath, 'utf-8')) as Record<
       string,
       Record<string, { acceptedAt: string; reason?: string }>
@@ -156,7 +156,7 @@ describe('cross-compare integration', () => {
     const projectResponse = await fastify.inject({
       method: 'POST',
       url: '/api/projects',
-      payload: { name: 'Demo', path: tempDir, configFile: 'vrt.config.json' },
+      payload: { name: 'Demo', path: tempDir, configFile: 'vrtini.config.json' },
     });
 
     expect(projectResponse.statusCode).toBe(201);

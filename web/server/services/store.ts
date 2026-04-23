@@ -67,7 +67,7 @@ export async function createProject(data: {
     id: randomUUID().slice(0, 8),
     name: data.name,
     path: data.path,
-    configFile: data.configFile ?? 'vrt.config.json',
+    configFile: data.configFile ?? 'vrtini.config.json',
     createdAt: new Date().toISOString(),
   };
 

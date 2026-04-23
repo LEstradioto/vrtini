@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile, copyFile, unlink, mkdir, stat } from 'fs/
 import { existsSync } from 'fs';
 import { resolve, basename, dirname, join } from 'path';
 import { ConfigSchema } from '../../../src/core/config.js';
+import { listProfileConfigs, type ProfileConfig } from '../../../src/core/config-manager.js';
 import { IMAGE_METADATA_SCHEMA_VERSION } from '../../../src/core/image-metadata.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
 import { log } from '../../../src/core/logger.js';
@@ -20,21 +21,27 @@ import {
 export interface ServerInfo {
   cwd: string;
   projectName: string;
-  existingConfig: string | undefined;
+  existingConfig: string | null;
   hasConfig: boolean;
 }
 
-const CONFIG_FILES = ['vrt.config.json', '.vrtrc.json'];
+const CONFIG_FILES = ['vrtini.config.json'];
 
-export function getServerInfo(): ServerInfo {
+export async function getServerInfo(): Promise<ServerInfo> {
   const cwd = process.cwd();
-  const existingConfig = CONFIG_FILES.find((f) => existsSync(resolve(cwd, f)));
+  const defaultMatch = CONFIG_FILES.find((f) => existsSync(resolve(cwd, f)));
+  let existingConfig: string | null = defaultMatch ?? null;
+
+  if (existingConfig === null) {
+    const profiles = await listProfileConfigs(cwd);
+    existingConfig = profiles[0]?.filename ?? null;
+  }
 
   return {
     cwd,
     projectName: basename(cwd),
     existingConfig,
-    hasConfig: !!existingConfig,
+    hasConfig: existingConfig !== null,
   };
 }
 
@@ -110,6 +117,10 @@ export async function saveConfig(
   await writeFile(configPath, JSON.stringify(result.data, null, 2));
 
   return { success: true, config: result.data };
+}
+
+export async function listProjectProfiles(projectPath: string): Promise<ProfileConfig[]> {
+  return listProfileConfigs(projectPath);
 }
 
 export function getConfigSchemaInfo(): Record<string, string[]> {
@@ -258,7 +269,7 @@ export async function revokeAcceptance(projectPath: string, filename: string): P
 }
 
 function getImageFlagsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrt', 'acceptances', 'flags.json');
+  return resolve(projectPath, '.vrtini', 'acceptances', 'flags.json');
 }
 
 async function ensureImageFlagsPath(projectPath: string): Promise<string> {

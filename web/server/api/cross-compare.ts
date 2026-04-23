@@ -29,8 +29,8 @@ function rewriteReportImageSources(
   projectPath: string,
   config: VRTConfig
 ): string {
-  const baselineRoot = resolve(projectPath, config.baselineDir ?? '.vrt/baselines');
-  const outputRoot = resolve(projectPath, config.outputDir ?? '.vrt/output');
+  const baselineRoot = resolve(projectPath, config.baselineDir ?? '.vrtini/baselines');
+  const outputRoot = resolve(projectPath, config.outputDir ?? '.vrtini/output');
 
   return html.replace(/src="([^"]+)"/g, (match, src) => {
     if (!src || src.startsWith('data:')) return match;

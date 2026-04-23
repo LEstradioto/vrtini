@@ -38,7 +38,7 @@ describe('project service integration', () => {
     originalCwd = process.cwd();
     process.chdir(tempDir);
 
-    await writeFile(join(tempDir, 'vrt.config.json'), JSON.stringify(config, null, 2));
+    await writeFile(join(tempDir, 'vrtini.config.json'), JSON.stringify(config, null, 2));
 
     const { baselineDir, outputDir, diffDir } = getProjectDirs(tempDir, config);
     await mkdir(baselineDir, { recursive: true });
@@ -67,7 +67,7 @@ describe('project service integration', () => {
     await writeFile(getImageMetadataPath(outputDir), JSON.stringify(metadataFile, null, 2));
     await writeFile(getImageMetadataPath(diffDir), JSON.stringify(metadataFile, null, 2));
 
-    await mkdir(join(tempDir, '.vrt'), { recursive: true });
+    await mkdir(join(tempDir, '.vrtini'), { recursive: true });
 
     const acceptances = {
       acceptances: [
@@ -100,7 +100,7 @@ describe('project service integration', () => {
     const projectResponse = await fastify.inject({
       method: 'POST',
       url: '/api/projects',
-      payload: { name: 'Demo', path: tempDir, configFile: 'vrt.config.json' },
+      payload: { name: 'Demo', path: tempDir, configFile: 'vrtini.config.json' },
     });
 
     expect(projectResponse.statusCode).toBe(201);

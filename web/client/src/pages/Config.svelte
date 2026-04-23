@@ -52,8 +52,8 @@
     if (!input || typeof input !== 'object') return null;
     const source = cloneConfig(input as Record<string, unknown>) as Record<string, unknown>;
 
-    if (typeof source.baselineDir !== 'string') source.baselineDir = '.vrt/baselines';
-    if (typeof source.outputDir !== 'string') source.outputDir = '.vrt/output';
+    if (typeof source.baselineDir !== 'string') source.baselineDir = '.vrtini/baselines';
+    if (typeof source.outputDir !== 'string') source.outputDir = '.vrtini/output';
     if (typeof source.threshold !== 'number' || !Number.isFinite(source.threshold)) source.threshold = 0.1;
     if (typeof source.disableAnimations !== 'boolean') source.disableAnimations = true;
     if (typeof source.diffColor !== 'string') source.diffColor = '#ff00ff';

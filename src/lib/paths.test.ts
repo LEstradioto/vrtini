@@ -25,18 +25,18 @@ const CWD_ROOT = '/cwd';
 
 describe('DEFAULT_PATHS', () => {
   it('has expected baseline dir', () => {
-    expect(DEFAULT_PATHS.baselineDir).toBe('./.vrt/baselines');
+    expect(DEFAULT_PATHS.baselineDir).toBe('./.vrtini/baselines');
   });
 
   it('has expected output dir', () => {
-    expect(DEFAULT_PATHS.outputDir).toBe('./.vrt/output');
+    expect(DEFAULT_PATHS.outputDir).toBe('./.vrtini/output');
   });
 });
 
 describe('getBaselineDir', () => {
   it('uses default path when no config provided', () => {
     const result = getBaselineDir(PROJECT_ROOT);
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/baselines'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/baselines'));
   });
 
   it('uses config baselineDir when provided', () => {
@@ -59,7 +59,7 @@ describe('getBaselineDir', () => {
 describe('getOutputDir', () => {
   it('uses default path when no config provided', () => {
     const result = getOutputDir(PROJECT_ROOT);
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/output'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/output'));
   });
 
   it('uses config outputDir when provided', () => {
@@ -76,7 +76,7 @@ describe('getOutputDir', () => {
 describe('getDiffDir', () => {
   it('appends diffs to output dir', () => {
     const result = getDiffDir(PROJECT_ROOT);
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/output', 'diffs'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/output', 'diffs'));
   });
 
   it('uses config outputDir', () => {
@@ -88,7 +88,7 @@ describe('getDiffDir', () => {
 describe('getCustomDiffDir', () => {
   it('appends custom-diffs to output dir', () => {
     const result = getCustomDiffDir(PROJECT_ROOT);
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/output', 'custom-diffs'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/output', 'custom-diffs'));
   });
 
   it('uses config outputDir', () => {
@@ -101,10 +101,10 @@ describe('getProjectDirs', () => {
   it('returns all directories', () => {
     const result = getProjectDirs(PROJECT_ROOT);
     expect(result).toEqual({
-      baselineDir: resolve(PROJECT_ROOT, './.vrt/baselines'),
-      outputDir: resolve(PROJECT_ROOT, './.vrt/output'),
-      diffDir: resolve(PROJECT_ROOT, './.vrt/output', 'diffs'),
-      customDiffDir: resolve(PROJECT_ROOT, './.vrt/output', 'custom-diffs'),
+      baselineDir: resolve(PROJECT_ROOT, './.vrtini/baselines'),
+      outputDir: resolve(PROJECT_ROOT, './.vrtini/output'),
+      diffDir: resolve(PROJECT_ROOT, './.vrtini/output', 'diffs'),
+      customDiffDir: resolve(PROJECT_ROOT, './.vrtini/output', 'custom-diffs'),
     });
   });
 
@@ -123,22 +123,22 @@ describe('getProjectDirs', () => {
 describe('getImagePath', () => {
   it('returns baseline path', () => {
     const result = getImagePath(PROJECT_ROOT, 'baseline', 'test.png');
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/baselines', 'test.png'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/baselines', 'test.png'));
   });
 
   it('returns test path', () => {
     const result = getImagePath(PROJECT_ROOT, 'test', 'test.png');
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/output', 'test.png'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/output', 'test.png'));
   });
 
   it('returns diff path', () => {
     const result = getImagePath(PROJECT_ROOT, 'diff', 'test.png');
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/output', 'diffs', 'test.png'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/output', 'diffs', 'test.png'));
   });
 
   it('returns custom-diff path', () => {
     const result = getImagePath(PROJECT_ROOT, 'custom-diff', 'test.png');
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/output', 'custom-diffs', 'test.png'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/output', 'custom-diffs', 'test.png'));
   });
 
   it('uses config for path resolution', () => {
@@ -234,14 +234,14 @@ describe('getScreenshotFilename', () => {
 describe('getAcceptancesPath', () => {
   it('returns acceptances.json path in .vrt dir', () => {
     const result = getAcceptancesPath(PROJECT_ROOT);
-    expect(result).toBe(resolve(PROJECT_ROOT, '.vrt', 'acceptances.json'));
+    expect(result).toBe(resolve(PROJECT_ROOT, '.vrtini', 'acceptances.json'));
   });
 });
 
 describe('getReportPath', () => {
   it('returns report.html in output dir', () => {
     const result = getReportPath(PROJECT_ROOT);
-    expect(result).toBe(resolve(PROJECT_ROOT, './.vrt/output', 'report.html'));
+    expect(result).toBe(resolve(PROJECT_ROOT, './.vrtini/output', 'report.html'));
   });
 
   it('uses config outputDir', () => {
@@ -253,14 +253,14 @@ describe('getReportPath', () => {
 describe('getVrtDir', () => {
   it('returns .vrt directory path', () => {
     const result = getVrtDir(PROJECT_ROOT);
-    expect(result).toBe(resolve(PROJECT_ROOT, '.vrt'));
+    expect(result).toBe(resolve(PROJECT_ROOT, '.vrtini'));
   });
 });
 
 describe('getProjectStorePath', () => {
   it('returns projects.json path in .vrt dir', () => {
     const result = getProjectStorePath(CWD_ROOT);
-    expect(result).toBe(resolve(CWD_ROOT, '.vrt', 'projects.json'));
+    expect(result).toBe(resolve(CWD_ROOT, '.vrtini', 'projects.json'));
   });
 });
 

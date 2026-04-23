@@ -11,6 +11,8 @@ import type {
   AIProviderValidationResponse,
   CompareResult,
   ConfigGetResponse,
+  ProfileConfig,
+  ProfileListResponse,
   ImageResult,
   ImageFlag,
   ProjectTiming,
@@ -35,6 +37,7 @@ import {
   SuccessResponseSchema,
   ConfigGetResponseSchema,
   ConfigSaveResponseSchema,
+  ProfileListResponseSchema,
   SchemaResponseSchema,
   ImagesListResponseSchema,
   ApproveResponseSchema,
@@ -80,6 +83,8 @@ export type {
   AIProviderValidationResponse,
   CompareResult,
   ConfigGetResponse,
+  ProfileConfig,
+  ProfileListResponse,
   ImageResult,
   ImageFlag,
   ProjectTiming,
@@ -230,6 +235,12 @@ export const config = {
       ConfigSaveResponseSchema
     ),
   schema: () => request('/schema', {}, SchemaResponseSchema),
+  profiles: (projectId: string) =>
+    request<ProfileListResponse>(
+      `${projectPath(projectId)}/profiles`,
+      {},
+      ProfileListResponseSchema
+    ),
 };
 
 // Images API

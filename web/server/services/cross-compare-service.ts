@@ -166,15 +166,15 @@ type CrossDeletionStore = Record<string, Record<string, { deletedAt: string }>>;
 type CrossFlagStore = Record<string, Record<string, CrossFlagRecord>>;
 
 function getCrossAcceptancesPath(projectPath: string): string {
-  return resolve(projectPath, '.vrt', 'acceptances', 'cross.json');
+  return resolve(projectPath, '.vrtini', 'acceptances', 'cross.json');
 }
 
 function getCrossDeletionsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrt', 'acceptances', 'cross-deleted.json');
+  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-deleted.json');
 }
 
 function getCrossFlagsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrt', 'acceptances', 'cross-flags.json');
+  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-flags.json');
 }
 
 async function loadCrossAcceptances(projectPath: string): Promise<CrossAcceptanceStore> {

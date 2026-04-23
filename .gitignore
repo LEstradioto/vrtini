@@ -6,8 +6,8 @@ dist/
 build/
 *.tsbuildinfo
 
-# VRT output
-.vrt/
+# vrtini output
+.vrtini/
 
 # Environment files
 .env
@@ -45,7 +45,7 @@ test-results/
 test/temp/
 
 # Local config (user-specific)
-vrt.config.json
+vrtini.config.json
 
 # Local caches
 .eslintcache

@@ -51,21 +51,21 @@ export function registerInitCommand(program: Command): void {
     .option('--skip-build', 'Skip TypeScript, client, and Docker builds')
     .action(async (options) => {
       const cwd = process.cwd();
-      const configPath = resolve(cwd, 'vrt.config.json');
+      const configPath = resolve(cwd, 'vrtini.config.json');
 
       if (existsSync(configPath) && !options.force) {
         log.info('✓ Config file already exists (use --force to overwrite)');
       } else {
-        const minimalConfigPath = resolve(VRT_ROOT, 'vrt.config.minimal.json');
+        const minimalConfigPath = resolve(VRT_ROOT, 'vrtini.config.minimal.json');
         await copyFile(minimalConfigPath, configPath);
-        log.info('✓ Created vrt.config.json (from minimal template)');
-        log.info('  See vrt.config.full.json5 in the vrtini directory for all options');
+        log.info('✓ Created vrtini.config.json (from minimal template)');
+        log.info('  See vrtini.config.example.json in the vrtini directory for all options');
       }
 
       const { baselineDir, outputDir } = getProjectDirs(cwd);
       await mkdir(baselineDir, { recursive: true });
       await mkdir(outputDir, { recursive: true });
-      log.info('✓ Created .vrt/baselines/ and .vrt/output/ directories');
+      log.info('✓ Created .vrtini/baselines/ and .vrtini/output/ directories');
 
       if (options.skipBuild) {
         log.info('\n✓ vrtini initialized (builds skipped)');

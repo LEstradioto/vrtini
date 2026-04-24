@@ -52,6 +52,13 @@ export class ConflictError extends ApiError {
   }
 }
 
+export class ForbiddenError extends ApiError {
+  constructor(message: string, details?: unknown) {
+    super('forbidden', 403, message, details);
+    this.name = 'ForbiddenError';
+  }
+}
+
 export function isApiError(err: unknown): err is ApiError {
   return err instanceof ApiError;
 }

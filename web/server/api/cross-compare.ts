@@ -22,7 +22,7 @@ import {
   getCrossCompareJobStatus,
   startCrossCompareRun,
 } from '../services/cross-compare-job-service.js';
-import { ValidationError } from '../../../src/core/api-errors.js';
+import { NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
 
 function rewriteReportImageSources(
   html: string,
@@ -111,9 +111,8 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
         );
         return reply.send({ reports });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Cross compare failed';
-        reply.code(400);
-        return { error: message };
+        if (err instanceof Error) throw new ValidationError(err.message);
+        throw new ValidationError('Cross compare failed');
       }
     }
   );
@@ -123,10 +122,7 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const job = getJobForProject(request.params.jobId, request.params.id);
-      if (!job) {
-        reply.code(404);
-        return { error: 'Job not found' };
-      }
+      if (!job) throw new NotFoundError('Job not found');
 
       const status = getCrossCompareJobStatus(job);
       return reply.send({

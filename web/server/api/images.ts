@@ -17,7 +17,7 @@ import {
 } from '../services/project-service.js';
 import { resizeImageData } from '../../../src/domain/image-diff.js';
 import { requireProject } from '../plugins/project.js';
-import { NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
 
 export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   // List images for a project
@@ -41,10 +41,7 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     const configData = config as { baselineDir?: string; outputDir?: string };
     const filePath = request.query.path;
 
-    if (!filePath) {
-      reply.code(400);
-      return { error: 'path query param is required' };
-    }
+    if (!filePath) throw new ValidationError('path query param is required');
 
     const baselineRoot = resolve(project.path, configData.baselineDir ?? '.vrtini/baselines');
     const outputRoot = resolve(project.path, configData.outputDir ?? '.vrtini/output');
@@ -56,15 +53,8 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
       resolved === outputRoot ||
       resolved.startsWith(outputRoot + sep);
 
-    if (!allowed) {
-      reply.code(403);
-      return { error: 'Path not allowed' };
-    }
-
-    if (!existsSync(resolved)) {
-      reply.code(404);
-      return { error: 'File not found' };
-    }
+    if (!allowed) throw new ForbiddenError('Path not allowed');
+    if (!existsSync(resolved)) throw new NotFoundError('File not found');
 
     const thumb = request.query.thumb === '1' || request.query.thumb === 'true';
     const maxDimension = request.query.max ? Number(request.query.max) : 0;
@@ -133,17 +123,11 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
         config as { baselineDir: string; outputDir: string }
       );
 
-      if (!dir) {
-        reply.code(400);
-        return { error: 'Invalid type. Use: baseline, test, diff' };
-      }
+      if (!dir) throw new ValidationError('Invalid type. Use: baseline, test, diff');
 
       const filepath = resolve(dir, filename);
 
-      if (!existsSync(filepath)) {
-        reply.code(404);
-        return { error: 'Image not found' };
-      }
+      if (!existsSync(filepath)) throw new NotFoundError('Image not found');
 
       reply.header('Cache-Control', 'no-cache, must-revalidate');
       return reply.sendFile(filename, dir);
@@ -154,16 +138,12 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
     Body: { filename: string };
-  }>('/projects/:id/approve', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/approve', { preHandler: requireProject }, async (request) => {
     const project = request.project;
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filename } = request.body;
-
-    if (!filename) {
-      reply.code(400);
-      return { error: 'Filename is required' };
-    }
+    if (!filename) throw new ValidationError('Filename is required');
 
     await approveImage(
       project.path,

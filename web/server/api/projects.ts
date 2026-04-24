@@ -8,6 +8,7 @@ import {
   deleteProject,
 } from '../services/store.js';
 import { getServerInfo } from '../services/project-service.js';
+import { NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -38,63 +39,51 @@ function validateConfigFile(cf: string): string | null {
   return null;
 }
 
-export const projectsRoutes: FastifyPluginAsync = async (fastify) => {
-  // Get server info (cwd, detect existing config)
-  fastify.get('/info', async () => {
-    return getServerInfo();
-  });
+function assertName(name: string): void {
+  const err = validateName(name);
+  if (err) throw new ValidationError(err);
+}
 
-  // List all projects
+function assertPath(p: string): void {
+  const err = validatePath(p);
+  if (err) throw new ValidationError(err);
+}
+
+function assertConfigFile(cf: string): void {
+  const err = validateConfigFile(cf);
+  if (err) throw new ValidationError(err);
+}
+
+export const projectsRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get('/info', async () => getServerInfo());
+
   fastify.get('/projects', async () => {
     const projects = await getProjects();
     return { projects };
   });
 
-  // Get single project
-  fastify.get<{ Params: { id: string } }>('/projects/:id', async (request, reply) => {
+  fastify.get<{ Params: { id: string } }>('/projects/:id', async (request) => {
     const project = await getProject(request.params.id);
-
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
+    if (!project) throw new NotFoundError('Project not found');
     return { project };
   });
 
-  // Create project
   fastify.post<{
     Body: { name: string; path: string; configFile?: string };
   }>('/projects', async (request, reply) => {
     const { name, path, configFile } = request.body;
 
     if (!isNonEmptyString(name) || !isNonEmptyString(path)) {
-      reply.code(400);
-      return { error: 'Name and path are required' };
+      throw new ValidationError('Name and path are required');
     }
-
-    const nameErr = validateName(name.trim());
-    if (nameErr) {
-      reply.code(400);
-      return { error: nameErr };
-    }
-
-    const pathErr = validatePath(path.trim());
-    if (pathErr) {
-      reply.code(400);
-      return { error: pathErr };
-    }
+    assertName(name.trim());
+    assertPath(path.trim());
 
     if (configFile !== undefined) {
       if (!isNonEmptyString(configFile)) {
-        reply.code(400);
-        return { error: 'Config file must be a non-empty string' };
+        throw new ValidationError('Config file must be a non-empty string');
       }
-      const cfErr = validateConfigFile(configFile.trim());
-      if (cfErr) {
-        reply.code(400);
-        return { error: cfErr };
-      }
+      assertConfigFile(configFile.trim());
     }
 
     const project = await createProject({
@@ -106,47 +95,25 @@ export const projectsRoutes: FastifyPluginAsync = async (fastify) => {
     return { project };
   });
 
-  // Update project
   fastify.put<{
     Params: { id: string };
     Body: { name?: string; path?: string; configFile?: string };
-  }>('/projects/:id', async (request, reply) => {
+  }>('/projects/:id', async (request) => {
     const { name, path, configFile } = request.body;
 
     if (name !== undefined) {
-      if (!isNonEmptyString(name)) {
-        reply.code(400);
-        return { error: 'Name must be a non-empty string' };
-      }
-      const nameErr = validateName(name.trim());
-      if (nameErr) {
-        reply.code(400);
-        return { error: nameErr };
-      }
+      if (!isNonEmptyString(name)) throw new ValidationError('Name must be a non-empty string');
+      assertName(name.trim());
     }
-
     if (path !== undefined) {
-      if (!isNonEmptyString(path)) {
-        reply.code(400);
-        return { error: 'Path must be a non-empty string' };
-      }
-      const pathErr = validatePath(path.trim());
-      if (pathErr) {
-        reply.code(400);
-        return { error: pathErr };
-      }
+      if (!isNonEmptyString(path)) throw new ValidationError('Path must be a non-empty string');
+      assertPath(path.trim());
     }
-
     if (configFile !== undefined) {
       if (!isNonEmptyString(configFile)) {
-        reply.code(400);
-        return { error: 'Config file must be a non-empty string' };
+        throw new ValidationError('Config file must be a non-empty string');
       }
-      const cfErr = validateConfigFile(configFile.trim());
-      if (cfErr) {
-        reply.code(400);
-        return { error: cfErr };
-      }
+      assertConfigFile(configFile.trim());
     }
 
     const sanitized: { name?: string; path?: string; configFile?: string } = {};
@@ -155,24 +122,13 @@ export const projectsRoutes: FastifyPluginAsync = async (fastify) => {
     if (configFile !== undefined) sanitized.configFile = configFile.trim();
 
     const project = await updateProject(request.params.id, sanitized);
-
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
+    if (!project) throw new NotFoundError('Project not found');
     return { project };
   });
 
-  // Delete project
-  fastify.delete<{ Params: { id: string } }>('/projects/:id', async (request, reply) => {
+  fastify.delete<{ Params: { id: string } }>('/projects/:id', async (request) => {
     const deleted = await deleteProject(request.params.id);
-
-    if (!deleted) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
+    if (!deleted) throw new NotFoundError('Project not found');
     return { success: true };
   });
 };

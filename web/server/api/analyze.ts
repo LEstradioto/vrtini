@@ -16,6 +16,7 @@ import {
   pickProviderFromEnv,
   readProviderEnv,
 } from '../../../src/core/env.js';
+import { ApiError, ValidationError } from '../../../src/core/api-errors.js';
 
 interface AnalyzeItem {
   baseline: { type: 'baseline' | 'test'; filename: string };
@@ -308,20 +309,13 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
     Body: ValidateProviderBody;
-  }>(
-    '/projects/:id/analyze/validate-provider',
-    { preHandler: requireProject },
-    async (request, reply) => {
-      const provider = request.body?.provider;
-      if (!provider || !PROVIDERS.includes(provider)) {
-        reply.code(400);
-        return { error: `provider must be one of: ${PROVIDERS.join(', ')}` };
-      }
-
-      const result = await validateProviderCredential(request.body);
-      return reply.send(result);
+  }>('/projects/:id/analyze/validate-provider', { preHandler: requireProject }, async (request) => {
+    const provider = request.body?.provider;
+    if (!provider || !PROVIDERS.includes(provider)) {
+      throw new ValidationError(`provider must be one of: ${PROVIDERS.join(', ')}`);
     }
-  );
+    return validateProviderCredential(request.body);
+  });
 
   // Analyze images using AI
   fastify.post<{
@@ -330,13 +324,12 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
   }>(
     '/projects/:id/analyze',
     { preHandler: [rateLimit({ max: 5, windowMs: 60_000 }), requireProject] },
-    async (request, reply) => {
+    async (request) => {
       const project = request.project;
       const { items } = request.body;
 
       if (!items || !Array.isArray(items) || items.length === 0) {
-        reply.code(400);
-        return { error: 'items array is required and must not be empty' };
+        throw new ValidationError('items array is required and must not be empty');
       }
 
       // Load project config to get AI settings
@@ -362,11 +355,9 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
       const provider = aiConfig?.provider || resolveProvider();
 
       if (!provider) {
-        reply.code(400);
-        return {
-          error:
-            'AI not configured. Set ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN, OPENAI_API_KEY, OPENROUTER_API_KEY, or GOOGLE_API_KEY, or configure AI in project settings.',
-        };
+        throw new ValidationError(
+          'AI not configured. Set ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN, OPENAI_API_KEY, OPENROUTER_API_KEY, or GOOGLE_API_KEY, or configure AI in project settings.'
+        );
       }
 
       // Helper to resolve paths using the project path
@@ -450,8 +441,8 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
           }
         }
       } catch (err) {
-        reply.code(500);
-        return { error: 'Batch analysis failed', details: getErrorMessage(err) };
+        if (err instanceof ApiError) throw err;
+        throw new ApiError('internal', 500, 'Batch analysis failed', getErrorMessage(err));
       }
 
       return { results };

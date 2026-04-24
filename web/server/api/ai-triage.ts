@@ -6,6 +6,7 @@ import type { VRTConfig } from '../../../src/core/config.js';
 import { loadCrossResults, saveCrossItemAIResults } from '../services/cross-compare-service.js';
 import { analyzeWithAI, type AIAnalysisOptions } from '../../../src/ai-analysis.js';
 import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
+import { ValidationError } from '../../../src/core/api-errors.js';
 
 export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
@@ -14,7 +15,7 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
   }>(
     '/projects/:id/cross-compare/:key/ai-triage',
     { preHandler: requireProject },
-    async (request, reply) => {
+    async (request) => {
       const project = request.project;
       const { key } = request.params;
       const { config } = await loadConfig(project.path, project.configFile);
@@ -22,8 +23,7 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
 
       const aiConfig = vrtConfig.ai;
       if (!aiConfig?.enabled) {
-        reply.code(400);
-        return { error: 'AI analysis is not enabled in config' };
+        throw new ValidationError('AI analysis is not enabled in config');
       }
 
       const crossResults = await loadCrossResults(project.path, vrtConfig, key);
@@ -35,8 +35,7 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
         : crossResults.items;
 
       if (targetItems.length === 0) {
-        reply.code(400);
-        return { error: 'No items matched the provided keys' };
+        throw new ValidationError('No items matched the provided keys');
       }
 
       const options: AIAnalysisOptions = {
@@ -91,7 +90,7 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
         await saveCrossItemAIResults(project.path, vrtConfig, key, updates);
       }
 
-      return reply.send({ results });
+      return { results };
     }
   );
 };

@@ -7,6 +7,7 @@ import {
 } from '../services/comparison-service.js';
 import { loadConfig } from '../services/project-service.js';
 import { requireProject } from '../plugins/project.js';
+import { NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
 
 export interface CompareRequest {
   left: CompareInput;
@@ -19,17 +20,16 @@ export const compareRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
     Body: CompareRequest;
-  }>('/projects/:id/compare', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/compare', { preHandler: requireProject }, async (request) => {
     const project = request.project;
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { left, right, threshold } = request.body;
 
     if (!left?.type || !left?.filename || !right?.type || !right?.filename) {
-      reply.code(400);
-      return {
-        error: 'Invalid request. Required: left.type, left.filename, right.type, right.filename',
-      };
+      throw new ValidationError(
+        'Invalid request. Required: left.type, left.filename, right.type, right.filename'
+      );
     }
 
     return compareImagesWithDiff(
@@ -59,10 +59,7 @@ export const compareRoutes: FastifyPluginAsync = async (fastify) => {
         config as { baselineDir: string; outputDir: string }
       );
 
-      if (!filepath) {
-        reply.code(404);
-        return { error: 'Diff image not found' };
-      }
+      if (!filepath) throw new NotFoundError('Diff image not found');
 
       // Stream the file directly instead of using fastify-static sendFile
       // This avoids issues with custom root paths

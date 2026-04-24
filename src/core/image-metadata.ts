@@ -1,5 +1,5 @@
 import type { VRTConfig } from './config.js';
-import { normalizeBrowserConfig } from '../browser-versions.js';
+import { normalizeBrowserConfig } from './browser-versions.js';
 import { getScreenshotFilename } from './paths.js';
 
 export interface ImageMetadata {

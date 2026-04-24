@@ -3,7 +3,10 @@ import { existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { buildDockerImage, checkDockerImage } from '../docker.js';
-import { getRequiredPlaywrightVersions, LATEST_PLAYWRIGHT_VERSION } from '../browser-versions.js';
+import {
+  getRequiredPlaywrightVersions,
+  LATEST_PLAYWRIGHT_VERSION,
+} from '../core/browser-versions.js';
 import { resolveConfigPath, loadConfigFromPath } from '../core/config-manager.js';
 import { getErrorMessage } from '../core/errors.js';
 import { log } from '../core/logger.js';
@@ -40,7 +43,7 @@ export function registerBuildCommand(program: Command): void {
       try {
         if (options.allVersions) {
           // Build all supported versions
-          const { PLAYWRIGHT_VERSIONS } = await import('../browser-versions.js');
+          const { PLAYWRIGHT_VERSIONS } = await import('../core/browser-versions.js');
           const versions = Object.keys(PLAYWRIGHT_VERSIONS);
           log.info(`Building ${versions.length} Docker images...\n`);
           await buildVersions(dockerDir, versions);

@@ -3,7 +3,7 @@ import { resolve, join, relative } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { loadConfig } from '../core/config.js';
-import { normalizeBrowserConfig } from '../browser-versions.js';
+import { normalizeBrowserConfig } from '../core/browser-versions.js';
 import { getProjectDirs, getScreenshotFilename, getSnapshotFilename } from '../core/paths.js';
 import { compareImages } from '../compare.js';
 import { generateReport } from '../report.js';

@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { listAvailableVersions, PLAYWRIGHT_VERSIONS } from '../browser-versions.js';
+import { listAvailableVersions, PLAYWRIGHT_VERSIONS } from '../core/browser-versions.js';
 import { log } from '../core/logger.js';
 
 type BrowserEngineKey = 'chromiumVersion' | 'webkitVersion';

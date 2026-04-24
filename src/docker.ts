@@ -6,7 +6,7 @@
 import { mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import type { VRTConfig } from './core/config.js';
-import { LATEST_PLAYWRIGHT_VERSION } from './browser-versions.js';
+import { LATEST_PLAYWRIGHT_VERSION } from './core/browser-versions.js';
 import {
   groupTasksByBrowser,
   getTotalTaskCount,

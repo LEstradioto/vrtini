@@ -4,7 +4,7 @@
  * Pure — no I/O.
  */
 
-import { normalizeBrowserConfig } from '../browser-versions.js';
+import { normalizeBrowserConfig } from '../core/browser-versions.js';
 import { formatBrowser, type BrowserRef } from '../types/index.js';
 
 export interface CrossComparePair {

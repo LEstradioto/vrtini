@@ -66,7 +66,7 @@ export const AutoThresholdCapsSchema = z.object({
   caps: z.record(z.string(), AutoThresholdCapSchema),
 });
 
-const ChangeCategorySchema = z.enum([
+export const ChangeCategorySchema = z.enum([
   'regression',
   'cosmetic',
   'content_change',
@@ -74,9 +74,14 @@ const ChangeCategorySchema = z.enum([
   'noise',
 ]);
 
-const SeveritySchema = z.enum(['critical', 'warning', 'info']);
-const RecommendationSchema = z.enum(['approve', 'review', 'reject']);
-const AIProviderNameSchema = z.enum(['anthropic', 'openai', 'openrouter', 'google']);
+export const SeveritySchema = z.enum(['critical', 'warning', 'info']);
+export const RecommendationSchema = z.enum(['approve', 'review', 'reject']);
+export const AIProviderNameSchema = z.enum(['anthropic', 'openai', 'openrouter', 'google']);
+
+export const ConfigValidationIssueSchema = z.object({
+  path: z.string(),
+  message: z.string(),
+});
 
 export const AIAnalysisResultSchema = z.object({
   category: ChangeCategorySchema,

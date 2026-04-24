@@ -14,12 +14,12 @@ import {
   findMissingImages,
   filterGroupsWithImages,
 } from './core/task-planner.js';
-import { checkDockerConnection, checkDockerImage } from './lib/docker-image.js';
-import { runBatchContainer, type ScreenshotResult } from './lib/docker-container.js';
+import { checkDockerConnection, checkDockerImage } from './core/docker-image.js';
+import { runBatchContainer, type ScreenshotResult } from './core/docker-container.js';
 import { log } from './core/logger.js';
 
-export type { ScreenshotResult } from './lib/docker-container.js';
-export { buildDockerImage, checkDockerImage } from './lib/docker-image.js';
+export type { ScreenshotResult } from './core/docker-container.js';
+export { buildDockerImage, checkDockerImage } from './core/docker-image.js';
 
 export interface RunOptions {
   config: VRTConfig;

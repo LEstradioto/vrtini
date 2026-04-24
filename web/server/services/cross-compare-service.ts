@@ -4,6 +4,11 @@ import { resolve, relative, dirname } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
 import { buildCrossComparePairs } from '../../../src/domain/cross-pairs.js';
 import { evaluateCrossSmartPass } from '../../../src/domain/smart-pass.js';
+import {
+  buildCrossItemKey,
+  crossItemToComparisonResult,
+  summarizeCrossItems,
+} from '../../../src/domain/cross-summary.js';
 import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
 import { log } from '../../../src/core/logger.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
@@ -225,141 +230,13 @@ async function clearCrossAcceptancesForItems(
   }
 }
 
-function buildItemKey(scenario: string, viewport: string): string {
-  return `${scenario}__${viewport}`;
-}
-
 function withSmartPassMetadata(item: CrossResultItem): CrossResultItem {
   const evaluation = evaluateCrossSmartPass(item);
   return { ...item, smartPass: evaluation.smartPass, smartPassReason: evaluation.reason };
 }
 
-function toComparisonResult(item: CrossResultItem, projectPath: string): ComparisonResult {
-  const baseline = resolve(projectPath, item.baseline);
-  const test = resolve(projectPath, item.test);
-  const approved = item.accepted ?? false;
-  const diffPath = item.diff ? resolve(projectPath, item.diff) : undefined;
-  const base = { baseline, test, approved };
-
-  switch (item.reason) {
-    case 'match':
-      return {
-        ...base,
-        reason: 'match',
-        match: true,
-        pixelDiff: item.pixelDiff,
-        diffPercentage: item.diffPercentage,
-        ssimScore: item.ssimScore,
-        phash: item.phash,
-        diffPath,
-      };
-    case 'diff':
-      if (!diffPath) {
-        return {
-          ...base,
-          reason: 'error',
-          match: false,
-          pixelDiff: 0,
-          diffPercentage: 0,
-          error: 'Missing diff image',
-        };
-      }
-      return {
-        ...base,
-        reason: 'diff',
-        match: false,
-        diffPath,
-        pixelDiff: item.pixelDiff,
-        diffPercentage: item.diffPercentage,
-        ssimScore: item.ssimScore,
-        phash: item.phash,
-      };
-    case 'no-baseline':
-      return {
-        ...base,
-        reason: 'no-baseline',
-        match: false,
-        pixelDiff: 0,
-        diffPercentage: 0,
-      };
-    case 'no-test':
-      return {
-        ...base,
-        reason: 'no-test',
-        match: false,
-        pixelDiff: 0,
-        diffPercentage: 0,
-      };
-    case 'error':
-      return {
-        ...base,
-        reason: 'error',
-        match: false,
-        pixelDiff: 0,
-        diffPercentage: 0,
-        error: item.error ?? 'Unknown error',
-        ssimScore: item.ssimScore,
-        phash: item.phash,
-      };
-  }
-}
-
-function summarizeCrossItems(
-  items: CrossResultItem[],
-  acceptances: Record<string, CrossAcceptanceRecord> | undefined,
-  flags: Record<string, CrossFlagRecord> | undefined,
-  deletions: Record<string, { deletedAt: string }> | undefined
-): Pick<
-  CrossResultsSummary,
-  | 'itemCount'
-  | 'approvedCount'
-  | 'smartPassCount'
-  | 'matchCount'
-  | 'diffCount'
-  | 'issueCount'
-  | 'flaggedCount'
-> {
-  const summary = {
-    itemCount: 0,
-    approvedCount: 0,
-    smartPassCount: 0,
-    matchCount: 0,
-    diffCount: 0,
-    issueCount: 0,
-    flaggedCount: 0,
-  };
-
-  for (const item of items) {
-    const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
-    if (deletions?.[itemKey]) continue;
-
-    summary.itemCount += 1;
-    if (flags?.[itemKey]) {
-      summary.flaggedCount += 1;
-    }
-
-    const accepted = !!acceptances?.[itemKey];
-    if (accepted) {
-      summary.approvedCount += 1;
-      continue;
-    }
-
-    const smartPass = item.smartPass ?? evaluateCrossSmartPass(item).smartPass;
-    if (smartPass) {
-      summary.smartPassCount += 1;
-      continue;
-    }
-    if (item.match) {
-      summary.matchCount += 1;
-      continue;
-    }
-
-    if (item.reason === 'diff') summary.diffCount += 1;
-    else summary.issueCount += 1;
-  }
-
-  return summary;
-}
+const toComparisonResult = (item: CrossResultItem, projectPath: string): ComparisonResult =>
+  crossItemToComparisonResult(item, (p) => resolve(projectPath, p));
 
 export async function runCrossCompare(
   projectId: string,
@@ -430,7 +307,7 @@ export async function runCrossCompare(
   const pairTotal = selectedPairs.length;
   const itemTotalPerPair = scenariosToRun.reduce((acc, scenario) => {
     for (const viewport of viewportsToRun) {
-      const itemKey = buildItemKey(scenario.name, viewport.name);
+      const itemKey = buildCrossItemKey(scenario.name, viewport.name);
       if (itemKeyFilter && !itemKeyFilter.has(itemKey)) continue;
       acc += 1;
     }
@@ -479,7 +356,7 @@ export async function runCrossCompare(
     if (isFilteredRun && existsSync(resultsPath)) {
       const existing = await loadCrossResultsRaw(projectPath, config, pair.key);
       for (const item of existing.items) {
-        const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+        const itemKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
         existingItemsByKey.set(itemKey, { ...item, itemKey });
       }
     }
@@ -499,7 +376,7 @@ export async function runCrossCompare(
 
     for (const scenario of scenariosToRun) {
       for (const viewport of viewportsToRun) {
-        const itemKey = buildItemKey(scenario.name, viewport.name);
+        const itemKey = buildCrossItemKey(scenario.name, viewport.name);
         if (itemKeyFilter && !itemKeyFilter.has(itemKey)) {
           continue;
         }
@@ -633,7 +510,7 @@ export async function runCrossCompare(
       const orderedItems: CrossResultItem[] = [];
       for (const scenario of config.scenarios) {
         for (const viewport of config.viewports) {
-          const itemKey = buildItemKey(scenario.name, viewport.name);
+          const itemKey = buildCrossItemKey(scenario.name, viewport.name);
           const item = existingItemsByKey.get(itemKey);
           if (item) {
             orderedItems.push(item);
@@ -756,7 +633,7 @@ export async function loadCrossResults(
   const pairDeletions = deletions[key] || {};
 
   results.items = results.items.map((item) => {
-    const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+    const itemKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
     const acceptanceRecord = pairAcceptances[itemKey];
     const flagRecord = pairFlags[itemKey];
     const enriched: CrossResultItem = {
@@ -771,7 +648,7 @@ export async function loadCrossResults(
   });
 
   results.items = results.items.filter(
-    (item) => !pairDeletions[item.itemKey ?? buildItemKey(item.scenario, item.viewport)]
+    (item) => !pairDeletions[item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport)]
   );
 
   async function getMtimeIso(relativePath: string | undefined): Promise<string | undefined> {
@@ -1002,7 +879,7 @@ async function updateCrossResultsAcceptance(
     let changed = false;
 
     data.items = data.items.map((item) => {
-      const resolvedKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+      const resolvedKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
       if (resolvedKey !== itemKey) return item;
       changed = true;
 
@@ -1043,7 +920,7 @@ async function updateCrossResultsFlag(
     let changed = false;
 
     data.items = data.items.map((item) => {
-      const resolvedKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+      const resolvedKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
       if (resolvedKey !== itemKey) return item;
       changed = true;
 
@@ -1080,7 +957,7 @@ export async function deleteCrossItems(
   const crossResults = await loadCrossResultsRaw(projectPath, config, key);
   const itemMap = new Map(
     crossResults.items.map((item) => [
-      item.itemKey ?? buildItemKey(item.scenario, item.viewport),
+      item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport),
       item,
     ])
   );
@@ -1192,7 +1069,7 @@ export async function saveCrossItemAIResults(
     let changed = false;
 
     data.items = data.items.map((item) => {
-      const itemKey = item.itemKey ?? buildItemKey(item.scenario, item.viewport);
+      const itemKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
       const analysis = updates.get(itemKey);
       if (!analysis) return item;
       changed = true;

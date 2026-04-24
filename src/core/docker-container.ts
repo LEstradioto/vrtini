@@ -6,11 +6,11 @@ import Docker from 'dockerode';
 import { mkdir, writeFile, rm, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import type { Scenario, Viewport } from '../core/config.js';
-import { getBatchResultsPath } from '../core/paths.js';
-import { getErrorMessage } from '../core/errors.js';
-import { log } from '../core/logger.js';
-import type { ScreenshotTask } from '../core/task-planner.js';
+import type { Scenario, Viewport } from './config.js';
+import { getBatchResultsPath } from './paths.js';
+import { getErrorMessage } from './errors.js';
+import { log } from './logger.js';
+import type { ScreenshotTask } from './task-planner.js';
 
 /**
  * Docker multiplexed stream header size in bytes.

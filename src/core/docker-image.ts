@@ -4,8 +4,8 @@
 
 import Docker from 'dockerode';
 import { getBaseImage, LATEST_PLAYWRIGHT_VERSION } from '../browser-versions.js';
-import { getErrorMessage } from '../core/errors.js';
-import { log } from '../core/logger.js';
+import { getErrorMessage } from './errors.js';
+import { log } from './logger.js';
 
 const DEFAULT_DOCKER_IMAGE = 'vrtini-playwright';
 

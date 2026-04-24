@@ -165,22 +165,12 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
       return { error: 'Filename is required' };
     }
 
-    try {
-      await approveImage(
-        project.path,
-        filename,
-        config as { baselineDir: string; outputDir: string }
-      );
-      return { success: true, approved: filename };
-    } catch (err) {
-      const message = getErrorMessage(err);
-      if (message.includes('not found')) {
-        reply.code(404);
-        return { error: 'Test image not found' };
-      }
-      reply.code(500);
-      return { error: 'Failed to approve', details: message };
-    }
+    await approveImage(
+      project.path,
+      filename,
+      config as { baselineDir: string; outputDir: string }
+    );
+    return { success: true, approved: filename };
   });
 
   // Reject (delete) a test image
@@ -274,28 +264,14 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   // Revert approval (delete baseline)
   fastify.post<{
     Params: { id: string; filename: string };
-  }>('/projects/:id/revert/:filename', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/revert/:filename', { preHandler: requireProject }, async (request) => {
     const project = request.project;
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filename } = request.params;
 
-    try {
-      await revertImage(
-        project.path,
-        filename,
-        config as { baselineDir: string; outputDir: string }
-      );
-      return { success: true, reverted: filename };
-    } catch (err) {
-      const message = getErrorMessage(err);
-      if (message.includes('not found')) {
-        reply.code(404);
-        return { error: 'Baseline image not found' };
-      }
-      reply.code(500);
-      return { error: 'Failed to revert', details: message };
-    }
+    await revertImage(project.path, filename, config as { baselineDir: string; outputDir: string });
+    return { success: true, reverted: filename };
   });
 
   // Get last test results (confidence, metrics)

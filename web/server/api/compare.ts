@@ -1,6 +1,5 @@
 import { createReadStream } from 'node:fs';
 import type { FastifyPluginAsync } from 'fastify';
-import { getErrorMessage } from '../../../src/core/errors.js';
 import {
   compareImagesWithDiff,
   getCustomDiffPath,
@@ -33,25 +32,14 @@ export const compareRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
 
-    try {
-      const result = await compareImagesWithDiff(
-        project.id,
-        project.path,
-        left,
-        right,
-        threshold,
-        config as { baselineDir: string; outputDir: string }
-      );
-      return result;
-    } catch (err) {
-      const message = getErrorMessage(err);
-      if (message.includes('not found')) {
-        reply.code(404);
-        return { error: message };
-      }
-      reply.code(500);
-      return { error: 'Comparison failed', details: message };
-    }
+    return compareImagesWithDiff(
+      project.id,
+      project.path,
+      left,
+      right,
+      threshold,
+      config as { baselineDir: string; outputDir: string }
+    );
   });
 
   // Serve custom diff images

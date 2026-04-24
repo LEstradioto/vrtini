@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { resolve, basename } from 'path';
 import { ConfigSchema } from '../../../src/core/config.js';
 import { listProfileConfigs, type ProfileConfig } from '../../../src/core/config-manager.js';
+import { NotFoundError } from '../../../src/core/api-errors.js';
 
 // ─── Server Info ─────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ export async function loadConfig(
   const configPath = resolve(projectPath, configFile);
 
   if (!existsSync(configPath)) {
-    throw new Error(`Config file not found: ${configPath}`);
+    throw new NotFoundError(`Config file not found: ${configPath}`);
   }
 
   const content = await readFile(configPath, 'utf-8');

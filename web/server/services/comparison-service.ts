@@ -2,6 +2,7 @@ import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { compareImages } from '../../../src/compare.js';
+import { NotFoundError } from '../../../src/core/api-errors.js';
 import { getSsimScore } from '../../../src/core/types.js';
 import {
   getImagePath,
@@ -62,7 +63,7 @@ export function resolveImagePaths(
 
 export function validateImageExists(path: string, label: string): void {
   if (!existsSync(path)) {
-    throw new Error(`${label} image not found`);
+    throw new NotFoundError(`${label} image not found`);
   }
 }
 

@@ -18,6 +18,7 @@ import {
   type AutoThresholdCaps,
 } from '../../../src/domain/auto-threshold.js';
 import { parseImageFilename } from '../../../src/domain/image-naming.js';
+import { NotFoundError } from '../../../src/core/api-errors.js';
 import {
   loadAcceptances,
   loadImageFlags,
@@ -220,7 +221,7 @@ export async function approveImage(
   );
 
   if (!existsSync(testPath)) {
-    throw new Error('Test image not found');
+    throw new NotFoundError('Test image not found');
   }
 
   await copyFile(testPath, baselinePath);
@@ -290,7 +291,7 @@ export async function revertImage(
   const baselinePath = resolve(baselineDir, filename);
 
   if (!existsSync(baselinePath)) {
-    throw new Error('Baseline image not found');
+    throw new NotFoundError('Baseline image not found');
   }
 
   await unlink(baselinePath);

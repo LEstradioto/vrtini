@@ -13,20 +13,9 @@ export const configRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { id: string } }>(
     '/projects/:id/config',
     { preHandler: requireProject },
-    async (request, reply) => {
+    async (request) => {
       const project = request.project;
-      try {
-        const result = await loadConfig(project.path, project.configFile);
-        return result;
-      } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.includes('not found')) {
-          reply.code(404);
-          return { error: 'Config file not found', path: message };
-        }
-        reply.code(500);
-        return { error: 'Failed to read config', details: message };
-      }
+      return loadConfig(project.path, project.configFile);
     }
   );
 

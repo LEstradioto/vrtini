@@ -16,6 +16,7 @@ import { crossCompareRoutes } from './api/cross-compare.js';
 import { aiTriageRoutes } from './api/ai-triage.js';
 import { registerAuth } from './plugins/auth.js';
 import { log } from '../../src/core/logger.js';
+import { isApiError } from '../../src/core/api-errors.js';
 import {
   readAllowInsecureRemote,
   readAuthToken,
@@ -79,6 +80,20 @@ export async function startServer(options: ServerOptions): Promise<void> {
         options: { colorize: true },
       },
     },
+  });
+
+  // Uniform error envelope for thrown ApiError subclasses.
+  // Route handlers can `throw new NotFoundError(...)` instead of manually
+  // setting reply.code() + returning a one-off shape.
+  fastify.setErrorHandler((err, _request, reply) => {
+    if (isApiError(err)) {
+      reply.code(err.statusCode);
+      return reply.send({
+        error: { code: err.code, message: err.message, details: err.details },
+      });
+    }
+    // Non-ApiError: fall through to Fastify's default (500 with opaque message).
+    throw err;
   });
 
   // CORS for development

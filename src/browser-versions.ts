@@ -84,7 +84,7 @@ export function getBaseImage(playwrightVersion: string): string {
 /**
  * Get Playwright version for a browser version.
  */
-export function getPlaywrightVersion(browser: 'chromium' | 'webkit', version?: string): string {
+function getPlaywrightVersion(browser: 'chromium' | 'webkit', version?: string): string {
   if (isLatestVersion(version)) {
     return LATEST_PLAYWRIGHT_VERSION;
   }

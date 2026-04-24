@@ -9,8 +9,6 @@ import { log } from './logger.js';
 
 const DEFAULT_DOCKER_IMAGE = 'vrtini-playwright';
 
-export { DEFAULT_DOCKER_IMAGE };
-
 export async function buildDockerImage(
   dockerDir: string,
   playwrightVersion: string = LATEST_PLAYWRIGHT_VERSION

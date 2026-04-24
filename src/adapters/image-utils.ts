@@ -11,7 +11,7 @@ const MAX_IMAGE_DIMENSION = 7500;
 /**
  * Resize PNG image if it exceeds max dimensions (bilinear).
  */
-export function resizeImageIfNeeded(buffer: Buffer): Buffer {
+function resizeImageIfNeeded(buffer: Buffer): Buffer {
   const png = PNG.sync.read(buffer);
   const { width, height, data } = png;
 

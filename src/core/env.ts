@@ -40,7 +40,6 @@ export function pickProviderFromEnv(): AIProviderName | null {
 
 // ── Server / CLI env ────────────────────────────────────────────────────────
 
-export const readLogLevel = (): string | undefined => process.env.VRT_LOG_LEVEL;
 export const readAuthToken = (): string | undefined => process.env.VRT_AUTH_TOKEN?.trim();
 export const readServerHost = (): string | undefined => process.env.VRT_HOST;
 export const readIsDev = (): boolean => process.env.NODE_ENV !== 'production';

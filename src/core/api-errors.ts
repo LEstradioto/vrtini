@@ -45,13 +45,6 @@ export class ValidationError extends ApiError {
   }
 }
 
-export class ConflictError extends ApiError {
-  constructor(message: string, details?: unknown) {
-    super('conflict', 409, message, details);
-    this.name = 'ConflictError';
-  }
-}
-
 export class ForbiddenError extends ApiError {
   constructor(message: string, details?: unknown) {
     super('forbidden', 403, message, details);

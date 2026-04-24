@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { compareImages } from '../../../src/compare.js';
 import { NotFoundError } from '../../../src/core/api-errors.js';
-import { getSsimScore } from '../../../src/core/types.js';
+import { getSsimScore } from '../../../src/types/index.js';
 import {
   getImagePath,
   getCustomDiffDir,

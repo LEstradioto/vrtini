@@ -3,9 +3,9 @@ import { existsSync } from 'fs';
 import { basename, resolve } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
 import { runScreenshotTasks, type ScreenshotResult } from '../../../src/docker.js';
-import { normalizeBrowserConfig } from '../../../src/core/browser-versions.js';
+import { normalizeBrowserConfig } from '../../../src/browser-versions.js';
 import { compareImages } from '../../../src/compare.js';
-import type { ComparisonResult } from '../../../src/core/types.js';
+import type { ComparisonResult } from '../../../src/types/index.js';
 import {
   getProjectDirs,
   getScreenshotFilename,

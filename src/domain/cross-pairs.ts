@@ -5,7 +5,7 @@
  */
 
 import { normalizeBrowserConfig } from '../browser-versions.js';
-import { formatBrowser, type BrowserRef } from '../core/types.js';
+import { formatBrowser, type BrowserRef } from '../types/index.js';
 
 export interface CrossComparePair {
   key: string;

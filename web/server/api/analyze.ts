@@ -5,7 +5,7 @@ import {
   analyzeMultiple,
   type AIAnalysisResult,
   type AIProvider,
-} from '../../../src/core/ai-analysis.js';
+} from '../../../src/ai-analysis.js';
 import { getImagePath, type ImageType } from '../../../src/core/paths.js';
 import { loadProjectConfig } from '../../../src/core/config-manager.js';
 import { getErrorMessage } from '../../../src/core/errors.js';

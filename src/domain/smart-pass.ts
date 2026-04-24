@@ -10,7 +10,7 @@ import type { ChangeCategory } from './ai-prompt.js';
 import type { DomDiffResult } from '../engines/dom-diff.js';
 import type { AIAnalysisResult } from './ai-prompt.js';
 import type { PerceptualHashResult } from '../phash.js';
-import type { ComparisonResult } from '../core/types.js';
+import type { ComparisonResult } from '../types/index.js';
 
 const SMART_PASS_PHASH_MIN = 0.93;
 const SMART_PASS_DIFF_PCT_MAX = 18;

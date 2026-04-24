@@ -31,8 +31,8 @@ import {
   getSnapshotFilename,
 } from '../../../src/core/paths.js';
 import { compareImages } from '../../../src/compare.js';
-import { formatBrowser, type ComparisonResult } from '../../../src/core/types.js';
-import { getDiffPath } from '../../../src/core/types.js';
+import { formatBrowser, type ComparisonResult } from '../../../src/types/index.js';
+import { getDiffPath } from '../../../src/types/index.js';
 import { buildEnginesConfig } from '../../../src/core/compare-runner.js';
 import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';

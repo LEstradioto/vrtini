@@ -15,9 +15,9 @@ import {
   revokeImageFlag,
   loadConfig,
 } from '../services/project-service.js';
-import { getErrorMessage } from '../../../src/core/errors.js';
 import { resizeImageData } from '../../../src/domain/image-diff.js';
 import { requireProject } from '../plugins/project.js';
+import { NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
 
 export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   // List images for a project
@@ -177,63 +177,39 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
     Body: { filename: string };
-  }>('/projects/:id/reject', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/reject', { preHandler: requireProject }, async (request) => {
     const project = request.project;
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filename } = request.body;
+    if (!filename) throw new ValidationError('Filename is required');
 
-    if (!filename) {
-      reply.code(400);
-      return { error: 'Filename is required' };
-    }
-
-    try {
-      await rejectImage(
-        project.path,
-        filename,
-        config as { baselineDir: string; outputDir: string }
-      );
-      await revokeImageFlag(project.path, filename);
-      return { success: true, rejected: filename };
-    } catch (err) {
-      reply.code(500);
-      return { error: 'Failed to reject', details: getErrorMessage(err) };
-    }
+    await rejectImage(project.path, filename, config as { baselineDir: string; outputDir: string });
+    await revokeImageFlag(project.path, filename);
+    return { success: true, rejected: filename };
   });
 
   // Flag an image for later review
   fastify.post<{
     Params: { id: string };
     Body: { filename: string; reason?: string };
-  }>('/projects/:id/flag', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/flag', { preHandler: requireProject }, async (request) => {
     const project = request.project;
     const { filename, reason } = request.body;
-    if (!filename) {
-      reply.code(400);
-      return { error: 'Filename is required' };
-    }
+    if (!filename) throw new ValidationError('Filename is required');
 
-    try {
-      const flag = await setImageFlag(project.path, { filename, reason });
-      return { success: true, flag };
-    } catch (err) {
-      reply.code(500);
-      return { error: 'Failed to flag image', details: getErrorMessage(err) };
-    }
+    const flag = await setImageFlag(project.path, { filename, reason });
+    return { success: true, flag };
   });
 
   // Remove image flag
   fastify.delete<{
     Params: { id: string; filename: string };
-  }>('/projects/:id/flag/:filename', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/flag/:filename', { preHandler: requireProject }, async (request) => {
     const project = request.project;
     const filename = decodeURIComponent(request.params.filename);
     const revoked = await revokeImageFlag(project.path, filename);
-    if (!revoked) {
-      reply.code(404);
-      return { error: 'Flag not found' };
-    }
+    if (!revoked) throw new NotFoundError('Flag not found');
 
     return { success: true, revoked: filename };
   });
@@ -242,15 +218,14 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { id: string };
     Body: { filenames: string[] };
-  }>('/projects/:id/bulk-approve', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/bulk-approve', { preHandler: requireProject }, async (request) => {
     const project = request.project;
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filenames } = request.body;
 
     if (!filenames || !Array.isArray(filenames) || filenames.length === 0) {
-      reply.code(400);
-      return { error: 'Filenames array is required' };
+      throw new ValidationError('Filenames array is required');
     }
 
     const result = await bulkApproveImages(

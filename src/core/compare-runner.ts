@@ -1,6 +1,6 @@
 import { resolve } from 'path';
 import type { VRTConfig, Scenario, Viewport } from './config.js';
-import { normalizeBrowserConfig } from './browser-versions.js';
+import { normalizeBrowserConfig } from '../browser-versions.js';
 import { getScreenshotFilename } from './paths.js';
 
 export function buildEnginesConfig(

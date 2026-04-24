@@ -8,7 +8,7 @@ import {
   normalizeBrowserConfig,
   getDockerImageTag,
   getBrowserDisplayName,
-} from './browser-versions.js';
+} from '../browser-versions.js';
 
 /** A screenshot task to be executed */
 export interface ScreenshotTask {

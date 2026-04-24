@@ -3,7 +3,7 @@
  * approved / smart-passed / flagged / issue). Pure — no I/O.
  */
 
-import type { ComparisonResult } from '../core/types.js';
+import type { ComparisonResult } from '../types/index.js';
 import type { PerceptualHashResult } from '../phash.js';
 import type { DomDiffResult } from '../engines/dom-diff.js';
 import type { AIAnalysisResult } from './ai-prompt.js';

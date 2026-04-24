@@ -22,6 +22,7 @@ import {
   getCrossCompareJobStatus,
   startCrossCompareRun,
 } from '../services/cross-compare-job-service.js';
+import { ValidationError } from '../../../src/core/api-errors.js';
 
 function rewriteReportImageSources(
   html: string,
@@ -193,8 +194,7 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     const project = request.project;
     const { key, itemKeys } = request.body;
     if (!key || !Array.isArray(itemKeys) || itemKeys.length === 0) {
-      reply.code(400);
-      return { error: 'key and itemKeys are required' };
+      throw new ValidationError('key and itemKeys are required');
     }
     const { config } = await loadConfig(project.path, project.configFile);
     const result = await deleteCrossItems(project.path, config as VRTConfig, key, itemKeys);
@@ -219,8 +219,7 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     const project = request.project;
     const { key, itemKey, reason } = request.body;
     if (!key || !itemKey) {
-      reply.code(400);
-      return { error: 'key and itemKey are required' };
+      throw new ValidationError('key and itemKey are required');
     }
     // Keep accept path fast: we persist to acceptances store only.
     // Cross results are enriched from acceptances at read-time.
@@ -247,8 +246,7 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     const project = request.project;
     const { key, itemKey, reason } = request.body;
     if (!key || !itemKey) {
-      reply.code(400);
-      return { error: 'key and itemKey are required' };
+      throw new ValidationError('key and itemKey are required');
     }
     // Keep flag path fast: persist flag store only.
     const record = await setCrossFlag(project.path, key, itemKey, reason);

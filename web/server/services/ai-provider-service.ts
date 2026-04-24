@@ -15,6 +15,7 @@
 import type { AIProvider } from '../../../src/ai-analysis.js';
 import { hasProviderEnvCredential, readProviderEnv } from '../../../src/core/env.js';
 import { loadProjectConfig } from '../../../src/core/config-manager.js';
+import { safeOpenRouterBaseUrl } from '../../../src/adapters/openrouter-provider.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -66,9 +67,6 @@ interface ResolvedCredential {
 
 export const PROVIDERS: AIProvider[] = ['anthropic', 'openai', 'openrouter', 'google'];
 
-const OPENROUTER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
-const OPENROUTER_ALLOWED_HOSTS = new Set(['openrouter.ai', 'www.openrouter.ai']);
-
 interface ProviderConfig {
   /** Human description of what env var(s) this provider needs. */
   envDescription: string;
@@ -99,7 +97,7 @@ const PROVIDER_CONFIGS: Record<AIProvider, ProviderConfig> = {
   openrouter: {
     envDescription: 'Needs OPENROUTER_API_KEY',
     buildProbeRequest: (credential, body) => {
-      const { baseUrl, warning } = resolveOpenRouterValidationBaseUrl(body.baseUrl);
+      const { baseUrl, warning } = safeOpenRouterBaseUrl(body.baseUrl);
       return {
         url: `${baseUrl}/models`,
         headers: { Authorization: `Bearer ${credential.apiKey}` },
@@ -120,31 +118,8 @@ const PROVIDER_CONFIGS: Record<AIProvider, ProviderConfig> = {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-export function resolveOpenRouterValidationBaseUrl(input?: string): {
-  baseUrl: string;
-  warning?: string;
-} {
-  const trimmed = input?.trim();
-  if (!trimmed) return { baseUrl: OPENROUTER_DEFAULT_BASE_URL };
-
-  try {
-    const parsed = new URL(trimmed);
-    const hostname = parsed.hostname.toLowerCase();
-    if (parsed.protocol !== 'https:' || !OPENROUTER_ALLOWED_HOSTS.has(hostname)) {
-      return {
-        baseUrl: OPENROUTER_DEFAULT_BASE_URL,
-        warning: 'Custom baseUrl ignored for security; using official OpenRouter endpoint.',
-      };
-    }
-    const normalized = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
-    return { baseUrl: normalized || OPENROUTER_DEFAULT_BASE_URL };
-  } catch {
-    return {
-      baseUrl: OPENROUTER_DEFAULT_BASE_URL,
-      warning: 'Invalid baseUrl ignored; using official OpenRouter endpoint.',
-    };
-  }
-}
+/** @deprecated Prefer `safeOpenRouterBaseUrl` from `src/adapters/openrouter-provider.js`. */
+export const resolveOpenRouterValidationBaseUrl = safeOpenRouterBaseUrl;
 
 /**
  * Load the project's AI config and return a normalized LoadedAIConfig,

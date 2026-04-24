@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { createReadStream, existsSync } from 'fs';
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'fs/promises';
 import { createHash } from 'crypto';
 import { isAbsolute, resolve, sep } from 'path';
 import { PNG } from 'pngjs';
@@ -42,19 +42,37 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     const filePath = request.query.path;
 
     if (!filePath) throw new ValidationError('path query param is required');
+    if (filePath.includes('\0')) throw new ValidationError('path contains null byte');
 
     const baselineRoot = resolve(project.path, configData.baselineDir ?? '.vrtini/baselines');
     const outputRoot = resolve(project.path, configData.outputDir ?? '.vrtini/output');
-    const resolved = isAbsolute(filePath) ? resolve(filePath) : resolve(project.path, filePath);
+    const requested = isAbsolute(filePath) ? resolve(filePath) : resolve(project.path, filePath);
+
+    if (!existsSync(requested)) throw new NotFoundError('File not found');
+
+    // Resolve symlinks for both the requested path and the sandbox roots before
+    // the prefix check, otherwise a symlink inside baselines/output could escape
+    // the sandbox (e.g. baselines/leak → /etc).
+    let resolved: string;
+    let baselineReal: string;
+    let outputReal: string;
+    try {
+      [resolved, baselineReal, outputReal] = await Promise.all([
+        realpath(requested),
+        realpath(baselineRoot).catch(() => baselineRoot),
+        realpath(outputRoot).catch(() => outputRoot),
+      ]);
+    } catch {
+      throw new NotFoundError('File not found');
+    }
 
     const allowed =
-      resolved === baselineRoot ||
-      resolved.startsWith(baselineRoot + sep) ||
-      resolved === outputRoot ||
-      resolved.startsWith(outputRoot + sep);
+      resolved === baselineReal ||
+      resolved.startsWith(baselineReal + sep) ||
+      resolved === outputReal ||
+      resolved.startsWith(outputReal + sep);
 
     if (!allowed) throw new ForbiddenError('Path not allowed');
-    if (!existsSync(resolved)) throw new NotFoundError('File not found');
 
     const thumb = request.query.thumb === '1' || request.query.thumb === 'true';
     const maxDimension = request.query.max ? Number(request.query.max) : 0;

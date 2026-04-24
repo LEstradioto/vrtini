@@ -1,4 +1,5 @@
 import { isAbsolute, normalize } from 'path';
+import { statSync } from 'fs';
 import type { FastifyPluginAsync } from 'fastify';
 import {
   getProjects,
@@ -9,6 +10,20 @@ import {
 } from '../services/store.js';
 import { getServerInfo } from '../services/project-service.js';
 import { NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
+
+const FORBIDDEN_PROJECT_ROOTS = new Set([
+  '/',
+  '/etc',
+  '/root',
+  '/bin',
+  '/sbin',
+  '/usr',
+  '/var',
+  '/boot',
+  '/proc',
+  '/sys',
+  '/dev',
+]);
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -29,6 +44,18 @@ function validatePath(p: string): string | null {
   if (!isAbsolute(p)) return 'Path must be absolute';
   const normed = normalize(p);
   if (normed !== p && normed !== p.replace(/\/$/, '')) return 'Path contains traversal sequences';
+  if (
+    FORBIDDEN_PROJECT_ROOTS.has(normed) ||
+    FORBIDDEN_PROJECT_ROOTS.has(normed.replace(/\/$/, ''))
+  ) {
+    return 'Path points to a system root';
+  }
+  try {
+    const stat = statSync(p);
+    if (!stat.isDirectory()) return 'Path must be an existing directory';
+  } catch {
+    return 'Path must be an existing directory';
+  }
   return null;
 }
 

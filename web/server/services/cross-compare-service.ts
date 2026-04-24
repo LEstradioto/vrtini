@@ -174,14 +174,25 @@ function withSmartPassMetadata(item: CrossResultItem): CrossResultItem {
 const toComparisonResult = (item: CrossResultItem, projectPath: string): ComparisonResult =>
   crossItemToComparisonResult(item, (p) => resolve(projectPath, p));
 
-export async function runCrossCompare(
-  projectId: string,
-  projectPath: string,
-  config: VRTConfig,
-  options: CrossCompareRunOptions = {},
-  onProgress?: (update: CrossCompareProgressUpdate) => void
-): Promise<CrossReport[]> {
-  const { outputDir } = getProjectDirs(projectPath, config);
+interface CrossRunPlan {
+  selectedPairs: ReturnType<typeof buildCrossComparePairs>;
+  scenariosToRun: VRTConfig['scenarios'];
+  viewportsToRun: VRTConfig['viewports'];
+  itemKeyFilter: Set<string> | null;
+  isFilteredRun: boolean;
+  quickMode: boolean;
+  enginesConfig: ReturnType<typeof buildEnginesConfig>;
+  pairTotal: number;
+  itemTotalPerPair: number;
+  totalPlannedItems: number;
+}
+
+/**
+ * Validate cross-compare run options + assemble the execution plan.
+ * Pure: throws on unknown pair/scenario/viewport filters, otherwise
+ * returns everything runCrossCompare needs to drive its loop.
+ */
+function resolveCrossRunPlan(config: VRTConfig, options: CrossCompareRunOptions): CrossRunPlan {
   const pairs = buildCrossComparePairs(config.browsers);
 
   if (pairs.length === 0) {
@@ -216,7 +227,6 @@ export async function runCrossCompare(
       );
     }
   }
-
   if (viewportFilter.size > 0) {
     const available = new Set(config.viewports.map((viewport) => viewport.name));
     const missing = [...viewportFilter].filter((name) => !available.has(name));
@@ -250,6 +260,148 @@ export async function runCrossCompare(
     return acc;
   }, 0);
   const totalPlannedItems = pairTotal * itemTotalPerPair;
+
+  return {
+    selectedPairs,
+    scenariosToRun,
+    viewportsToRun,
+    itemKeyFilter,
+    isFilteredRun,
+    quickMode,
+    enginesConfig,
+    pairTotal,
+    itemTotalPerPair,
+    totalPlannedItems,
+  };
+}
+
+interface CompareCrossItemCtx {
+  projectPath: string;
+  outputDir: string;
+  diffDir: string;
+  config: VRTConfig;
+  quickMode: boolean;
+  enginesConfig: ReturnType<typeof buildEnginesConfig>;
+}
+
+/**
+ * Compare a single (scenario × viewport) pair and produce a fully-shaped
+ * CrossResultItem. This is the inner body of runCrossCompare's double loop;
+ * extracting it makes the orchestration loop shallow and the per-item logic
+ * unit-testable in isolation.
+ */
+async function compareCrossItem(
+  pair: ReturnType<typeof buildCrossComparePairs>[number],
+  scenario: VRTConfig['scenarios'][number],
+  viewport: VRTConfig['viewports'][number],
+  itemKey: string,
+  ctx: CompareCrossItemCtx
+): Promise<CrossResultItem> {
+  const { projectPath, outputDir, diffDir, config, quickMode, enginesConfig } = ctx;
+  const baselineFilename = getScreenshotFilename(
+    scenario.name,
+    pair.baseline.name,
+    viewport.name,
+    pair.baseline.version
+  );
+  const testFilename = getScreenshotFilename(
+    scenario.name,
+    pair.test.name,
+    viewport.name,
+    pair.test.version
+  );
+  const baselinePath = resolve(outputDir, baselineFilename);
+  const testPath = resolve(outputDir, testFilename);
+  const baselineSnapshotPath = resolve(outputDir, getSnapshotFilename(baselineFilename));
+  const testSnapshotPath = resolve(outputDir, getSnapshotFilename(testFilename));
+  const domSnapshotEnabled = !!config.domSnapshot?.enabled;
+  const baselineSnapshotFound = domSnapshotEnabled && existsSync(baselineSnapshotPath);
+  const testSnapshotFound = domSnapshotEnabled && existsSync(testSnapshotPath);
+
+  const diffName = getScreenshotFilename(
+    scenario.name,
+    `${formatBrowser(pair.baseline)}-vs-${formatBrowser(pair.test)}`,
+    viewport.name
+  );
+  const diffPath = resolve(diffDir, diffName);
+
+  const result = await compareImages(baselinePath, testPath, diffPath, {
+    threshold: config.threshold,
+    diffColor: config.diffColor,
+    computePHash: !quickMode,
+    engines: enginesConfig,
+    keepDiffOnMatch: true,
+    sizeNormalization: config.crossCompare?.normalization,
+    sizeMismatchHandling: config.crossCompare?.mismatch,
+    verticalAlign: config.crossCompare?.verticalAlign,
+    antialiasing: config.engines?.pixelmatch?.antialiasing,
+    maxDiffPercentage:
+      scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
+    maxDiffPixels: scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
+    baselineSnapshot:
+      domSnapshotEnabled && baselineSnapshotFound ? baselineSnapshotPath : undefined,
+    testSnapshot: domSnapshotEnabled && testSnapshotFound ? testSnapshotPath : undefined,
+  });
+
+  const diffPathValue = getDiffPath(result);
+  const itemBase: CrossResultItem = {
+    itemKey,
+    name: scenario.name,
+    scenario: scenario.name,
+    viewport: viewport.name,
+    baseline: relative(projectPath, baselinePath),
+    test: relative(projectPath, testPath),
+    diff: diffPathValue ? relative(projectPath, diffPathValue) : undefined,
+    match: result.match,
+    reason: result.reason,
+    diffPercentage: result.diffPercentage,
+    pixelDiff: result.pixelDiff,
+    ssimScore: 'ssimScore' in result ? result.ssimScore : undefined,
+    engineResults:
+      result.reason === 'diff' && Array.isArray(result.engineResults)
+        ? result.engineResults.map((engineResult) => ({
+            engine: engineResult.engine,
+            similarity: engineResult.similarity,
+            diffPercent: engineResult.diffPercent,
+            diffPixels: engineResult.diffPixels,
+            error: engineResult.error,
+          }))
+        : undefined,
+    phash: 'phash' in result ? result.phash : undefined,
+    domSnapshot: domSnapshotEnabled
+      ? {
+          enabled: true,
+          baselineFound: baselineSnapshotFound,
+          testFound: testSnapshotFound,
+        }
+      : undefined,
+    domDiff: result.reason === 'diff' ? result.domDiff : undefined,
+    error: result.reason === 'error' ? result.error : undefined,
+  };
+
+  return withSmartPassMetadata(itemBase);
+}
+
+export async function runCrossCompare(
+  projectId: string,
+  projectPath: string,
+  config: VRTConfig,
+  options: CrossCompareRunOptions = {},
+  onProgress?: (update: CrossCompareProgressUpdate) => void
+): Promise<CrossReport[]> {
+  const { outputDir } = getProjectDirs(projectPath, config);
+  const {
+    selectedPairs,
+    scenariosToRun,
+    viewportsToRun,
+    itemKeyFilter,
+    isFilteredRun,
+    quickMode,
+    enginesConfig,
+    pairTotal,
+    itemTotalPerPair,
+    totalPlannedItems,
+  } = resolveCrossRunPlan(config, options);
 
   const emitProgress = (update: CrossCompareProgressUpdate): void => {
     if (!onProgress) return;
@@ -310,95 +462,23 @@ export async function runCrossCompare(
       total: totalPlannedItems,
     });
 
+    const itemCtx: CompareCrossItemCtx = {
+      projectPath,
+      outputDir,
+      diffDir,
+      config,
+      quickMode,
+      enginesConfig,
+    };
+
     for (const scenario of scenariosToRun) {
       for (const viewport of viewportsToRun) {
         const itemKey = buildCrossItemKey(scenario.name, viewport.name);
         if (itemKeyFilter && !itemKeyFilter.has(itemKey)) {
           continue;
         }
-        const baselineFilename = getScreenshotFilename(
-          scenario.name,
-          pair.baseline.name,
-          viewport.name,
-          pair.baseline.version
-        );
-        const testFilename = getScreenshotFilename(
-          scenario.name,
-          pair.test.name,
-          viewport.name,
-          pair.test.version
-        );
-        const baselinePath = resolve(outputDir, baselineFilename);
-        const testPath = resolve(outputDir, testFilename);
-        const baselineSnapshotPath = resolve(outputDir, getSnapshotFilename(baselineFilename));
-        const testSnapshotPath = resolve(outputDir, getSnapshotFilename(testFilename));
-        const domSnapshotEnabled = !!config.domSnapshot?.enabled;
-        const baselineSnapshotFound = domSnapshotEnabled && existsSync(baselineSnapshotPath);
-        const testSnapshotFound = domSnapshotEnabled && existsSync(testSnapshotPath);
 
-        const diffName = getScreenshotFilename(
-          scenario.name,
-          `${formatBrowser(pair.baseline)}-vs-${formatBrowser(pair.test)}`,
-          viewport.name
-        );
-        const diffPath = resolve(diffDir, diffName);
-
-        const result = await compareImages(baselinePath, testPath, diffPath, {
-          threshold: config.threshold,
-          diffColor: config.diffColor,
-          computePHash: !quickMode,
-          engines: enginesConfig,
-          keepDiffOnMatch: true,
-          sizeNormalization: config.crossCompare?.normalization,
-          sizeMismatchHandling: config.crossCompare?.mismatch,
-          verticalAlign: config.crossCompare?.verticalAlign,
-          antialiasing: config.engines?.pixelmatch?.antialiasing,
-          maxDiffPercentage:
-            scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
-          maxDiffPixels:
-            scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
-          baselineSnapshot:
-            domSnapshotEnabled && baselineSnapshotFound ? baselineSnapshotPath : undefined,
-          testSnapshot: domSnapshotEnabled && testSnapshotFound ? testSnapshotPath : undefined,
-        });
-
-        const diffPathValue = getDiffPath(result);
-        const itemBase: CrossResultItem = {
-          itemKey,
-          name: scenario.name,
-          scenario: scenario.name,
-          viewport: viewport.name,
-          baseline: relative(projectPath, baselinePath),
-          test: relative(projectPath, testPath),
-          diff: diffPathValue ? relative(projectPath, diffPathValue) : undefined,
-          match: result.match,
-          reason: result.reason,
-          diffPercentage: result.diffPercentage,
-          pixelDiff: result.pixelDiff,
-          ssimScore: 'ssimScore' in result ? result.ssimScore : undefined,
-          engineResults:
-            result.reason === 'diff' && Array.isArray(result.engineResults)
-              ? result.engineResults.map((engineResult) => ({
-                  engine: engineResult.engine,
-                  similarity: engineResult.similarity,
-                  diffPercent: engineResult.diffPercent,
-                  diffPixels: engineResult.diffPixels,
-                  error: engineResult.error,
-                }))
-              : undefined,
-          phash: 'phash' in result ? result.phash : undefined,
-          domSnapshot: domSnapshotEnabled
-            ? {
-                enabled: true,
-                baselineFound: baselineSnapshotFound,
-                testFound: testSnapshotFound,
-              }
-            : undefined,
-          domDiff: result.reason === 'diff' ? result.domDiff : undefined,
-          error: result.reason === 'error' ? result.error : undefined,
-        };
-        const item: CrossResultItem = withSmartPassMetadata(itemBase);
-
+        const item = await compareCrossItem(pair, scenario, viewport, itemKey, itemCtx);
         items.push(item);
         updatedItemKeys.push(itemKey);
         if (isFilteredRun) {

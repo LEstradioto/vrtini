@@ -154,12 +154,31 @@ async function request<T>(
 
   if (!res.ok) {
     const payload = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+
+    // New typed envelope: { error: { code, message, details? } }
+    // Legacy envelope:    { error: "string", details?: "string", issues?: [...] }
+    const errorField = payload.error;
+    const typedEnvelope =
+      errorField && typeof errorField === 'object' && !Array.isArray(errorField)
+        ? (errorField as Record<string, unknown>)
+        : null;
+
     const issues = Array.isArray(payload.issues)
       ? (payload.issues as Array<{ path: string; message: string }>)
       : undefined;
-    const details = typeof payload.details === 'string' ? payload.details : undefined;
-    const base =
-      typeof payload.error === 'string' ? payload.error : `Request failed (${res.status})`;
+    const details =
+      typeof payload.details === 'string'
+        ? payload.details
+        : typeof typedEnvelope?.details === 'string'
+          ? (typedEnvelope.details as string)
+          : undefined;
+    const base = typedEnvelope
+      ? typeof typedEnvelope.message === 'string'
+        ? typedEnvelope.message
+        : `Request failed (${res.status})`
+      : typeof errorField === 'string'
+        ? errorField
+        : `Request failed (${res.status})`;
     const issueMessage =
       issues && issues.length > 0
         ? issues.map((issue) => `${issue.path || '<root>'}: ${issue.message}`).join('; ')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveOpenRouterValidationBaseUrl } from './analyze.js';
+import { resolveOpenRouterValidationBaseUrl } from '../services/ai-provider-service.js';
 
 describe('resolveOpenRouterValidationBaseUrl', () => {
   it('uses official OpenRouter endpoint by default', () => {

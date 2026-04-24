@@ -39,7 +39,7 @@ export interface PromptContext {
   domDiff?: DomDiffContext;
 }
 
-export function buildContextLines(ctx: PromptContext): string[] {
+function buildContextLines(ctx: PromptContext): string[] {
   const lines: string[] = [];
   if (ctx.url) lines.push(`URL: ${ctx.url}`);
   if (ctx.scenarioName) lines.push(`Scenario: ${ctx.scenarioName}`);
@@ -115,7 +115,7 @@ export interface RawAIResponse {
 /**
  * Extract JSON from AI response text, handling markdown code blocks.
  */
-export function extractJsonFromResponse(responseText: string): string {
+function extractJsonFromResponse(responseText: string): string {
   const trimmed = responseText.trim();
   const jsonMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   return jsonMatch ? jsonMatch[1] : trimmed;
@@ -132,21 +132,4 @@ export function parseAIResponse(responseText: string): RawAIResponse {
   } catch {
     throw new Error(`Failed to parse AI response as JSON: ${jsonText.slice(0, 200)}...`);
   }
-}
-
-/**
- * Map raw AI response to full result with provider metadata.
- */
-export function buildAnalysisResult(
-  raw: RawAIResponse,
-  provider: string,
-  model: string,
-  tokensUsed?: number
-): AIAnalysisResult {
-  return {
-    ...raw,
-    provider,
-    model,
-    tokensUsed,
-  };
 }

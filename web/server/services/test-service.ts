@@ -499,7 +499,7 @@ export async function abortJob(job: TestJob): Promise<void> {
   }
 }
 
-export async function runTests(
+async function runTests(
   job: TestJob,
   projectPath: string,
   config: VRTConfig,

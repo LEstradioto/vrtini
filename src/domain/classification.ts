@@ -90,7 +90,7 @@ export function classifyFindings(diffResult: DomDiffResult): ClassificationResul
   return { classifications, primaryClass, overallSeverity };
 }
 
-export function classToCategory(cls: ChangeClass): ChangeCategory {
+function classToCategory(cls: ChangeClass): ChangeCategory {
   return CLASS_TO_CATEGORY[cls];
 }
 

@@ -26,24 +26,6 @@ import { compareDomSnapshots } from './engines/dom-diff.js';
 import { buildRowSignatureSeries, scoreRowAlignment } from './domain/vertical-align.js';
 import type { DomSnapshot } from './domain/dom-snapshot.js';
 
-export type {
-  ComparisonResult,
-  ComparisonMatch,
-  ComparisonDiff,
-  ComparisonNoBaseline,
-  ComparisonNoTest,
-  ComparisonError,
-} from './types/index.js';
-export {
-  isDiff,
-  isMatch,
-  hasPhash,
-  hasAiAnalysis,
-  getSsimScore,
-  getDiffPath,
-  getResultError,
-} from './types/index.js';
-
 import type {
   ComparisonResult,
   ComparisonMatch,

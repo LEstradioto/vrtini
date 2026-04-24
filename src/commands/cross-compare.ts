@@ -5,9 +5,14 @@ import { existsSync } from 'fs';
 import { loadConfig } from '../core/config.js';
 import { normalizeBrowserConfig } from '../browser-versions.js';
 import { getProjectDirs, getScreenshotFilename, getSnapshotFilename } from '../core/paths.js';
-import { compareImages, getDiffPath } from '../compare.js';
+import { compareImages } from '../compare.js';
 import { generateReport } from '../report.js';
-import { formatBrowser, type BrowserRef, type ComparisonResult } from '../types/index.js';
+import {
+  formatBrowser,
+  getDiffPath,
+  type BrowserRef,
+  type ComparisonResult,
+} from '../types/index.js';
 import { buildEnginesConfig } from '../core/compare-runner.js';
 import { getErrorMessage } from '../core/errors.js';
 import { log } from '../core/logger.js';

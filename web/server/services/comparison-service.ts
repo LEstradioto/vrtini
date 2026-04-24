@@ -50,7 +50,7 @@ export interface ComparisonResultWithUrl {
   };
 }
 
-export function resolveImagePaths(
+function resolveImagePaths(
   projectPath: string,
   left: CompareInput,
   right: CompareInput,
@@ -61,7 +61,7 @@ export function resolveImagePaths(
   return { leftPath, rightPath };
 }
 
-export function validateImageExists(path: string, label: string): void {
+function validateImageExists(path: string, label: string): void {
   if (!existsSync(path)) {
     throw new NotFoundError(`${label} image not found`);
   }

@@ -104,25 +104,6 @@ export function isDiff(result: ComparisonResult): result is ComparisonDiff {
   return result.reason === 'diff';
 }
 
-/** Type guard to check if result is a match */
-export function isMatch(result: ComparisonResult): result is ComparisonMatch {
-  return result.reason === 'match';
-}
-
-/** Type guard to check if result has phash data */
-export function hasPhash(
-  result: ComparisonResult
-): result is ComparisonResult & { phash: PerceptualHashResult } {
-  return 'phash' in result && result.phash !== undefined;
-}
-
-/** Type guard to check if result has AI analysis */
-export function hasAiAnalysis(
-  result: ComparisonResult
-): result is ComparisonDiff & { aiAnalysis: AIAnalysisResult } {
-  return result.reason === 'diff' && result.aiAnalysis !== undefined;
-}
-
 /** Helper to get optional ssimScore from any result */
 export function getSsimScore(result: ComparisonResult): number | undefined {
   return 'ssimScore' in result ? result.ssimScore : undefined;

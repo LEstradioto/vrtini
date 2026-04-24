@@ -46,7 +46,7 @@ export function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function escapeAttribute(str: string): string {
+function escapeAttribute(str: string): string {
   return escapeHtml(str).replace(/'/g, '&#39;');
 }
 
@@ -252,7 +252,7 @@ export function buildConfidenceSection(result: ComparisonResult): string {
   `;
 }
 
-export function buildEngineBreakdownSection(result: ComparisonResult): string {
+function buildEngineBreakdownSection(result: ComparisonResult): string {
   if (!isDiff(result) || !result.engineResults || result.engineResults.length === 0) return '';
 
   const items = result.engineResults
@@ -299,7 +299,7 @@ export function buildAutoActionBadge(result: ComparisonResult): string {
   return `<span class="auto-action ${actionClass}">Auto: ${result.autoAction}</span>`;
 }
 
-export function buildDomInsightsSection(result: ComparisonResult): string {
+function buildDomInsightsSection(result: ComparisonResult): string {
   if (!isDiff(result) || !result.domDiff || result.domDiff.findings.length === 0) return '';
 
   const diff = result.domDiff;

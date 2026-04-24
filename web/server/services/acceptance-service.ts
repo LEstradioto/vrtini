@@ -1,5 +1,4 @@
-import { resolve } from 'path';
-import { getAcceptancesPath } from '../../../src/core/paths.js';
+import { getAcceptancesPath, getImageFlagsPath } from '../../../src/core/paths.js';
 import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
 import type { Acceptance, ImageFlag } from '../../../src/domain/acceptance.js';
 
@@ -61,10 +60,6 @@ export async function revokeAcceptance(projectPath: string, filename: string): P
 }
 
 // ─── Image flags ─────────────────────────────────────────────────────────────
-
-function getImageFlagsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrtini', 'acceptances', 'flags.json');
-}
 
 export async function loadImageFlags(projectPath: string): Promise<ImageFlag[]> {
   const data = await loadJsonFile<ImageFlagsFile>(getImageFlagsPath(projectPath), { flags: [] });

@@ -37,3 +37,17 @@ export interface ImageFlag {
   flaggedAt: string;
   reason?: string;
 }
+
+// ─── Cross-compare variants ─────────────────────────────────────────────────
+// These are the cross-compare-specific acceptance/flag records, keyed by
+// `${pairKey}::${itemKey}` rather than by filename.
+
+export interface CrossAcceptanceRecord {
+  acceptedAt: string;
+  reason?: string;
+}
+
+export interface CrossFlagRecord {
+  flaggedAt: string;
+  reason?: string;
+}

@@ -3,34 +3,20 @@
  * Pure functions, no I/O.
  */
 
-import type { DomSnapshot, SnapshotElement, SnapshotElementBox } from '../domain/dom-snapshot.js';
+import type {
+  DomSnapshot,
+  SnapshotElement,
+  SnapshotElementBox,
+  FindingType,
+  FindingSeverity,
+  DomFinding,
+  DomDiffResult,
+} from '../domain/dom-snapshot.js';
 
-export type FindingType =
-  | 'text_changed'
-  | 'text_moved'
-  | 'layout_shift'
-  | 'spacing_change'
-  | 'style_change'
-  | 'background_change'
-  | 'element_added'
-  | 'element_removed';
-
-export type FindingSeverity = 'critical' | 'warning' | 'info';
-
-export interface DomFinding {
-  type: FindingType;
-  path: string;
-  tag: string;
-  severity: FindingSeverity;
-  description: string;
-  detail?: Record<string, unknown>;
-}
-
-export interface DomDiffResult {
-  findings: DomFinding[];
-  summary: Record<FindingType, number>;
-  similarity: number; // 0-1
-}
+// Re-export for backward compatibility — these types now live in
+// domain/dom-snapshot.ts so the domain layer doesn't have to reach up
+// into engines/ for shared diff types.
+export type { FindingType, FindingSeverity, DomFinding, DomDiffResult };
 
 interface MatchedPair {
   baseline: SnapshotElement;

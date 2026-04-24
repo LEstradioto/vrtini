@@ -8,34 +8,19 @@
  * Uses the generic atomic JsonFileStore primitive underneath.
  */
 
-import { resolve } from 'path';
+import {
+  getCrossAcceptancesPath,
+  getCrossDeletionsPath,
+  getCrossFlagsPath,
+} from '../../../src/core/paths.js';
 import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
+import type { CrossAcceptanceRecord, CrossFlagRecord } from '../../../src/domain/acceptance.js';
 
-export interface CrossAcceptanceRecord {
-  acceptedAt: string;
-  reason?: string;
-}
-
-export interface CrossFlagRecord {
-  flaggedAt: string;
-  reason?: string;
-}
+export type { CrossAcceptanceRecord, CrossFlagRecord };
 
 export type CrossAcceptanceStore = Record<string, Record<string, CrossAcceptanceRecord>>;
 export type CrossDeletionStore = Record<string, Record<string, { deletedAt: string }>>;
 export type CrossFlagStore = Record<string, Record<string, CrossFlagRecord>>;
-
-function getCrossAcceptancesPath(projectPath: string): string {
-  return resolve(projectPath, '.vrtini', 'acceptances', 'cross.json');
-}
-
-function getCrossDeletionsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-deleted.json');
-}
-
-function getCrossFlagsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-flags.json');
-}
 
 export const loadCrossAcceptances = (projectPath: string) =>
   loadJsonFile<CrossAcceptanceStore>(getCrossAcceptancesPath(projectPath), {});

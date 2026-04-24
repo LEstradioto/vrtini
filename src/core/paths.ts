@@ -111,6 +111,22 @@ export function getAcceptancesPath(projectPath: string): string {
   return resolve(projectPath, '.vrtini', 'acceptances.json');
 }
 
+export function getImageFlagsPath(projectPath: string): string {
+  return resolve(projectPath, '.vrtini', 'acceptances', 'flags.json');
+}
+
+export function getCrossAcceptancesPath(projectPath: string): string {
+  return resolve(projectPath, '.vrtini', 'acceptances', 'cross.json');
+}
+
+export function getCrossDeletionsPath(projectPath: string): string {
+  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-deleted.json');
+}
+
+export function getCrossFlagsPath(projectPath: string): string {
+  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-flags.json');
+}
+
 export function getReportPath(projectPath: string, config?: PathConfig): string {
   return resolve(getOutputDir(projectPath, config), 'report.html');
 }

@@ -7,7 +7,7 @@
 import { calculateConfidence } from '../confidence.js';
 import { classifyFindings, classificationToCategory } from './classification.js';
 import type { ChangeCategory } from './ai-prompt.js';
-import type { DomDiffResult } from '../engines/dom-diff.js';
+import type { DomDiffResult } from './dom-snapshot.js';
 import type { AIAnalysisResult } from './ai-prompt.js';
 import type { PerceptualHashResult } from '../phash.js';
 import type { ComparisonResult } from '../types/index.js';

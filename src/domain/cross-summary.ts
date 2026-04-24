@@ -5,8 +5,9 @@
 
 import type { ComparisonResult } from '../types/index.js';
 import type { PerceptualHashResult } from '../phash.js';
-import type { DomDiffResult } from '../engines/dom-diff.js';
+import type { DomDiffResult } from './dom-snapshot.js';
 import type { AIAnalysisResult } from './ai-prompt.js';
+import type { CrossAcceptanceRecord, CrossFlagRecord } from './acceptance.js';
 import { evaluateCrossSmartPass } from './smart-pass.js';
 
 /**
@@ -40,16 +41,6 @@ export interface CrossSummaryCounts {
   diffCount: number;
   issueCount: number;
   flaggedCount: number;
-}
-
-interface CrossAcceptanceRecord {
-  acceptedAt: string;
-  reason?: string;
-}
-
-interface CrossFlagRecord {
-  flaggedAt: string;
-  reason?: string;
 }
 
 export function buildCrossItemKey(scenario: string, viewport: string): string {

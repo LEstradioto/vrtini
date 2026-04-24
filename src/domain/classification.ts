@@ -3,12 +3,7 @@
  * Pure functions, no I/O.
  */
 
-import type {
-  DomDiffResult,
-  DomFinding,
-  FindingType,
-  FindingSeverity,
-} from '../engines/dom-diff.js';
+import type { DomDiffResult, DomFinding, FindingType, FindingSeverity } from './dom-snapshot.js';
 import type { ChangeCategory } from './ai-prompt.js';
 
 export type ChangeClass = 'text' | 'layout' | 'spacing' | 'style' | 'background';

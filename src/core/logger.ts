@@ -23,15 +23,9 @@ function parseLevel(raw: string | undefined): LogLevel {
   return 'info';
 }
 
-let currentLevel: LogLevel = parseLevel(process.env.VRT_LOG_LEVEL);
-
-export function setLogLevel(level: LogLevel): void {
-  currentLevel = level;
-}
-
-export function getLogLevel(): LogLevel {
-  return currentLevel;
-}
+const currentLevel: LogLevel = parseLevel(process.env.VRT_LOG_LEVEL);
+// Note: logger is loaded by env.ts itself, so we read process.env directly
+// here to avoid a circular import. All other modules must go through env.ts.
 
 function isEnabled(level: LogLevel): boolean {
   return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[currentLevel];

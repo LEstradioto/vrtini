@@ -10,7 +10,7 @@ import {
   filterGroupsWithImages,
   type BrowserTaskGroup,
 } from './task-planner.js';
-import type { Scenario, Viewport, BrowserConfig } from '../config.js';
+import type { Scenario, Viewport, BrowserConfig } from './config.js';
 
 // Test fixtures
 const baseScenario: Scenario = {
@@ -30,7 +30,7 @@ const mobileViewport: Viewport = { name: 'mobile', width: 375, height: 812 };
 
 function makeGroup(
   browser: 'chromium' | 'webkit',
-  dockerImage = 'vrt-playwright:v1.49.1',
+  dockerImage = 'vrtini-playwright:v1.49.1',
   tasks: BrowserTaskGroup['tasks'] = []
 ): BrowserTaskGroup {
   return {
@@ -137,7 +137,7 @@ describe('groupTasksByBrowser', () => {
     const group = groups.get('chromium-v130')!;
     expect(group.browser).toBe('chromium');
     expect(group.version).toBe('130');
-    expect(group.dockerImage).toBe('vrt-playwright:v1.49.1');
+    expect(group.dockerImage).toBe('vrtini-playwright:v1.49.1');
   });
 
   it('creates separate groups for different browser versions', () => {
@@ -216,7 +216,7 @@ describe('getTotalTaskCount', () => {
         {
           browserKey: 'chromium',
           browser: 'chromium',
-          dockerImage: 'vrt-playwright:v1.49.1',
+          dockerImage: 'vrtini-playwright:v1.49.1',
           tasks: [
             createScreenshotTask(baseScenario, 'chromium', desktopViewport),
             createScreenshotTask(baseScenario, 'chromium', mobileViewport),
@@ -234,7 +234,7 @@ describe('getTotalTaskCount', () => {
         {
           browserKey: 'chromium',
           browser: 'chromium',
-          dockerImage: 'vrt-playwright:v1.49.1',
+          dockerImage: 'vrtini-playwright:v1.49.1',
           tasks: [createScreenshotTask(baseScenario, 'chromium', desktopViewport)],
         },
       ],
@@ -243,7 +243,7 @@ describe('getTotalTaskCount', () => {
         {
           browserKey: 'webkit',
           browser: 'webkit',
-          dockerImage: 'vrt-playwright:v1.49.1',
+          dockerImage: 'vrtini-playwright:v1.49.1',
           tasks: [
             createScreenshotTask(baseScenario, 'webkit', desktopViewport),
             createScreenshotTask(baseScenario, 'webkit', mobileViewport),
@@ -261,7 +261,7 @@ describe('getTotalTaskCount', () => {
         {
           browserKey: 'chromium',
           browser: 'chromium',
-          dockerImage: 'vrt-playwright:v1.49.1',
+          dockerImage: 'vrtini-playwright:v1.49.1',
           tasks: [],
         },
       ],
@@ -317,11 +317,11 @@ describe('filterScenarios', () => {
 });
 
 describe('partitionGroupsByImageAvailability', () => {
-  const chromiumGroup = makeGroup('chromium', 'vrt-playwright:v1.49.1', [
+  const chromiumGroup = makeGroup('chromium', 'vrtini-playwright:v1.49.1', [
     createScreenshotTask(baseScenario, 'chromium', desktopViewport),
   ]);
 
-  const webkitGroup = makeGroup('webkit', 'vrt-playwright:v1.49.1', [
+  const webkitGroup = makeGroup('webkit', 'vrtini-playwright:v1.49.1', [
     createScreenshotTask(baseScenario, 'webkit', desktopViewport),
   ]);
 
@@ -355,7 +355,7 @@ describe('partitionGroupsByImageAvailability', () => {
 
     expect(result.available.size).toBe(1);
     expect(result.available.has('chromium')).toBe(true);
-    expect(result.missingImages).toEqual(['vrt-playwright:v1.49.1']);
+    expect(result.missingImages).toEqual(['vrtini-playwright:v1.49.1']);
   });
 
   it('returns all groups as missing when no images exist', () => {
@@ -391,13 +391,13 @@ describe('partitionGroupsByImageAvailability', () => {
     const result = partitionGroupsByImageAvailability(groups, imageExists);
 
     expect(result.available.size).toBe(0);
-    expect(result.missingImages).toEqual(['vrt-playwright:v1.49.1']);
+    expect(result.missingImages).toEqual(['vrtini-playwright:v1.49.1']);
   });
 });
 
 describe('findMissingImages', () => {
-  const chromiumGroup = makeGroup('chromium', 'vrt-playwright:v1.49.1');
-  const webkitGroup = makeGroup('webkit', 'vrt-playwright:v1.40.0');
+  const chromiumGroup = makeGroup('chromium', 'vrtini-playwright:v1.49.1');
+  const webkitGroup = makeGroup('webkit', 'vrtini-playwright:v1.40.0');
 
   it('returns empty array when all images exist', () => {
     const groups = new Map([['chromium', chromiumGroup]]);
@@ -416,7 +416,7 @@ describe('findMissingImages', () => {
       ['webkit', false],
     ]);
 
-    expect(findMissingImages(groups, imageExists)).toEqual(['vrt-playwright:v1.40.0']);
+    expect(findMissingImages(groups, imageExists)).toEqual(['vrtini-playwright:v1.40.0']);
   });
 
   it('returns all docker images when none exist', () => {
@@ -431,8 +431,8 @@ describe('findMissingImages', () => {
 
     const missing = findMissingImages(groups, imageExists);
     expect(missing.length).toBe(2);
-    expect(missing).toContain('vrt-playwright:v1.49.1');
-    expect(missing).toContain('vrt-playwright:v1.40.0');
+    expect(missing).toContain('vrtini-playwright:v1.49.1');
+    expect(missing).toContain('vrtini-playwright:v1.40.0');
   });
 
   it('returns empty array for empty groups', () => {
@@ -444,11 +444,11 @@ describe('findMissingImages', () => {
 });
 
 describe('filterGroupsWithImages', () => {
-  const chromiumGroup = makeGroup('chromium', 'vrt-playwright:v1.49.1', [
+  const chromiumGroup = makeGroup('chromium', 'vrtini-playwright:v1.49.1', [
     createScreenshotTask(baseScenario, 'chromium', desktopViewport),
   ]);
 
-  const webkitGroup = makeGroup('webkit', 'vrt-playwright:v1.49.1', [
+  const webkitGroup = makeGroup('webkit', 'vrtini-playwright:v1.49.1', [
     createScreenshotTask(baseScenario, 'webkit', desktopViewport),
   ]);
 

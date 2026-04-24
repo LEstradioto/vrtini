@@ -5,6 +5,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AIProvider, AnalysisRequest, AnalysisResponse } from './ai-provider.js';
 import { imageToBase64 } from './image-utils.js';
+import { readProviderEnv } from '../core/env.js';
 
 export interface AnthropicProviderOptions {
   apiKey?: string;
@@ -12,8 +13,9 @@ export interface AnthropicProviderOptions {
 }
 
 export function createAnthropicProvider(options: AnthropicProviderOptions = {}): AIProvider {
-  const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
-  const authToken = options.authToken || process.env.ANTHROPIC_AUTH_TOKEN;
+  const env = readProviderEnv('anthropic');
+  const apiKey = options.apiKey || env.apiKey;
+  const authToken = options.authToken || env.authToken;
 
   if (!apiKey && !authToken) {
     throw new Error(

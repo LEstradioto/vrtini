@@ -68,7 +68,7 @@ export function registerBuildCommand(program: Command): void {
           // Check which images already exist
           const toBuild: string[] = [];
           for (const version of requiredVersions) {
-            const imageTag = `vrt-playwright:v${version}`;
+            const imageTag = `vrtini-playwright:v${version}`;
             const exists = await checkDockerImage(imageTag);
             if (exists && !options.force) {
               log.info(`✓ ${imageTag} already exists (skip)`);

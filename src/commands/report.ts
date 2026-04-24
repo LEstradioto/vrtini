@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { resolve } from 'path';
-import { loadConfig } from '../config.js';
+import { loadConfig } from '../core/config.js';
 import { normalizeBrowserConfig } from '../browser-versions.js';
 import { compareImages } from '../compare.js';
 import type { ComparisonResult } from '../types/index.js';

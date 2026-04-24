@@ -22,10 +22,6 @@ export const compareRoutes: FastifyPluginAsync = async (fastify) => {
     Body: CompareRequest;
   }>('/projects/:id/compare', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { left, right, threshold } = request.body;
@@ -67,10 +63,6 @@ export const compareRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { filename } = request.params;
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { config } = await loadConfig(project.path, project.configFile);
 
       const filepath = getCustomDiffPath(

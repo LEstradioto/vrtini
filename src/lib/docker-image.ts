@@ -4,10 +4,10 @@
 
 import Docker from 'dockerode';
 import { getBaseImage, LATEST_PLAYWRIGHT_VERSION } from '../browser-versions.js';
-import { getErrorMessage } from './errors.js';
-import { log } from './logger.js';
+import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
 
-const DEFAULT_DOCKER_IMAGE = 'vrt-playwright';
+const DEFAULT_DOCKER_IMAGE = 'vrtini-playwright';
 
 export { DEFAULT_DOCKER_IMAGE };
 
@@ -24,7 +24,7 @@ export async function buildDockerImage(
   const stream = await docker.buildImage(
     {
       context: dockerDir,
-      src: ['Dockerfile', 'playwright-runner.js', 'batch-runner.js', 'dom-snapshot.js'],
+      src: ['Dockerfile', 'batch-runner.js', 'dom-snapshot.js'],
     },
     {
       t: imageTag,

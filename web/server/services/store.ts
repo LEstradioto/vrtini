@@ -1,49 +1,23 @@
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-import { dirname } from 'path';
 import { randomUUID } from 'crypto';
 import { getProjectStorePath } from '../../../src/core/paths.js';
+import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
+import { readProjectsPath } from '../../../src/core/env.js';
 import type { Project } from '../../shared/api-types.js';
 
-export interface ProjectStore {
+interface ProjectStore {
   projects: Project[];
 }
 
-function createEmptyStore(): ProjectStore {
-  return { projects: [] };
-}
-
 function getStorePath(): string {
-  if (process.env.VRT_PROJECTS_PATH) {
-    return process.env.VRT_PROJECTS_PATH;
-  }
-  return getProjectStorePath(process.cwd());
+  return readProjectsPath() ?? getProjectStorePath(process.cwd());
 }
 
-export async function loadStore(): Promise<ProjectStore> {
-  const storePath = getStorePath();
-
-  if (!existsSync(storePath)) {
-    return createEmptyStore();
-  }
-
-  try {
-    const content = await readFile(storePath, 'utf-8');
-    return JSON.parse(content) as ProjectStore;
-  } catch {
-    return createEmptyStore();
-  }
+async function loadStore(): Promise<ProjectStore> {
+  return loadJsonFile<ProjectStore>(getStorePath(), { projects: [] });
 }
 
-export async function saveStore(store: ProjectStore): Promise<void> {
-  const storePath = getStorePath();
-  const dir = dirname(storePath);
-
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
-
-  await writeFile(storePath, JSON.stringify(store, null, 2));
+async function saveStore(store: ProjectStore): Promise<void> {
+  await saveJsonFile(getStorePath(), store);
 }
 
 export async function getProjects(): Promise<Project[]> {

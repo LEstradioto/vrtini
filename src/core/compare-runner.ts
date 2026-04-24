@@ -57,23 +57,3 @@ export function buildComparisonMatrix(
 
   return comparisons;
 }
-
-export function buildComparisons(
-  outputDir: string,
-  baselineDir: string,
-  diffDir: string,
-  scenarios: VRTConfig['scenarios'],
-  config: VRTConfig
-): {
-  baselinePath: string;
-  testPath: string;
-  diffPath: string;
-}[] {
-  return buildComparisonMatrix(outputDir, baselineDir, diffDir, scenarios, config).map(
-    ({ baselinePath, testPath, diffPath }) => ({
-      baselinePath,
-      testPath,
-      diffPath,
-    })
-  );
-}

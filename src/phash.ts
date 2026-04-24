@@ -88,7 +88,7 @@ function toGrayscale(data: Buffer, width: number, height: number): Uint8Array {
  * Compute difference hash (dHash) for an image
  * Returns a 64-character hex string
  */
-export function computeDHash(imagePath: string): string {
+function computeDHash(imagePath: string): string {
   const pngData = readFileSync(imagePath);
   const png = PNG.sync.read(pngData);
 
@@ -113,41 +113,10 @@ export function computeDHash(imagePath: string): string {
 }
 
 /**
- * Compute average hash (aHash) - even simpler but less robust
- * Returns a 64-character hex string
- */
-export function computeAHash(imagePath: string): string {
-  const pngData = readFileSync(imagePath);
-  const png = PNG.sync.read(pngData);
-
-  // Convert to grayscale
-  const grayscale = toGrayscale(png.data, png.width, png.height);
-
-  // Resize to 8x8
-  const resized = resizeGrayscale(grayscale, png.width, png.height, HASH_SIZE, HASH_SIZE);
-
-  // Compute average
-  let sum = 0;
-  for (const pixel of resized) {
-    sum += pixel;
-  }
-  const avg = sum / resized.length;
-
-  // Generate hash based on whether pixel is above/below average
-  let hash = '';
-  for (const pixel of resized) {
-    hash += pixel >= avg ? '1' : '0';
-  }
-
-  // Convert binary to hex
-  return binaryToHex(hash);
-}
-
-/**
  * Compute Hamming distance between two hex hashes
  * Returns number of differing bits (0 = identical, 64 = completely different)
  */
-export function hammingDistance(hash1: string, hash2: string): number {
+function hammingDistance(hash1: string, hash2: string): number {
   if (hash1.length !== hash2.length) {
     throw new Error('Hashes must be the same length');
   }
@@ -174,7 +143,7 @@ export function hammingDistance(hash1: string, hash2: string): number {
  * Compute similarity between two images using dHash
  * Returns a value between 0 (completely different) and 1 (identical)
  */
-export function computeHashSimilarity(
+function computeHashSimilarity(
   imagePath1: string,
   imagePath2: string
 ): {

@@ -176,15 +176,15 @@ export const ConfigSchema = z.object({
   // AI analysis settings
   ai: AIAnalysisSchema.optional(),
   // Comparison engines (ignored if quickMode is true)
-  engines: EnginesConfigSchema.optional(),
+  engines: EnginesConfigSchema,
   // Cross-compare normalization options
-  crossCompare: CrossCompareSchema.optional(),
+  crossCompare: CrossCompareSchema,
   // Auto-thresholds derived from approvals
   autoThresholds: AutoThresholdsSchema.optional(),
   // Confidence thresholds
-  confidence: ConfidenceThresholdsSchema.optional(),
+  confidence: ConfidenceThresholdsSchema,
   // DOM snapshot capture (opt-in)
-  domSnapshot: DomSnapshotSchema.optional(),
+  domSnapshot: DomSnapshotSchema,
   // Report options
   report: z
     .object({

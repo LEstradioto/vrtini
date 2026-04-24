@@ -6,13 +6,14 @@
 import { GoogleGenAI } from '@google/genai';
 import type { AIProvider, AnalysisRequest, AnalysisResponse } from './ai-provider.js';
 import { imageToBase64 } from './image-utils.js';
+import { readProviderEnv } from '../core/env.js';
 
 export interface GoogleProviderOptions {
   apiKey?: string;
 }
 
 export function createGoogleProvider(options: GoogleProviderOptions = {}): AIProvider {
-  const apiKey = options.apiKey || process.env.GOOGLE_API_KEY;
+  const apiKey = options.apiKey || readProviderEnv('google').apiKey;
   if (!apiKey) {
     throw new Error('Google API key not provided. Set GOOGLE_API_KEY or pass apiKey option.');
   }

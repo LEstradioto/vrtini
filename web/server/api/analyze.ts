@@ -11,6 +11,11 @@ import { loadProjectConfig } from '../../../src/core/config-manager.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
 import { requireProject } from '../plugins/project.js';
 import { rateLimit } from '../plugins/rate-limit.js';
+import {
+  hasProviderEnvCredential,
+  pickProviderFromEnv,
+  readProviderEnv,
+} from '../../../src/core/env.js';
 
 interface AnalyzeItem {
   baseline: { type: 'baseline' | 'test'; filename: string };
@@ -97,20 +102,7 @@ export function resolveOpenRouterValidationBaseUrl(input?: string): {
   }
 }
 
-function hasEnvCredential(provider: AIProvider): boolean {
-  switch (provider) {
-    case 'anthropic':
-      return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
-    case 'openai':
-      return !!process.env.OPENAI_API_KEY;
-    case 'openrouter':
-      return !!process.env.OPENROUTER_API_KEY;
-    case 'google':
-      return !!process.env.GOOGLE_API_KEY;
-    default:
-      return false;
-  }
-}
+const hasEnvCredential = hasProviderEnvCredential;
 
 function hasConfigCredential(aiConfig: LoadedAIConfig | undefined, provider: AIProvider): boolean {
   if (!aiConfig || aiConfig.provider !== provider) return false;
@@ -161,13 +153,7 @@ function getProviderStatuses(aiConfig?: LoadedAIConfig): ProviderStatus[] {
   });
 }
 
-function resolveProvider(): AIProvider | null {
-  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return 'anthropic';
-  if (process.env.OPENAI_API_KEY) return 'openai';
-  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
-  if (process.env.GOOGLE_API_KEY) return 'google';
-  return null;
-}
+const resolveProvider = pickProviderFromEnv;
 
 function resolveProviderCredential(body: ValidateProviderBody): {
   source: 'input' | 'env' | 'none';
@@ -176,23 +162,17 @@ function resolveProviderCredential(body: ValidateProviderBody): {
 } {
   const hasInputApiKey = !!body.apiKey?.trim();
   const hasInputAuthToken = !!body.authToken?.trim();
+  const env = readProviderEnv(body.provider);
 
   if (body.provider === 'anthropic') {
-    const apiKey = body.apiKey?.trim() || process.env.ANTHROPIC_API_KEY;
-    const authToken = body.authToken?.trim() || process.env.ANTHROPIC_AUTH_TOKEN;
+    const apiKey = body.apiKey?.trim() || env.apiKey;
+    const authToken = body.authToken?.trim() || env.authToken;
     const source: 'input' | 'env' | 'none' =
       hasInputApiKey || hasInputAuthToken ? 'input' : apiKey || authToken ? 'env' : 'none';
     return { source, apiKey, authToken };
   }
 
-  const envKey =
-    body.provider === 'openai'
-      ? process.env.OPENAI_API_KEY
-      : body.provider === 'openrouter'
-        ? process.env.OPENROUTER_API_KEY
-        : process.env.GOOGLE_API_KEY;
-
-  const apiKey = body.apiKey?.trim() || envKey;
+  const apiKey = body.apiKey?.trim() || env.apiKey;
   const source: 'input' | 'env' | 'none' = hasInputApiKey ? 'input' : apiKey ? 'env' : 'none';
   return { source, apiKey };
 }
@@ -300,13 +280,8 @@ async function validateProviderCredential(
 export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
     Params: { id: string };
-  }>('/projects/:id/analyze/providers', { preHandler: requireProject }, async (request, reply) => {
+  }>('/projects/:id/analyze/providers', { preHandler: requireProject }, async (request) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
     let aiConfig: LoadedAIConfig | undefined;
     try {
       const config = await loadProjectConfig(project.path, project.configFile);
@@ -337,12 +312,6 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
     '/projects/:id/analyze/validate-provider',
     { preHandler: requireProject },
     async (request, reply) => {
-      const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const provider = request.body?.provider;
       if (!provider || !PROVIDERS.includes(provider)) {
         reply.code(400);
@@ -363,11 +332,6 @@ export const analyzeRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [rateLimit({ max: 5, windowMs: 60_000 }), requireProject] },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const { items } = request.body;
 
       if (!items || !Array.isArray(items) || items.length === 0) {

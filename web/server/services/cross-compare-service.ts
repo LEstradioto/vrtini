@@ -2,61 +2,24 @@ import { mkdir, readFile, writeFile, readdir, rm, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve, relative, dirname } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
-import { normalizeBrowserConfig } from '../../../src/core/browser-versions.js';
+import { buildCrossComparePairs } from '../../../src/domain/cross-pairs.js';
+import { evaluateCrossSmartPass } from '../../../src/domain/smart-pass.js';
+import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
+import { log } from '../../../src/core/logger.js';
+import { getErrorMessage } from '../../../src/core/errors.js';
 import {
   getProjectDirs,
   getScreenshotFilename,
   getSnapshotFilename,
 } from '../../../src/core/paths.js';
-import { compareImages } from '../../../src/core/compare.js';
-import { formatBrowser, type BrowserRef, type ComparisonResult } from '../../../src/core/types.js';
+import { compareImages } from '../../../src/compare.js';
+import { formatBrowser, type ComparisonResult } from '../../../src/core/types.js';
 import { getDiffPath } from '../../../src/core/types.js';
 import { buildEnginesConfig } from '../../../src/core/compare-runner.js';
 import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';
 import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
 import type { DomDiffResult } from '../../../src/engines/dom-diff.js';
-import { calculateConfidence } from '../../../src/confidence.js';
-import { classifyFindings, classificationToCategory } from '../../../src/domain/classification.js';
-
-function buildCrossComparePairs(
-  browsers: (string | { name: 'chromium' | 'webkit'; version?: string })[]
-): { key: string; title: string; baseline: BrowserRef; test: BrowserRef }[] {
-  const all = browsers.map(normalizeBrowserConfig);
-  const pairs: { key: string; title: string; baseline: BrowserRef; test: BrowserRef }[] = [];
-  const seen = new Set<string>();
-
-  for (let i = 0; i < all.length; i++) {
-    for (let j = i + 1; j < all.length; j++) {
-      const a = all[i];
-      const b = all[j];
-
-      // Skip identical entries (same name and version)
-      if (a.name === b.name && a.version === b.version) continue;
-
-      // Baseline preference: unversioned (latest) over versioned (old)
-      let baseline = a;
-      let test = b;
-      if (a.version && !b.version) {
-        baseline = b;
-        test = a;
-      }
-
-      const key = `${formatBrowser(baseline)}_vs_${formatBrowser(test)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      pairs.push({
-        key,
-        title: `Cross Compare: ${formatBrowser(baseline)} vs ${formatBrowser(test)}`,
-        baseline,
-        test,
-      });
-    }
-  }
-
-  return pairs;
-}
 
 export interface CrossReport {
   key: string;
@@ -177,59 +140,21 @@ function getCrossFlagsPath(projectPath: string): string {
   return resolve(projectPath, '.vrtini', 'acceptances', 'cross-flags.json');
 }
 
-async function loadCrossAcceptances(projectPath: string): Promise<CrossAcceptanceStore> {
-  const path = getCrossAcceptancesPath(projectPath);
-  if (!existsSync(path)) return {};
-  try {
-    const raw = await readFile(path, 'utf-8');
-    return JSON.parse(raw) as CrossAcceptanceStore;
-  } catch {
-    return {};
-  }
-}
+const loadCrossAcceptances = (projectPath: string) =>
+  loadJsonFile<CrossAcceptanceStore>(getCrossAcceptancesPath(projectPath), {});
+const saveCrossAcceptances = (projectPath: string, data: CrossAcceptanceStore) =>
+  saveJsonFile(getCrossAcceptancesPath(projectPath), data);
 
-async function saveCrossAcceptances(
-  projectPath: string,
-  data: CrossAcceptanceStore
-): Promise<void> {
-  const path = getCrossAcceptancesPath(projectPath);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(data, null, 2));
-}
+const loadCrossDeletions = (projectPath: string) =>
+  loadJsonFile<CrossDeletionStore>(getCrossDeletionsPath(projectPath), {});
+const saveCrossDeletions = (projectPath: string, data: CrossDeletionStore) =>
+  saveJsonFile(getCrossDeletionsPath(projectPath), data);
 
-async function loadCrossDeletions(projectPath: string): Promise<CrossDeletionStore> {
-  const path = getCrossDeletionsPath(projectPath);
-  if (!existsSync(path)) return {};
-  try {
-    const raw = await readFile(path, 'utf-8');
-    return JSON.parse(raw) as CrossDeletionStore;
-  } catch {
-    return {};
-  }
-}
+const loadCrossFlags = (projectPath: string) =>
+  loadJsonFile<CrossFlagStore>(getCrossFlagsPath(projectPath), {});
 
-async function saveCrossDeletions(projectPath: string, data: CrossDeletionStore): Promise<void> {
-  const path = getCrossDeletionsPath(projectPath);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(data, null, 2));
-}
-
-async function loadCrossFlags(projectPath: string): Promise<CrossFlagStore> {
-  const path = getCrossFlagsPath(projectPath);
-  if (!existsSync(path)) return {};
-  try {
-    const raw = await readFile(path, 'utf-8');
-    return JSON.parse(raw) as CrossFlagStore;
-  } catch {
-    return {};
-  }
-}
-
-async function saveCrossFlags(projectPath: string, data: CrossFlagStore): Promise<void> {
-  const path = getCrossFlagsPath(projectPath);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(data, null, 2));
-}
+const saveCrossFlags = (projectPath: string, data: CrossFlagStore) =>
+  saveJsonFile(getCrossFlagsPath(projectPath), data);
 
 async function clearCrossDeletions(projectPath: string, key: string): Promise<void> {
   const deletions = await loadCrossDeletions(projectPath);
@@ -302,87 +227,6 @@ async function clearCrossAcceptancesForItems(
 
 function buildItemKey(scenario: string, viewport: string): string {
   return `${scenario}__${viewport}`;
-}
-
-interface CrossSmartPassEvaluation {
-  smartPass: boolean;
-  reason: string;
-}
-
-function evaluateCrossSmartPass(item: CrossResultItem): CrossSmartPassEvaluation {
-  if (item.reason !== 'match' && item.reason !== 'diff') {
-    return { smartPass: false, reason: 'Item is not a match/diff comparison result.' };
-  }
-  if (item.diffPercentage <= 0) {
-    return {
-      smartPass: false,
-      reason: 'Diff percentage is zero; Smart Pass only applies to non-zero deltas.',
-    };
-  }
-
-  let domCategory:
-    | 'cosmetic'
-    | 'noise'
-    | 'content_change'
-    | 'layout_shift'
-    | 'regression'
-    | undefined;
-  if (item.domDiff) {
-    const classification = classifyFindings(item.domDiff);
-    domCategory = classificationToCategory(classification);
-  }
-
-  const confidence = calculateConfidence({
-    ssimScore: item.ssimScore,
-    phashSimilarity: item.phash?.similarity,
-    pixelDiffPercent: item.diffPercentage,
-    aiAnalysis: item.aiAnalysis,
-    domCategory,
-    domSummary: item.domDiff?.summary,
-  });
-
-  if (confidence.verdict === 'pass' || confidence.verdict === 'likely-pass') {
-    return {
-      smartPass: true,
-      reason: `Confidence ${confidence.verdict} (${(confidence.score * 100).toFixed(1)}%). ${confidence.explanation || 'Signals are within Smart Pass confidence band.'}`,
-    };
-  }
-
-  // Fallback for cross-browser rendering drift:
-  // if no textual/structural DOM changes are detected and perceptual hash remains high,
-  // classify as Smart Pass candidate even when pixel/SSIM are noisy.
-  const summary = item.domDiff?.summary;
-  const hasTextOrStructuralChange =
-    (summary?.text_changed ?? 0) > 0 ||
-    (summary?.element_added ?? 0) > 0 ||
-    (summary?.element_removed ?? 0) > 0;
-  const layoutShiftCount = summary?.layout_shift ?? 0;
-  const phashSimilarity = item.phash?.similarity ?? 0;
-  const rejectedByAI = item.aiAnalysis?.recommendation === 'reject';
-
-  if (
-    !rejectedByAI &&
-    !hasTextOrStructuralChange &&
-    phashSimilarity >= 0.93 &&
-    item.diffPercentage <= 18 &&
-    layoutShiftCount <= 450
-  ) {
-    return {
-      smartPass: true,
-      reason: `Cross-browser heuristic: no DOM text/structural additions-removals, pHash ${(phashSimilarity * 100).toFixed(1)}%, diff ${item.diffPercentage.toFixed(2)}%, layout shifts ${layoutShiftCount}.`,
-    };
-  }
-
-  if (rejectedByAI) {
-    return { smartPass: false, reason: 'AI recommendation is reject, so Smart Pass is blocked.' };
-  }
-  if (hasTextOrStructuralChange) {
-    return { smartPass: false, reason: 'DOM text/structure changed, so Smart Pass is blocked.' };
-  }
-  return {
-    smartPass: false,
-    reason: `Confidence ${confidence.verdict} (${(confidence.score * 100).toFixed(1)}) below Smart Pass gate.`,
-  };
 }
 
 function withSmartPassMetadata(item: CrossResultItem): CrossResultItem {
@@ -1003,8 +847,8 @@ export async function listCrossResults(
           testLabel: data.testLabel,
           ...summary,
         });
-      } catch {
-        // ignore unreadable results
+      } catch (err) {
+        log.warn(`Unreadable cross results at ${resultsPath}: ${getErrorMessage(err)}`);
       }
     }
   }
@@ -1178,8 +1022,8 @@ async function updateCrossResultsAcceptance(
     if (changed) {
       await writeFile(resultsPath, JSON.stringify(data, null, 2));
     }
-  } catch {
-    // ignore invalid results.json
+  } catch (err) {
+    log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
   }
 }
 
@@ -1219,8 +1063,8 @@ async function updateCrossResultsFlag(
     if (changed) {
       await writeFile(resultsPath, JSON.stringify(data, null, 2));
     }
-  } catch {
-    // ignore invalid results.json
+  } catch (err) {
+    log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
   }
 }
 
@@ -1359,7 +1203,7 @@ export async function saveCrossItemAIResults(
     if (changed) {
       await writeFile(resultsPath, JSON.stringify(data, null, 2));
     }
-  } catch {
-    // ignore invalid results.json
+  } catch (err) {
+    log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
   }
 }

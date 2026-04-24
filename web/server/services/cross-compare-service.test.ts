@@ -2,7 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { copyFile, mkdir, rm, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { VRTConfig } from '../../../src/config.js';
+import { ConfigSchema, type VRTConfig } from '../../../src/core/config.js';
 import {
   deleteCrossItems,
   loadCrossResults,
@@ -22,20 +22,17 @@ const TEMP_ROOT = join(PROJECT_ROOT, 'test', 'temp', 'cross-compare-smart-pass')
 const scenarioName = 'homepage';
 const viewportName = 'desktop';
 
-const config: VRTConfig = {
+const config: VRTConfig = ConfigSchema.parse({
   baselineDir: './.vrtini/baselines',
   outputDir: './.vrtini/output',
   browsers: ['chromium', { name: 'chromium', version: '90' }],
   viewports: [{ name: viewportName, width: 800, height: 600 }],
   threshold: 0.1,
   diffThreshold: { maxDiffPercentage: 100 },
-  disableAnimations: true,
-  diffColor: '#ff00ff',
-  keepDiffOnMatch: false,
   concurrency: 1,
   quickMode: true,
   scenarios: [{ name: scenarioName, url: 'https://example.com' }],
-};
+});
 
 async function seedCrossCompareImages(outputDir: string): Promise<void> {
   const baselinePath = join(FIXTURES_DIR, 'baseline.png');

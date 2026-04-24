@@ -1,6 +1,6 @@
 export * from './ai-analysis.js';
 export * from './browser-versions.js';
-export * from './compare.js';
+export * from '../compare.js';
 export * from './compare-runner.js';
 export * from './config-manager.js';
 export * from './config.js';

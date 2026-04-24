@@ -16,6 +16,12 @@ import { crossCompareRoutes } from './api/cross-compare.js';
 import { aiTriageRoutes } from './api/ai-triage.js';
 import { registerAuth } from './plugins/auth.js';
 import { log } from '../../src/core/logger.js';
+import {
+  readAllowInsecureRemote,
+  readAuthToken,
+  readIsDev,
+  readServerHost,
+} from '../../src/core/env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -58,10 +64,10 @@ function getOpenCommand(platform: NodeJS.Platform): string {
 
 export async function startServer(options: ServerOptions): Promise<void> {
   const { port, open } = options;
-  const host = options.host ?? process.env.VRT_HOST ?? '127.0.0.1';
-  const isDev = process.env.NODE_ENV !== 'production';
-  const authToken = process.env.VRT_AUTH_TOKEN?.trim();
-  const allowInsecureRemote = process.env.VRT_ALLOW_INSECURE_REMOTE === '1';
+  const host = options.host ?? readServerHost() ?? '127.0.0.1';
+  const isDev = readIsDev();
+  const authToken = readAuthToken();
+  const allowInsecureRemote = readAllowInsecureRemote();
   assertSecureHostBinding({ host, authToken, allowInsecureRemote });
 
   const fastify = Fastify({

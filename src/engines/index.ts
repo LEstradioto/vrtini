@@ -7,11 +7,11 @@ import * as ImageSSIM from 'image-ssim';
 import { comparePerceptualHash } from '../phash.js';
 import { compareWithOdiff } from './odiff.js';
 import { getErrorMessage } from '../core/errors.js';
+import { resizeRGBABilinear } from '../core/image-resize.js';
 import type { EngineResult, EnginesConfig, EngineName, PixelmatchConfig } from './types.js';
 import { DEFAULT_ENGINES_CONFIG } from './types.js';
 
-export { DEFAULT_ENGINES_CONFIG } from './types.js';
-export type { EngineResult, EnginesConfig, EngineConfig, EngineName } from './types.js';
+export type { EngineResult, EnginesConfig, EngineName } from './types.js';
 
 const ENGINE_WEIGHTS: Record<EngineName, number> = {
   pixelmatch: 0.3,
@@ -174,31 +174,7 @@ async function runSSIM(baseline: string, test: string): Promise<EngineResult> {
     const resizePNG = (img: PNG, targetWidth: number, targetHeight: number): PNG => {
       if (img.width === targetWidth && img.height === targetHeight) return img;
       const resized = new PNG({ width: targetWidth, height: targetHeight });
-      for (let y = 0; y < targetHeight; y++) {
-        for (let x = 0; x < targetWidth; x++) {
-          const srcX = (x / targetWidth) * img.width;
-          const srcY = (y / targetHeight) * img.height;
-          const x0 = Math.floor(srcX);
-          const y0 = Math.floor(srcY);
-          const x1 = Math.min(x0 + 1, img.width - 1);
-          const y1 = Math.min(y0 + 1, img.height - 1);
-          const xFrac = srcX - x0;
-          const yFrac = srcY - y0;
-          const dstIdx = (targetWidth * y + x) * 4;
-          for (let c = 0; c < 4; c++) {
-            const v00 = img.data[(img.width * y0 + x0) * 4 + c];
-            const v10 = img.data[(img.width * y0 + x1) * 4 + c];
-            const v01 = img.data[(img.width * y1 + x0) * 4 + c];
-            const v11 = img.data[(img.width * y1 + x1) * 4 + c];
-            const value =
-              v00 * (1 - xFrac) * (1 - yFrac) +
-              v10 * xFrac * (1 - yFrac) +
-              v01 * (1 - xFrac) * yFrac +
-              v11 * xFrac * yFrac;
-            resized.data[dstIdx + c] = Math.round(value);
-          }
-        }
-      }
+      resized.data = resizeRGBABilinear(img.data, img.width, img.height, targetWidth, targetHeight);
       return resized;
     };
 

@@ -49,3 +49,4 @@ vrtini.config.json
 
 # Local caches
 .eslintcache
+.gitnexus

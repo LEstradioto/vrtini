@@ -15,11 +15,6 @@ export const configRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       try {
         const result = await loadConfig(project.path, project.configFile);
         return result;
@@ -41,11 +36,6 @@ export const configRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { config: unknown };
   }>('/projects/:id/config', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
     try {
       const result = await saveConfig(project.path, project.configFile, request.body.config);
 
@@ -67,11 +57,6 @@ export const configRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       try {
         const profiles = await listProjectProfiles(project.path);
         return { profiles };

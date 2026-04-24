@@ -105,18 +105,7 @@ export function getPlaywrightVersion(browser: 'chromium' | 'webkit', version?: s
  */
 export function getDockerImageTag(browser: 'chromium' | 'webkit', version?: string): string {
   const pwVersion = getPlaywrightVersion(browser, version);
-  return `vrt-playwright:v${pwVersion}`;
-}
-
-/**
- * Get baseline directory suffix for a browser version.
- * Returns empty string for latest, "-vXXX" for specific versions.
- */
-export function getBaselineSuffix(browser: 'chromium' | 'webkit', version?: string): string {
-  if (isLatestVersion(version)) {
-    return '';
-  }
-  return `-v${version}`;
+  return `vrtini-playwright:v${pwVersion}`;
 }
 
 /**

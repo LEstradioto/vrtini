@@ -1,5 +1,6 @@
 import type { VRTConfig } from '../../../src/core/config.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
+import { createJobStore } from '../../../src/core/job-store.js';
 import {
   runCrossCompare,
   type CrossCompareRunOptions,
@@ -24,12 +25,11 @@ export interface CrossCompareJob {
   completedAt?: string;
 }
 
-const jobs = new Map<string, CrossCompareJob>();
+const jobs = createJobStore<CrossCompareJob>();
 
 export function createCrossCompareJob(projectId: string): CrossCompareJob {
-  const jobId = Date.now().toString(36);
-  const job: CrossCompareJob = {
-    id: jobId,
+  return jobs.create((id) => ({
+    id,
     projectId,
     status: 'running',
     phase: 'preparing',
@@ -39,9 +39,7 @@ export function createCrossCompareJob(projectId: string): CrossCompareJob {
     pairTotal: 0,
     reports: [],
     startedAt: new Date().toISOString(),
-  };
-  jobs.set(jobId, job);
-  return job;
+  }));
 }
 
 export function getCrossCompareJob(jobId: string): CrossCompareJob | undefined {

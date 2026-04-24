@@ -17,13 +17,8 @@ export const acceptanceRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { id: string } }>(
     '/projects/:id/acceptances',
     { preHandler: requireProject },
-    async (request, reply) => {
+    async (request) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const acceptances = await loadAcceptances(project.path);
 
       return {
@@ -48,11 +43,6 @@ export const acceptanceRoutes: FastifyPluginAsync = async (fastify) => {
     };
   }>('/projects/:id/accept', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
     const { filename, reason, comparedAgainst, metrics, signals } = request.body;
 
     if (!filename) {
@@ -86,11 +76,6 @@ export const acceptanceRoutes: FastifyPluginAsync = async (fastify) => {
     Params: { id: string; filename: string };
   }>('/projects/:id/accept/:filename', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
     const { filename } = request.params;
     const revoked = await revokeAcceptance(project.path, decodeURIComponent(filename));
 

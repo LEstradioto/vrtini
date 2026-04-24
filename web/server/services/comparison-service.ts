@@ -1,7 +1,7 @@
 import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
-import { compareImages } from '../../../src/core/compare.js';
+import { compareImages } from '../../../src/compare.js';
 import { getSsimScore } from '../../../src/core/types.js';
 import {
   getImagePath,
@@ -154,8 +154,4 @@ export function getCustomDiffPath(
   }
 
   return filepath;
-}
-
-export function getCustomDiffDirectory(projectPath: string, config?: PathConfig): string {
-  return getCustomDiffDir(projectPath, config);
 }

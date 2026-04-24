@@ -2,7 +2,7 @@ import type { Command } from 'commander';
 import { resolve, join, relative } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { loadConfig } from '../config.js';
+import { loadConfig } from '../core/config.js';
 import { normalizeBrowserConfig } from '../browser-versions.js';
 import { getProjectDirs, getScreenshotFilename, getSnapshotFilename } from '../core/paths.js';
 import { compareImages, getDiffPath } from '../compare.js';

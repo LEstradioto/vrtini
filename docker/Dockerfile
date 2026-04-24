@@ -1,5 +1,5 @@
 # Parameterized Dockerfile for multi-version Playwright support
-# Build with: docker build --build-arg PLAYWRIGHT_VERSION=1.40.0 --build-arg BASE_IMAGE=jammy -t vrt-playwright:v1.40.0 .
+# Build with: docker build --build-arg PLAYWRIGHT_VERSION=1.40.0 --build-arg BASE_IMAGE=jammy -t vrtini-playwright:v1.40.0 .
 
 ARG PLAYWRIGHT_VERSION=1.49.1
 ARG BASE_IMAGE=noble
@@ -14,14 +14,11 @@ ARG PLAYWRIGHT_VERSION=1.49.1
 RUN npm init -y && npm install playwright@${PLAYWRIGHT_VERSION}
 
 # Copy runner scripts
-COPY playwright-runner.js .
 COPY batch-runner.js .
 COPY dom-snapshot.js .
 
 # Input/output directories will be mounted as volumes
-# /input - contains scenario config JSON (or batch.json for batch mode)
+# /input - contains batch.json describing the tasks
 # /output - screenshots will be saved here
 
-# Default: single-task runner. For batch mode, override CMD:
-# docker run ... node batch-runner.js
-CMD ["node", "playwright-runner.js"]
+CMD ["node", "batch-runner.js"]

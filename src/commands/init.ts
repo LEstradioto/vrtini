@@ -11,7 +11,7 @@ import { log } from '../core/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const VRT_ROOT = resolve(__dirname, '..', '..');
+const VRTINI_ROOT = resolve(__dirname, '..', '..');
 
 function execPromise(cmd: string, options?: { cwd?: string }): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ export function registerInitCommand(program: Command): void {
       if (existsSync(configPath) && !options.force) {
         log.info('✓ Config file already exists (use --force to overwrite)');
       } else {
-        const minimalConfigPath = resolve(VRT_ROOT, 'vrtini.config.minimal.json');
+        const minimalConfigPath = resolve(VRTINI_ROOT, 'vrtini.config.minimal.json');
         await copyFile(minimalConfigPath, configPath);
         log.info('✓ Created vrtini.config.json (from minimal template)');
         log.info('  See vrtini.config.example.json in the vrtini directory for all options');
@@ -81,7 +81,7 @@ export function registerInitCommand(program: Command): void {
         successLabel: 'TypeScript build complete',
         failureLabel: 'TypeScript build failed',
         command: 'npm run build',
-        cwd: VRT_ROOT,
+        cwd: VRTINI_ROOT,
         failureHint: 'cd vrtini && npm run build',
       });
       await runBuildStep({
@@ -89,7 +89,7 @@ export function registerInitCommand(program: Command): void {
         successLabel: 'Client build complete',
         failureLabel: 'Client build failed',
         command: 'npm run build:client',
-        cwd: VRT_ROOT,
+        cwd: VRTINI_ROOT,
         failureHint: 'cd vrtini && npm run build:client',
       });
 

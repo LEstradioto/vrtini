@@ -16,11 +16,6 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const { key } = request.params;
       const { config } = await loadConfig(project.path, project.configFile);
       const vrtConfig = config as VRTConfig;

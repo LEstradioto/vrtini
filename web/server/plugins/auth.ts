@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { log } from '../../../src/core/logger.js';
+import { readAuthToken } from '../../../src/core/env.js';
 
 function isLoopbackRemote(remoteAddress?: string): boolean {
   if (!remoteAddress) return false;
@@ -16,7 +17,7 @@ function isLoopbackRemote(remoteAddress?: string): boolean {
  *   Authorization: Bearer <token>
  */
 export function registerAuth(fastify: FastifyInstance): void {
-  const token = process.env.VRT_AUTH_TOKEN?.trim();
+  const token = readAuthToken();
   if (!token) return;
 
   log.info('Authentication enabled — VRT_AUTH_TOKEN is set');

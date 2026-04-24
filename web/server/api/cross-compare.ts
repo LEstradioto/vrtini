@@ -75,10 +75,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [rateLimit({ max: 3, windowMs: 60_000 }), requireProject] },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { config } = await loadConfig(project.path, project.configFile);
       try {
         const options = {
@@ -125,12 +121,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     '/projects/:id/cross-compare-jobs/:jobId',
     { preHandler: requireProject },
     async (request, reply) => {
-      const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const job = getJobForProject(request.params.jobId, request.params.id);
       if (!job) {
         reply.code(404);
@@ -161,10 +151,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { config } = await loadConfig(project.path, project.configFile);
       const html = await loadCrossReport(project.path, config as VRTConfig, request.params.key);
       const rewritten = rewriteReportImageSources(
@@ -183,10 +169,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { config } = await loadConfig(project.path, project.configFile);
       const results = await loadCrossResults(project.path, config as VRTConfig, request.params.key);
       return reply.send({ results });
@@ -198,10 +180,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { config } = await loadConfig(project.path, project.configFile);
       await clearCrossResults(project.path, config as VRTConfig, request.params.key);
       return reply.send({ success: true });
@@ -213,10 +191,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { key: string; itemKeys: string[] };
   }>('/projects/:id/cross-delete', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { key, itemKeys } = request.body;
     if (!key || !Array.isArray(itemKeys) || itemKeys.length === 0) {
       reply.code(400);
@@ -232,10 +206,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { config } = await loadConfig(project.path, project.configFile);
       const results = await listCrossResults(project.path, config as VRTConfig);
       return reply.send({ results });
@@ -247,10 +217,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { key: string; itemKey: string; reason?: string };
   }>('/projects/:id/cross-accept', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { key, itemKey, reason } = request.body;
     if (!key || !itemKey) {
       reply.code(400);
@@ -267,10 +233,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { key, itemKey } = request.params;
       // Keep revoke path fast; avoid rewriting large results.json payloads.
       const revoked = await revokeCrossAcceptance(project.path, key, itemKey);
@@ -283,10 +245,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { key: string; itemKey: string; reason?: string };
   }>('/projects/:id/cross-flag', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { key, itemKey, reason } = request.body;
     if (!key || !itemKey) {
       reply.code(400);
@@ -302,10 +260,6 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: requireProject },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { key, itemKey } = request.params;
       // Keep unflag path fast; avoid rewriting large results payload.
       const revoked = await revokeCrossFlag(project.path, key, itemKey);

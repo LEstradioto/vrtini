@@ -30,11 +30,6 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [rateLimit({ max: 3, windowMs: 60_000 }), requireProject] },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       let config;
       try {
         config = await loadProjectConfig(project.path, project.configFile);
@@ -68,11 +63,6 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [rateLimit({ max: 5, windowMs: 60_000 }), requireProject] },
     async (request, reply) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const fileList =
         request.body.filenames || (request.body.filename ? [request.body.filename] : []);
       if (fileList.length === 0) {

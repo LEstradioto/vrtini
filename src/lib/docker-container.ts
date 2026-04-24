@@ -6,11 +6,11 @@ import Docker from 'dockerode';
 import { mkdir, writeFile, rm, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import type { Scenario, Viewport } from '../config.js';
-import { getBatchResultsPath, sanitizeForFilename } from './paths.js';
-import { getErrorMessage } from './errors.js';
-import { log } from './logger.js';
-import type { ScreenshotTask } from '../domain/task-planner.js';
+import type { Scenario, Viewport } from '../core/config.js';
+import { getBatchResultsPath } from '../core/paths.js';
+import { getErrorMessage } from '../core/errors.js';
+import { log } from '../core/logger.js';
+import type { ScreenshotTask } from '../core/task-planner.js';
 
 /**
  * Docker multiplexed stream header size in bytes.
@@ -82,101 +82,6 @@ function isBatchResults(data: unknown): data is BatchResults {
         typeof (r as Record<string, unknown>).success === 'boolean'
     )
   );
-}
-
-/**
- * Run a single container for one screenshot task.
- * Kept for reference but replaced by batch runner in production.
- */
-export async function runSingleContainer(
-  task: ScreenshotTask,
-  inputDir: string,
-  outputDir: string,
-  dockerImage: string,
-  disableAnimations = true
-): Promise<ScreenshotResult> {
-  const docker = new Docker();
-  const { scenario, browser, viewport } = task;
-
-  const configData = {
-    scenario,
-    browser,
-    viewport,
-    disableAnimations,
-  };
-
-  const taskId = `${sanitizeForFilename(scenario.name)}_${browser}_${viewport.name}`;
-  const taskInputDir = join(inputDir, taskId);
-
-  await mkdir(taskInputDir, { recursive: true });
-  await writeFile(join(taskInputDir, 'scenario.json'), JSON.stringify(configData, null, 2));
-
-  let container: Docker.Container | null = null;
-  let logs = '';
-
-  try {
-    container = await docker.createContainer({
-      Image: dockerImage,
-      HostConfig: {
-        Binds: [`${taskInputDir}:/input:ro`, `${outputDir}:/output:rw`],
-        AutoRemove: true,
-      },
-    });
-
-    await container.start();
-
-    const logStream = await container.logs({
-      follow: true,
-      stdout: true,
-      stderr: true,
-    });
-
-    logs = await new Promise<string>((resolve) => {
-      let output = '';
-      logStream.on('data', (chunk: Buffer) => {
-        const text = chunk.toString('utf-8').replace(DOCKER_STREAM_HEADER_REGEX, '');
-        output += text;
-      });
-      logStream.on('end', () => resolve(output));
-      logStream.on('error', (err: Error) => {
-        // Log stream errors but still resolve with partial output.
-        // The container result will indicate overall success/failure.
-        log.warn(`Log stream error: ${err.message}`);
-        resolve(output);
-      });
-    });
-
-    const result = await container.wait();
-
-    await safeRemove(taskInputDir);
-
-    if (result.StatusCode !== 0) {
-      return {
-        task,
-        success: false,
-        error: `Container exited with code ${result.StatusCode}`,
-        logs,
-      };
-    }
-
-    const screenshotPath = join(outputDir, `${taskId}.png`);
-
-    return {
-      task,
-      success: true,
-      screenshotPath,
-      logs,
-    };
-  } catch (error) {
-    await safeRemove(taskInputDir);
-
-    return {
-      task,
-      success: false,
-      error: getErrorMessage(error),
-      logs,
-    };
-  }
 }
 
 /**

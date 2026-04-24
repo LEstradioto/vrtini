@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { readdir } from 'fs/promises';
 import { resolve } from 'path';
-import { loadConfig } from '../config.js';
+import { loadConfig } from '../core/config.js';
 import { approveResult } from '../report.js';
 import { getProjectDirs } from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';

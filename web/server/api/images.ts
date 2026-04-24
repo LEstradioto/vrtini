@@ -24,12 +24,8 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { id: string } }>(
     '/projects/:id/images',
     { preHandler: requireProject },
-    async (request, reply) => {
+    async (request) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
       const { config } = await loadConfig(project.path, project.configFile);
       return getProjectImages(project.path, config as { baselineDir: string; outputDir: string });
     }
@@ -41,10 +37,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     Querystring: { path?: string; thumb?: string; max?: string };
   }>('/projects/:id/files', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { config } = await loadConfig(project.path, project.configFile);
     const configData = config as { baselineDir?: string; outputDir?: string };
     const filePath = request.query.path;
@@ -134,11 +126,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { type, filename } = request.params;
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const { config } = await loadConfig(project.path, project.configFile);
       const dir = getImageDirectory(
         project.path,
@@ -169,10 +156,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { filename: string };
   }>('/projects/:id/approve', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filename } = request.body;
@@ -206,10 +189,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { filename: string };
   }>('/projects/:id/reject', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filename } = request.body;
@@ -239,11 +218,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { filename: string; reason?: string };
   }>('/projects/:id/flag', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
     const { filename, reason } = request.body;
     if (!filename) {
       reply.code(400);
@@ -264,11 +238,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     Params: { id: string; filename: string };
   }>('/projects/:id/flag/:filename', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
-
     const filename = decodeURIComponent(request.params.filename);
     const revoked = await revokeImageFlag(project.path, filename);
     if (!revoked) {
@@ -285,10 +254,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     Body: { filenames: string[] };
   }>('/projects/:id/bulk-approve', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filenames } = request.body;
@@ -311,10 +276,6 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
     Params: { id: string; filename: string };
   }>('/projects/:id/revert/:filename', { preHandler: requireProject }, async (request, reply) => {
     const project = request.project;
-    if (!project) {
-      reply.code(404);
-      return { error: 'Project not found' };
-    }
     const { config } = await loadConfig(project.path, project.configFile);
 
     const { filename } = request.params;
@@ -341,13 +302,8 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { id: string } }>(
     '/projects/:id/results',
     { preHandler: requireProject },
-    async (request, reply) => {
+    async (request) => {
       const project = request.project;
-      if (!project) {
-        reply.code(404);
-        return { error: 'Project not found' };
-      }
-
       const resultsPath = resolve(project.path, '.vrtini', 'last-results.json');
       if (!existsSync(resultsPath)) {
         return { results: {} };

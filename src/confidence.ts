@@ -4,7 +4,6 @@ import {
   calculateWeightedScore,
   determineVerdict,
   buildExplanation,
-  evaluateRules,
   DEFAULT_SCORING_CONFIG,
   type Verdict,
   type ScoringConfig,
@@ -42,18 +41,6 @@ function buildScoringInputs(inputs: ConfidenceInputs) {
   };
 }
 
-function buildRuleInputs(inputs: ConfidenceInputs, confidence: ConfidenceResult) {
-  return {
-    ssimScore: inputs.ssimScore,
-    phashSimilarity: inputs.phashSimilarity,
-    pixelDiffPercent: inputs.pixelDiffPercent,
-    confidenceScore: confidence.score,
-    aiCategory: inputs.aiAnalysis?.category,
-    aiSeverity: inputs.aiAnalysis?.severity,
-    domTextChanges: inputs.domSummary?.text_changed,
-  };
-}
-
 /**
  * Calculate a unified confidence score from multiple signals
  */
@@ -69,20 +56,3 @@ export function calculateConfidence(
 
   return { score, verdict, explanation, factors };
 }
-
-// Re-export AutoApproveRule as alias for backward compatibility
-export type AutoApproveRule = AutoRule;
-
-/**
- * Check if a result should be auto-approved/rejected based on rules
- */
-export function evaluateAutoRules(
-  inputs: ConfidenceInputs,
-  confidence: ConfidenceResult,
-  rules: AutoRule[]
-): { action: 'approve' | 'flag' | 'reject' | null; matchedRule: AutoRule | null } {
-  return evaluateRules(buildRuleInputs(inputs, confidence), rules);
-}
-
-// Re-export DEFAULT_AUTO_RULES from scoring.ts
-export { DEFAULT_AUTO_RULES } from './domain/scoring.js';

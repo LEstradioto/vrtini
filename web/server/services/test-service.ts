@@ -4,7 +4,7 @@ import { basename, resolve } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
 import { runScreenshotTasks, type ScreenshotResult } from '../../../src/docker.js';
 import { normalizeBrowserConfig } from '../../../src/core/browser-versions.js';
-import { compareImages } from '../../../src/core/compare.js';
+import { compareImages } from '../../../src/compare.js';
 import type { ComparisonResult } from '../../../src/core/types.js';
 import {
   getProjectDirs,
@@ -19,6 +19,7 @@ import {
   IMAGE_METADATA_SCHEMA_VERSION,
   type ImageMetadata,
 } from '../../../src/core/image-metadata.js';
+import { createJobStore } from '../../../src/core/job-store.js';
 import { updateProject } from './store.js';
 import {
   loadAcceptances,
@@ -68,7 +69,7 @@ export interface TestJob {
 export type TestJobStatus = Omit<TestJob, 'abortController'>;
 type ProjectDirs = ReturnType<typeof getProjectDirs>;
 
-const jobs = new Map<string, TestJob>();
+const jobs = createJobStore<TestJob>();
 
 function buildAutoThresholdKey(scenarioName: string, viewportName: string): string {
   return `${scenarioName.trim()}::${viewportName.trim()}`;
@@ -322,29 +323,23 @@ async function captureScreenshots(
   const signal = job.abortController?.signal;
   await ensureCaptureDirs(dirs);
 
-  const originalCwd = process.cwd();
-  process.chdir(projectPath);
-
   const screenshotStartTime = Date.now();
 
-  try {
-    const results = await runScreenshotTasks({
-      config,
-      scenarios: scenarios.map((s) => s.name),
-      signal,
-      onContainerStart: (containerId: string) => {
-        job.containerIds.push(containerId);
-      },
-      onProgress: (completed: number, total: number, phase: 'capturing' | 'comparing') => {
-        job.progress = completed;
-        job.total = total;
-        job.phase = phase;
-      },
-    });
-    appendCaptureWarnings(job, results);
-  } finally {
-    process.chdir(originalCwd);
-  }
+  const results = await runScreenshotTasks({
+    config,
+    cwd: projectPath,
+    scenarios: scenarios.map((s) => s.name),
+    signal,
+    onContainerStart: (containerId: string) => {
+      job.containerIds.push(containerId);
+    },
+    onProgress: (completed: number, total: number, phase: 'capturing' | 'comparing') => {
+      job.progress = completed;
+      job.total = total;
+      job.phase = phase;
+    },
+  });
+  appendCaptureWarnings(job, results);
 
   return Date.now() - screenshotStartTime;
 }
@@ -449,11 +444,8 @@ async function persistResults(job: TestJob, projectPath: string): Promise<void> 
 }
 
 export function createJob(projectId: string, totalTests: number): TestJob {
-  const jobId = Date.now().toString(36);
-  const abortController = new AbortController();
-
-  const job: TestJob = {
-    id: jobId,
+  return jobs.create((id) => ({
+    id,
     projectId,
     status: 'running',
     progress: 0,
@@ -461,12 +453,9 @@ export function createJob(projectId: string, totalTests: number): TestJob {
     phase: 'capturing',
     results: [],
     startedAt: new Date().toISOString(),
-    abortController,
+    abortController: new AbortController(),
     containerIds: [],
-  };
-
-  jobs.set(jobId, job);
-  return job;
+  }));
 }
 
 export function getJob(jobId: string): TestJob | undefined {

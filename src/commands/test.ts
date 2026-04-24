@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import { mkdir, readdir, writeFile } from 'fs/promises';
-import { loadConfig } from '../config.js';
+import { loadConfig } from '../core/config.js';
 import { runScreenshotTasks } from '../docker.js';
 import { compareImages } from '../compare.js';
 import type { ComparisonResult } from '../types/index.js';

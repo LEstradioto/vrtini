@@ -5,7 +5,7 @@
 
 import { mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
-import type { VRTConfig } from './config.js';
+import type { VRTConfig } from './core/config.js';
 import { LATEST_PLAYWRIGHT_VERSION } from './browser-versions.js';
 import {
   groupTasksByBrowser,
@@ -13,19 +13,18 @@ import {
   filterScenarios,
   findMissingImages,
   filterGroupsWithImages,
-} from './domain/task-planner.js';
+} from './core/task-planner.js';
 import { checkDockerConnection, checkDockerImage } from './lib/docker-image.js';
 import { runBatchContainer, type ScreenshotResult } from './lib/docker-container.js';
 import { log } from './core/logger.js';
 
-// Re-export for backward compatibility
-export { getScreenshotFilename } from './core/paths.js';
-export type { ScreenshotTask } from './domain/task-planner.js';
 export type { ScreenshotResult } from './lib/docker-container.js';
-export { buildDockerImage, checkDockerConnection, checkDockerImage } from './lib/docker-image.js';
+export { buildDockerImage, checkDockerImage } from './lib/docker-image.js';
 
 export interface RunOptions {
   config: VRTConfig;
+  /** Resolves relative baseline/output paths. Defaults to `process.cwd()`. */
+  cwd?: string;
   scenarios?: string[];
   signal?: AbortSignal;
   onContainerStart?: (containerId: string) => void;
@@ -43,7 +42,7 @@ function countResults(results: ScreenshotResult[]): { successful: number; failed
 }
 
 export async function runScreenshotTasks(options: RunOptions): Promise<ScreenshotResult[]> {
-  const { config, scenarios: scenarioFilter, signal, onContainerStart, onProgress } = options;
+  const { config, cwd, scenarios: scenarioFilter, signal, onContainerStart, onProgress } = options;
 
   // Check Docker connection first
   const dockerStatus = await checkDockerConnection();
@@ -51,7 +50,7 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
     throw new Error(dockerStatus.error);
   }
 
-  const outputDir = resolve(process.cwd(), config.outputDir);
+  const outputDir = resolve(cwd ?? process.cwd(), config.outputDir);
   const inputDir = resolve(outputDir, '.tmp-input');
 
   await mkdir(outputDir, { recursive: true });

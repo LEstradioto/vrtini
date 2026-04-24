@@ -1,6 +1,6 @@
-import { readdir, readFile, writeFile, copyFile, unlink, mkdir, stat } from 'fs/promises';
+import { readdir, readFile, writeFile, copyFile, unlink, stat } from 'fs/promises';
 import { existsSync } from 'fs';
-import { resolve, basename, dirname, join } from 'path';
+import { resolve, basename, join } from 'path';
 import { ConfigSchema } from '../../../src/core/config.js';
 import { listProfileConfigs, type ProfileConfig } from '../../../src/core/config-manager.js';
 import { IMAGE_METADATA_SCHEMA_VERSION } from '../../../src/core/image-metadata.js';
@@ -15,6 +15,29 @@ import {
   getImageMetadataPath,
   type PathConfig,
 } from '../../../src/core/paths.js';
+import type {
+  Acceptance,
+  AcceptanceMetrics,
+  AcceptanceSignals,
+  ImageFlag,
+} from '../../../src/domain/acceptance.js';
+import {
+  computeAutoThresholdCaps,
+  type AutoThresholdCap,
+  type AutoThresholdCaps,
+} from '../../../src/domain/auto-threshold.js';
+import { parseImageFilename } from '../../../src/domain/image-naming.js';
+import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
+
+export { computeAutoThresholdCaps, parseImageFilename };
+export type {
+  Acceptance,
+  AcceptanceMetrics,
+  AcceptanceSignals,
+  ImageFlag,
+  AutoThresholdCap,
+  AutoThresholdCaps,
+};
 
 // ─── Server Info ─────────────────────────────────────────────────────────────
 
@@ -136,98 +159,23 @@ export function getConfigSchemaInfo(): Record<string, string[]> {
 
 // ─── Acceptance Management ───────────────────────────────────────────────────
 
-export interface AcceptanceMetrics {
-  diffPercentage: number;
-  pixelDiff?: number;
-  ssimScore?: number;
-  phash?: number;
-}
-
-export interface AcceptanceSignals {
-  scenario?: string;
-  viewport?: string;
-  viewportWidth?: number;
-  viewportHeight?: number;
-  browserPair?: {
-    baseline?: { name?: string; version?: string };
-    test?: { name?: string; version?: string };
-  };
-}
-
-export interface Acceptance {
-  filename: string;
-  acceptedAt: string;
-  reason?: string;
-  comparedAgainst: {
-    filename: string;
-    type: 'baseline' | 'test';
-  };
-  metrics: AcceptanceMetrics;
-  signals?: AcceptanceSignals;
-}
-
-export interface AutoThresholdCap {
-  scenario: string;
-  viewport: string;
-  sampleSize: number;
-  p95DiffPercentage: number;
-  p95PixelDiff?: number;
-  pixelSampleSize?: number;
-}
-
-export interface AutoThresholdCaps {
-  percentile: number;
-  minSampleSize: number;
-  caps: Record<string, AutoThresholdCap>;
-}
-
 interface AcceptancesFile {
   acceptances: Acceptance[];
-}
-
-export interface ImageFlag {
-  filename: string;
-  flaggedAt: string;
-  reason?: string;
 }
 
 interface ImageFlagsFile {
   flags: ImageFlag[];
 }
 
-async function ensureAcceptancesDir(projectPath: string): Promise<string> {
-  const filePath = getAcceptancesPath(projectPath);
-  const dir = dirname(filePath);
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
-  return filePath;
-}
-
 export async function loadAcceptances(projectPath: string): Promise<Acceptance[]> {
-  const filePath = await ensureAcceptancesDir(projectPath);
-  if (!existsSync(filePath)) {
-    return [];
-  }
-  try {
-    const content = await readFile(filePath, 'utf-8');
-    const data: AcceptancesFile = JSON.parse(content);
-    return data.acceptances || [];
-  } catch (err) {
-    // Log parsing errors but return empty array to allow graceful degradation.
-    // File corruption is recoverable by re-accepting images.
-    log.warn(`Failed to load acceptances from ${filePath}:`, getErrorMessage(err));
-    return [];
-  }
+  const data = await loadJsonFile<AcceptancesFile>(getAcceptancesPath(projectPath), {
+    acceptances: [],
+  });
+  return data.acceptances || [];
 }
 
-export async function saveAcceptances(
-  projectPath: string,
-  acceptances: Acceptance[]
-): Promise<void> {
-  const filePath = await ensureAcceptancesDir(projectPath);
-  const data: AcceptancesFile = { acceptances };
-  await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+async function saveAcceptances(projectPath: string, acceptances: Acceptance[]): Promise<void> {
+  await saveJsonFile(getAcceptancesPath(projectPath), { acceptances } satisfies AcceptancesFile);
 }
 
 export function acceptancesToMap(acceptances: Acceptance[]): Record<string, Acceptance> {
@@ -272,34 +220,13 @@ function getImageFlagsPath(projectPath: string): string {
   return resolve(projectPath, '.vrtini', 'acceptances', 'flags.json');
 }
 
-async function ensureImageFlagsPath(projectPath: string): Promise<string> {
-  const path = getImageFlagsPath(projectPath);
-  const dir = dirname(path);
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
-  return path;
-}
-
 export async function loadImageFlags(projectPath: string): Promise<ImageFlag[]> {
-  const filePath = await ensureImageFlagsPath(projectPath);
-  if (!existsSync(filePath)) {
-    return [];
-  }
-  try {
-    const content = await readFile(filePath, 'utf-8');
-    const data: ImageFlagsFile = JSON.parse(content);
-    return data.flags || [];
-  } catch (err) {
-    log.warn(`Failed to load image flags from ${filePath}:`, getErrorMessage(err));
-    return [];
-  }
+  const data = await loadJsonFile<ImageFlagsFile>(getImageFlagsPath(projectPath), { flags: [] });
+  return data.flags || [];
 }
 
-export async function saveImageFlags(projectPath: string, flags: ImageFlag[]): Promise<void> {
-  const filePath = await ensureImageFlagsPath(projectPath);
-  const data: ImageFlagsFile = { flags };
-  await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+async function saveImageFlags(projectPath: string, flags: ImageFlag[]): Promise<void> {
+  await saveJsonFile(getImageFlagsPath(projectPath), { flags } satisfies ImageFlagsFile);
 }
 
 export function imageFlagsToMap(flags: ImageFlag[]): Record<string, ImageFlag> {
@@ -341,9 +268,6 @@ export async function revokeImageFlag(projectPath: string, filename: string): Pr
 
 // ─── Image Management ────────────────────────────────────────────────────────
 
-/** Fallback value for unparseable filename components */
-const UNKNOWN_COMPONENT = 'unknown';
-
 export interface ImageMetadata {
   filename: string;
   scenario: string;
@@ -368,146 +292,6 @@ function getProjectImagePaths(projectPath: string, filename: string, config?: Pa
     baselinePath: resolve(baselineDir, filename),
     diffPath: resolve(diffDir, filename),
   };
-}
-
-export function parseImageFilename(filename: string): ImageMetadata {
-  const name = filename.replace(/\.png$/, '');
-  const parts = name.split('_');
-
-  if (parts.length < 3) {
-    return { filename, scenario: name, browser: UNKNOWN_COMPONENT, viewport: UNKNOWN_COMPONENT };
-  }
-
-  // The browser segment matches: chromium, webkit, chromium-v130, webkit-v17.4, etc.
-  const browserPattern = /^(chromium|webkit)(?:-v(\d+(?:\.\d+)*))?$/i;
-
-  // Search for the browser segment (may not be parts[1] for multi-underscore scenarios).
-  for (let i = 1; i < parts.length - 1; i++) {
-    const match = parts[i].match(browserPattern);
-    if (match) {
-      const scenario = parts.slice(0, i).join('_');
-      const viewport = parts.slice(i + 1).join('_');
-      return {
-        filename,
-        scenario,
-        browser: match[1],
-        version: match[2],
-        viewport,
-      };
-    }
-  }
-
-  // Fallback: assume parts[0] is scenario, parts[1] is browser, rest is viewport
-  return { filename, scenario: parts[0], browser: parts[1], viewport: parts.slice(2).join('_') };
-}
-
-const DEFAULT_AUTO_THRESHOLD_PERCENTILE = 0.95;
-const DEFAULT_AUTO_THRESHOLD_MIN_SAMPLE = 5;
-
-function percentileNearestRank(values: number[], percentile: number): number | undefined {
-  if (values.length === 0) return undefined;
-  const sorted = [...values].sort((a, b) => a - b);
-  const rank = Math.ceil(percentile * sorted.length);
-  const index = Math.min(sorted.length - 1, Math.max(0, rank - 1));
-  return sorted[index];
-}
-
-function normalizeGroupComponent(value?: string): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed || trimmed === UNKNOWN_COMPONENT) return undefined;
-  return trimmed;
-}
-
-function getAcceptanceGroupKey(
-  acceptance: Acceptance
-): { key: string; scenario: string; viewport: string } | null {
-  let scenario = normalizeGroupComponent(acceptance.signals?.scenario);
-  let viewport = normalizeGroupComponent(acceptance.signals?.viewport);
-
-  if (!scenario || !viewport) {
-    const parsed = parseImageFilename(acceptance.filename);
-    scenario = scenario ?? normalizeGroupComponent(parsed.scenario);
-    viewport = viewport ?? normalizeGroupComponent(parsed.viewport);
-  }
-
-  if (!scenario || !viewport) return null;
-
-  return { key: `${scenario}::${viewport}`, scenario, viewport };
-}
-
-export function computeAutoThresholdCaps(
-  acceptances: Acceptance[],
-  options: { percentile?: number; minSampleSize?: number } = {}
-): AutoThresholdCaps {
-  const percentile = options.percentile ?? DEFAULT_AUTO_THRESHOLD_PERCENTILE;
-  const minSampleSize = options.minSampleSize ?? DEFAULT_AUTO_THRESHOLD_MIN_SAMPLE;
-  const groups = new Map<
-    string,
-    {
-      scenario: string;
-      viewport: string;
-      diffPercentages: number[];
-      pixelDiffs: number[];
-    }
-  >();
-
-  for (const acceptance of acceptances) {
-    const groupKey = getAcceptanceGroupKey(acceptance);
-    if (!groupKey) continue;
-    const diffPercentage = acceptance.metrics.diffPercentage;
-    if (!Number.isFinite(diffPercentage)) continue;
-
-    const group =
-      groups.get(groupKey.key) ??
-      ({
-        scenario: groupKey.scenario,
-        viewport: groupKey.viewport,
-        diffPercentages: [],
-        pixelDiffs: [],
-      } satisfies {
-        scenario: string;
-        viewport: string;
-        diffPercentages: number[];
-        pixelDiffs: number[];
-      });
-
-    group.diffPercentages.push(diffPercentage);
-
-    const pixelDiff = acceptance.metrics.pixelDiff;
-    if (typeof pixelDiff === 'number' && Number.isFinite(pixelDiff)) {
-      group.pixelDiffs.push(pixelDiff);
-    }
-
-    groups.set(groupKey.key, group);
-  }
-
-  const caps: Record<string, AutoThresholdCap> = {};
-
-  for (const [key, group] of groups) {
-    if (group.diffPercentages.length < minSampleSize) continue;
-
-    const p95DiffPercentage = percentileNearestRank(group.diffPercentages, percentile);
-    if (p95DiffPercentage === undefined) continue;
-
-    const cap: AutoThresholdCap = {
-      scenario: group.scenario,
-      viewport: group.viewport,
-      sampleSize: group.diffPercentages.length,
-      p95DiffPercentage,
-    };
-
-    if (group.pixelDiffs.length >= minSampleSize) {
-      const p95PixelDiff = percentileNearestRank(group.pixelDiffs, percentile);
-      if (p95PixelDiff !== undefined) {
-        cap.p95PixelDiff = p95PixelDiff;
-        cap.pixelSampleSize = group.pixelDiffs.length;
-      }
-    }
-
-    caps[key] = cap;
-  }
-
-  return { percentile, minSampleSize, caps };
 }
 
 export async function listImages(dir: string): Promise<string[]> {

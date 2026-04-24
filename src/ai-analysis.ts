@@ -21,6 +21,7 @@ import {
   createOpenRouterProvider,
   createGoogleProvider,
 } from './adapters/index.js';
+import { buildRowSignatureSeries, scoreRowAlignment } from './domain/vertical-align.js';
 
 export type { AIAnalysisResult, ChangeCategory, Severity, Recommendation };
 export type { AIProviderName as AIProvider };
@@ -161,34 +162,6 @@ async function writePng(path: string, png: PNG): Promise<void> {
   await writeFile(path, PNG.sync.write(png));
 }
 
-function buildRowSignatureSeries(png: PNG): { luma: number; alpha: number }[] {
-  const sampleStep = Math.max(1, Math.floor(png.width / 256));
-  const rows = new Array<{ luma: number; alpha: number }>(png.height);
-
-  for (let y = 0; y < png.height; y += 1) {
-    let lumaSum = 0;
-    let alphaSum = 0;
-    let count = 0;
-    for (let x = 0; x < png.width; x += sampleStep) {
-      const idx = (y * png.width + x) * 4;
-      const r = png.data[idx] ?? 0;
-      const g = png.data[idx + 1] ?? 0;
-      const b = png.data[idx + 2] ?? 0;
-      const a = (png.data[idx + 3] ?? 255) / 255;
-      const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-      lumaSum += luma * a;
-      alphaSum += a;
-      count += 1;
-    }
-    rows[y] = {
-      luma: count > 0 ? lumaSum / count : 0,
-      alpha: count > 0 ? alphaSum / count : 0,
-    };
-  }
-
-  return rows;
-}
-
 function estimateVerticalOffset(baseline: PNG, test: PNG, requestedMaxShift: number): number {
   const safeMaxShift = Math.max(
     0,
@@ -196,27 +169,23 @@ function estimateVerticalOffset(baseline: PNG, test: PNG, requestedMaxShift: num
   );
   if (safeMaxShift === 0) return 0;
 
-  const baselineRows = buildRowSignatureSeries(baseline);
-  const testRows = buildRowSignatureSeries(test);
+  const baselineRows = buildRowSignatureSeries(baseline.data, baseline.width, baseline.height);
+  const testRows = buildRowSignatureSeries(test.data, test.width, test.height);
   const minOverlapRows = Math.max(120, Math.floor(Math.min(baseline.height, test.height) * 0.35));
 
   let bestShift = 0;
   let bestScore = Number.POSITIVE_INFINITY;
 
   for (let shift = -safeMaxShift; shift <= safeMaxShift; shift += 1) {
-    const baselineStart = Math.max(0, -shift);
-    const testStart = Math.max(0, shift);
-    const overlap = Math.min(baseline.height - baselineStart, test.height - testStart);
-    if (overlap < minOverlapRows) continue;
-
-    let score = 0;
-    for (let row = 0; row < overlap; row += 1) {
-      const b = baselineRows[baselineStart + row];
-      const t = testRows[testStart + row];
-      score += Math.abs((b?.luma ?? 0) - (t?.luma ?? 0)) * 0.85;
-      score += Math.abs((b?.alpha ?? 0) - (t?.alpha ?? 0)) * 0.15;
-    }
-    score /= overlap;
+    const score = scoreRowAlignment(
+      baselineRows,
+      testRows,
+      baseline.height,
+      test.height,
+      shift,
+      minOverlapRows
+    );
+    if (!Number.isFinite(score)) continue;
 
     if (score < bestScore || (score === bestScore && Math.abs(shift) < Math.abs(bestShift))) {
       bestScore = score;

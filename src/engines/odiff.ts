@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { createRequire } from 'module';
 import type { EngineResult, OdiffConfig } from './types.js';
 import { getErrorMessage } from '../core/errors.js';
+import { readOdiffBinaryOverride } from '../core/env.js';
 
 function makeErrorResult(error: string): EngineResult {
   return {
@@ -77,7 +78,7 @@ async function canRunBinary(binaryPath: string): Promise<boolean> {
 }
 
 async function resolveOdiffBinaryPath(): Promise<string | null> {
-  const override = process.env.VRT_ODIFF_BINARY?.trim();
+  const override = readOdiffBinaryOverride();
   if (override) {
     return (await canRunBinary(override)) ? override : null;
   }

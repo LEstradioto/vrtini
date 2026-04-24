@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { PNG } from 'pngjs';
@@ -22,6 +22,7 @@ import {
   createGoogleProvider,
 } from './adapters/index.js';
 import { buildRowSignatureSeries, scoreRowAlignment } from './domain/vertical-align.js';
+import { loadPngSafely, writePng } from './core/png-io.js';
 
 export type { AIAnalysisResult, ChangeCategory, Severity, Recommendation };
 export type { AIProviderName as AIProvider };
@@ -148,20 +149,6 @@ function cropPng(png: PNG, y: number, height: number): PNG {
   return out;
 }
 
-async function readPngSafely(path?: string): Promise<PNG | null> {
-  if (!path || !existsSync(path)) return null;
-  try {
-    const data = await readFile(path);
-    return PNG.sync.read(data);
-  } catch {
-    return null;
-  }
-}
-
-async function writePng(path: string, png: PNG): Promise<void> {
-  await writeFile(path, PNG.sync.write(png));
-}
-
 function estimateVerticalOffset(baseline: PNG, test: PNG, requestedMaxShift: number): number {
   const safeMaxShift = Math.max(
     0,
@@ -251,9 +238,9 @@ async function prepareChunkedImages(
   diffPath: string | undefined,
   vision: Required<AIVisionCompareOptions>
 ): Promise<PreparedChunking> {
-  const baselinePng = await readPngSafely(baselinePath);
-  const testPng = await readPngSafely(testPath);
-  const diffPng = await readPngSafely(diffPath);
+  const baselinePng = await loadPngSafely(baselinePath);
+  const testPng = await loadPngSafely(testPath);
+  const diffPng = await loadPngSafely(diffPath);
 
   if (!baselinePng || !testPng) {
     return {

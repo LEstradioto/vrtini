@@ -1,8 +1,8 @@
-import { createWriteStream, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { mkdir, readFile } from 'fs/promises';
 import { dirname } from 'path';
-import { pipeline } from 'stream/promises';
 import { PNG } from 'pngjs';
+import { loadPng, writePng } from './core/png-io.js';
 import pixelmatch from 'pixelmatch';
 import { comparePerceptualHash, type PerceptualHashResult } from './phash.js';
 import { getErrorMessage } from './core/errors.js';
@@ -35,27 +35,8 @@ import type {
   ComparisonError,
 } from './types/index.js';
 
-async function loadPNG(path: string): Promise<PNG> {
-  const data = await readFile(path);
-  return await new Promise<PNG>((resolve, reject) => {
-    const png = new PNG();
-    png.parse(data, (err, parsed) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      if (!parsed) {
-        reject(new Error('Failed to parse PNG.'));
-        return;
-      }
-      resolve(parsed);
-    });
-  });
-}
-
-async function writePNG(path: string, png: PNG): Promise<void> {
-  await pipeline(png.pack(), createWriteStream(path));
-}
+// PNG I/O is centralized in src/core/png-io.ts
+// (loadPng throws, loadPngSafely returns null, writePng sync-encodes).
 
 function hasCriticalDomTextChanges(domDiff: ComparisonDiff['domDiff']): boolean {
   return (domDiff?.summary.text_changed ?? 0) > 0;
@@ -324,7 +305,7 @@ export async function compareImages(
   }
 
   try {
-    const [img1, img2] = await Promise.all([loadPNG(baselinePath), loadPNG(testPath)]);
+    const [img1, img2] = await Promise.all([loadPng(baselinePath), loadPng(testPath)]);
     maybeTrimUniformBottom(img1, img2, options);
     maybeApplyVerticalAlignment(img1, img2, options);
     const maxOriginalHeight = Math.max(img1.height, img2.height);
@@ -415,7 +396,7 @@ export async function compareImages(
         await mkdir(dirname(diffPath), { recursive: true });
         const diff = new PNG({ width, height });
         diff.data = diffData;
-        await writePNG(diffPath, diff);
+        await writePng(diffPath, diff);
         diffPathValue = diffPath;
       }
 
@@ -438,7 +419,7 @@ export async function compareImages(
     await mkdir(dirname(diffPath), { recursive: true });
     const diff = new PNG({ width, height });
     diff.data = diffData;
-    await writePNG(diffPath, diff);
+    await writePng(diffPath, diff);
 
     const engineConfig = {
       ...options.engines,

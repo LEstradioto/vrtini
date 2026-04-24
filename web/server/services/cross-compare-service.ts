@@ -9,7 +9,20 @@ import {
   crossItemToComparisonResult,
   summarizeCrossItems,
 } from '../../../src/domain/cross-summary.js';
-import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
+import {
+  clearCrossDeletions,
+  clearCrossDeletionsForItems,
+  loadCrossAcceptances,
+  loadCrossDeletions,
+  loadCrossFlags,
+  saveCrossAcceptances,
+  saveCrossDeletions,
+  saveCrossFlags,
+  type CrossAcceptanceRecord,
+  type CrossAcceptanceStore,
+  type CrossFlagRecord,
+  type CrossFlagStore,
+} from './cross-compare-stores.js';
 import { log } from '../../../src/core/logger.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
 import {
@@ -117,84 +130,6 @@ export interface CrossCompareProgressUpdate {
   itemTotal: number;
   progress: number;
   total: number;
-}
-
-interface CrossAcceptanceRecord {
-  acceptedAt: string;
-  reason?: string;
-}
-
-interface CrossFlagRecord {
-  flaggedAt: string;
-  reason?: string;
-}
-
-type CrossAcceptanceStore = Record<string, Record<string, CrossAcceptanceRecord>>;
-type CrossDeletionStore = Record<string, Record<string, { deletedAt: string }>>;
-type CrossFlagStore = Record<string, Record<string, CrossFlagRecord>>;
-
-function getCrossAcceptancesPath(projectPath: string): string {
-  return resolve(projectPath, '.vrtini', 'acceptances', 'cross.json');
-}
-
-function getCrossDeletionsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-deleted.json');
-}
-
-function getCrossFlagsPath(projectPath: string): string {
-  return resolve(projectPath, '.vrtini', 'acceptances', 'cross-flags.json');
-}
-
-const loadCrossAcceptances = (projectPath: string) =>
-  loadJsonFile<CrossAcceptanceStore>(getCrossAcceptancesPath(projectPath), {});
-const saveCrossAcceptances = (projectPath: string, data: CrossAcceptanceStore) =>
-  saveJsonFile(getCrossAcceptancesPath(projectPath), data);
-
-const loadCrossDeletions = (projectPath: string) =>
-  loadJsonFile<CrossDeletionStore>(getCrossDeletionsPath(projectPath), {});
-const saveCrossDeletions = (projectPath: string, data: CrossDeletionStore) =>
-  saveJsonFile(getCrossDeletionsPath(projectPath), data);
-
-const loadCrossFlags = (projectPath: string) =>
-  loadJsonFile<CrossFlagStore>(getCrossFlagsPath(projectPath), {});
-
-const saveCrossFlags = (projectPath: string, data: CrossFlagStore) =>
-  saveJsonFile(getCrossFlagsPath(projectPath), data);
-
-async function clearCrossDeletions(projectPath: string, key: string): Promise<void> {
-  const deletions = await loadCrossDeletions(projectPath);
-  if (!deletions[key]) return;
-  const { [key]: _removed, ...rest } = deletions;
-  await saveCrossDeletions(projectPath, rest);
-}
-
-async function clearCrossDeletionsForItems(
-  projectPath: string,
-  key: string,
-  itemKeys: string[]
-): Promise<void> {
-  if (itemKeys.length === 0) return;
-  const deletions = await loadCrossDeletions(projectPath);
-  const pairDeletions = deletions[key];
-  if (!pairDeletions) return;
-
-  const itemKeySet = new Set(itemKeys);
-  const nextEntries = Object.entries(pairDeletions).filter(([itemKey]) => !itemKeySet.has(itemKey));
-
-  if (nextEntries.length === Object.keys(pairDeletions).length) {
-    return;
-  }
-
-  if (nextEntries.length === 0) {
-    const { [key]: _removed, ...rest } = deletions;
-    await saveCrossDeletions(projectPath, rest);
-    return;
-  }
-
-  await saveCrossDeletions(projectPath, {
-    ...deletions,
-    [key]: Object.fromEntries(nextEntries),
-  });
 }
 
 async function clearCrossAcceptancesForItems(

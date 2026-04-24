@@ -11,13 +11,26 @@ import { getErrorMessage } from '../../../src/core/errors.js';
 import { parseScreenshotFilename } from '../../../src/core/paths.js';
 import { requireProject } from '../plugins/project.js';
 import { rateLimit } from '../plugins/rate-limit.js';
+import { NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
 
 function getJobForProject(jobId: string, projectId: string) {
   const job = getJob(jobId);
-  if (!job || job.projectId !== projectId) {
-    return null;
-  }
+  if (!job || job.projectId !== projectId) return null;
   return job;
+}
+
+function requireJob(jobId: string, projectId: string) {
+  const job = getJobForProject(jobId, projectId);
+  if (!job) throw new NotFoundError('Job not found');
+  return job;
+}
+
+async function loadConfigOrThrow(projectPath: string, configFile: string) {
+  try {
+    return await loadProjectConfig(projectPath, configFile);
+  } catch (err) {
+    throw new ValidationError(`Failed to load config: ${getErrorMessage(err)}`);
+  }
 }
 
 export const testRoutes: FastifyPluginAsync = async (fastify) => {
@@ -30,13 +43,7 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [rateLimit({ max: 3, windowMs: 60_000 }), requireProject] },
     async (request, reply) => {
       const project = request.project;
-      let config;
-      try {
-        config = await loadProjectConfig(project.path, project.configFile);
-      } catch (err) {
-        reply.code(400);
-        return { error: 'Failed to load config', details: getErrorMessage(err) };
-      }
+      const config = await loadConfigOrThrow(project.path, project.configFile);
 
       const scenarioFilter = request.body.scenarios;
       const scenarios = scenarioFilter
@@ -46,7 +53,6 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
       const totalTests = scenarios.length * config.browsers.length * config.viewports.length;
       const job = createJob(project.id, totalTests);
 
-      // Run tests in background
       startTestRun(job, project.path, config, scenarios);
 
       reply.code(202);
@@ -66,17 +72,10 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
       const fileList =
         request.body.filenames || (request.body.filename ? [request.body.filename] : []);
       if (fileList.length === 0) {
-        reply.code(400);
-        return { error: 'filename or filenames is required' };
+        throw new ValidationError('filename or filenames is required');
       }
 
-      let config;
-      try {
-        config = await loadProjectConfig(project.path, project.configFile);
-      } catch (err) {
-        reply.code(400);
-        return { error: 'Failed to load config', details: getErrorMessage(err) };
-      }
+      const config = await loadConfigOrThrow(project.path, project.configFile);
 
       // Parse all filenames and collect unique scenarios/browsers/viewports
       const scenarioNames = new Set<string>();
@@ -114,8 +113,7 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       if (scenarioNames.size === 0) {
-        reply.code(400);
-        return { error: 'No filenames matched config', failed };
+        throw new ValidationError('No filenames matched config', { failed });
       }
 
       const scenarios = config.scenarios.filter((s) => scenarioNames.has(s.name));
@@ -136,16 +134,11 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
   // Abort a running test
   fastify.post<{ Params: { id: string; jobId: string } }>(
     '/projects/:id/test/:jobId/abort',
-    async (request, reply) => {
-      const job = getJobForProject(request.params.jobId, request.params.id);
-      if (!job) {
-        reply.code(404);
-        return { error: 'Job not found' };
-      }
+    async (request) => {
+      const job = requireJob(request.params.jobId, request.params.id);
 
       if (job.status !== 'running') {
-        reply.code(400);
-        return { error: 'Job is not running', status: job.status };
+        throw new ValidationError(`Job is not running (status: ${job.status})`);
       }
 
       await abortJob(job);
@@ -162,13 +155,8 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
   // Get test job status
   fastify.get<{ Params: { id: string; jobId: string } }>(
     '/projects/:id/test/:jobId',
-    async (request, reply) => {
-      const job = getJobForProject(request.params.jobId, request.params.id);
-      if (!job) {
-        reply.code(404);
-        return { error: 'Job not found' };
-      }
-
+    async (request) => {
+      const job = requireJob(request.params.jobId, request.params.id);
       const status = getJobStatus(job);
       return {
         id: status.id,
@@ -191,11 +179,7 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { id: string; jobId: string } }>(
     '/projects/:id/test/:jobId/stream',
     async (request, reply) => {
-      const job = getJobForProject(request.params.jobId, request.params.id);
-      if (!job) {
-        reply.code(404);
-        return { error: 'Job not found' };
-      }
+      const job = requireJob(request.params.jobId, request.params.id);
 
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',

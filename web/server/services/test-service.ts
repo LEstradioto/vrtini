@@ -1,4 +1,4 @@
-import { mkdir, writeFile, unlink } from 'fs/promises';
+import { mkdir, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 import { basename, resolve } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
@@ -20,6 +20,7 @@ import {
   type ImageMetadata,
 } from '../../../src/core/image-metadata.js';
 import { createJobStore } from '../../../src/core/job-store.js';
+import { saveJsonFile } from '../../../src/core/json-file-store.js';
 import { updateProject } from './store.js';
 import {
   loadAcceptances,
@@ -147,7 +148,7 @@ async function writeImageMetadataFile(
     images,
   };
 
-  await writeFile(getImageMetadataPath(dir), JSON.stringify(payload, null, 2));
+  await saveJsonFile(getImageMetadataPath(dir), payload);
 }
 
 async function persistImageMetadata(
@@ -440,7 +441,7 @@ async function persistResults(job: TestJob, projectPath: string): Promise<void> 
 
   const resultsPath = resolve(projectPath, '.vrtini', 'last-results.json');
   const resultsData = buildResultsData(job.results);
-  await writeFile(resultsPath, JSON.stringify(resultsData, null, 2));
+  await saveJsonFile(resultsPath, resultsData);
 }
 
 export function createJob(projectId: string, totalTests: number): TestJob {

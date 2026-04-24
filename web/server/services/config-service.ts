@@ -1,9 +1,10 @@
-import { readFile, writeFile } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve, basename } from 'path';
 import { ConfigSchema } from '../../../src/core/config.js';
 import { listProfileConfigs, type ProfileConfig } from '../../../src/core/config-manager.js';
 import { NotFoundError } from '../../../src/core/api-errors.js';
+import { saveJsonFile } from '../../../src/core/json-file-store.js';
 
 // ─── Server Info ─────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ export async function saveConfig(
   }
 
   const configPath = resolve(projectPath, configFile);
-  await writeFile(configPath, JSON.stringify(result.data, null, 2));
+  await saveJsonFile(configPath, result.data);
 
   return { success: true, config: result.data };
 }

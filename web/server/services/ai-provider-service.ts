@@ -16,6 +16,8 @@ import type { AIProvider } from '../../../src/ai-analysis.js';
 import { hasProviderEnvCredential, readProviderEnv } from '../../../src/core/env.js';
 import { loadProjectConfig } from '../../../src/core/config-manager.js';
 import { safeOpenRouterBaseUrl } from '../../../src/adapters/openrouter-provider.js';
+import { log } from '../../../src/core/logger.js';
+import { getErrorMessage } from '../../../src/core/errors.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -144,7 +146,8 @@ export async function loadProjectAIConfig(
       baseUrl: config.ai.baseUrl,
       visionCompare: config.ai.visionCompare,
     };
-  } catch {
+  } catch (err) {
+    log.warn(`Could not load AI config from project ${projectPath}: ${getErrorMessage(err)}`);
     return undefined;
   }
 }

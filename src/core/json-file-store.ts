@@ -32,16 +32,33 @@ export async function loadJsonFile<T>(path: string, fallback: T): Promise<T> {
     );
     try {
       await writeFile(`${path}.corrupt`, raw);
-    } catch {
-      // best-effort backup
+    } catch (backupErr) {
+      log.warn(`Could not back up corrupt JSON at ${path}: ${getErrorMessage(backupErr)}`);
     }
     return fallback;
+  }
+}
+
+/**
+ * Best-effort cleanup of an orphaned temp file produced by `saveJsonFile` if
+ * the rename fails. Tolerant of ENOENT.
+ */
+async function removeQuietly(path: string): Promise<void> {
+  try {
+    await (await import('fs/promises')).unlink(path);
+  } catch {
+    // already gone
   }
 }
 
 export async function saveJsonFile(path: string, data: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.${randomUUID()}.tmp`;
-  await writeFile(tmp, JSON.stringify(data, null, 2));
-  await rename(tmp, path);
+  try {
+    await writeFile(tmp, JSON.stringify(data, null, 2));
+    await rename(tmp, path);
+  } catch (err) {
+    await removeQuietly(tmp);
+    throw err;
+  }
 }

@@ -1,7 +1,8 @@
-import { mkdir, readFile, writeFile, readdir, rm, stat } from 'fs/promises';
+import { mkdir, readFile, readdir, rm, stat } from 'fs/promises';
 import { existsSync } from 'fs';
 import { resolve, relative, dirname } from 'path';
 import type { VRTConfig } from '../../../src/core/config.js';
+import { saveJsonFile } from '../../../src/core/json-file-store.js';
 import { buildCrossComparePairs } from '../../../src/domain/cross-pairs.js';
 import { evaluateCrossSmartPass } from '../../../src/domain/smart-pass.js';
 import {
@@ -486,7 +487,7 @@ export async function runCrossCompare(
       testLabel: formatBrowser(pair.test),
       items: finalItems,
     };
-    await writeFile(resultsPath, JSON.stringify(crossResults, null, 2));
+    await saveJsonFile(resultsPath, crossResults);
 
     reports.push({
       key: pair.key,
@@ -832,7 +833,7 @@ async function updateCrossResultsAcceptance(
     });
 
     if (changed) {
-      await writeFile(resultsPath, JSON.stringify(data, null, 2));
+      await saveJsonFile(resultsPath, data);
     }
   } catch (err) {
     log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
@@ -873,7 +874,7 @@ async function updateCrossResultsFlag(
     });
 
     if (changed) {
-      await writeFile(resultsPath, JSON.stringify(data, null, 2));
+      await saveJsonFile(resultsPath, data);
     }
   } catch (err) {
     log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
@@ -1013,7 +1014,7 @@ export async function saveCrossItemAIResults(
     });
 
     if (changed) {
-      await writeFile(resultsPath, JSON.stringify(data, null, 2));
+      await saveJsonFile(resultsPath, data);
     }
   } catch (err) {
     log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);

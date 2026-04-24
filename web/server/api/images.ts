@@ -18,6 +18,13 @@ import {
 import { resizeImageData } from '../../../src/domain/image-diff.js';
 import { requireProject } from '../plugins/project.js';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../../src/core/api-errors.js';
+import { createSemaphore } from '../../../src/core/semaphore.js';
+
+// Bound the parallel PNG decode+resize work. pngjs's `PNG.sync.read` blocks
+// the event loop, so many concurrent thumb requests for large images would
+// otherwise tie up the server. 4 is well below the point where latency for
+// small images suffers.
+const thumbnailGate = createSemaphore(4);
 
 export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
   // List images for a project
@@ -94,26 +101,27 @@ export const imagesRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.send(createReadStream(thumbPath));
       }
 
-      const buffer = await readFile(resolved);
-      const png = PNG.sync.read(buffer);
-      const { width, height } = png;
-      const scale = Math.min(maxDimension / width, maxDimension / height, 1);
-      const targetWidth = Math.max(1, Math.round(width * scale));
-      const targetHeight = Math.max(1, Math.round(height * scale));
+      // Cache miss: gate decode+resize so we can't exhaust the event loop
+      // if many parallel thumb requests land at once.
+      const outBuffer = await thumbnailGate(async () => {
+        const buffer = await readFile(resolved);
+        const png = PNG.sync.read(buffer);
+        const { width, height } = png;
+        const scale = Math.min(maxDimension / width, maxDimension / height, 1);
 
-      if (scale >= 1) {
-        reply.header('Cache-Control', 'no-cache, must-revalidate');
-        reply.type('image/png');
-        return reply.send(buffer);
-      }
+        if (scale >= 1) return buffer;
 
-      const resizedData = resizeImageData(png.data, width, height, targetWidth, targetHeight);
-      const resized = new PNG({ width: targetWidth, height: targetHeight });
-      resized.data = resizedData;
-      const outBuffer = PNG.sync.write(resized);
+        const targetWidth = Math.max(1, Math.round(width * scale));
+        const targetHeight = Math.max(1, Math.round(height * scale));
+        const resizedData = resizeImageData(png.data, width, height, targetWidth, targetHeight);
+        const resized = new PNG({ width: targetWidth, height: targetHeight });
+        resized.data = resizedData;
+        const encoded = PNG.sync.write(resized);
 
-      await mkdir(thumbDir, { recursive: true });
-      await writeFile(thumbPath, outBuffer);
+        await mkdir(thumbDir, { recursive: true });
+        await writeFile(thumbPath, encoded);
+        return encoded;
+      });
 
       reply.header('Cache-Control', 'no-cache, must-revalidate');
       reply.type('image/png');

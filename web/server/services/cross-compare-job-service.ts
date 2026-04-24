@@ -60,6 +60,22 @@ function applyProgress(job: CrossCompareJob, update: CrossCompareProgressUpdate)
   job.currentPairTitle = update.pairTitle;
 }
 
+/**
+ * On server shutdown: mark any in-flight cross-compare job as failed so
+ * observers see terminal state on next poll. The underlying Docker work
+ * cannot be aborted mid-flight (no signal plumbing) — containers finish
+ * their current step and the server exits.
+ */
+export function markAllRunningJobsAsFailed(): void {
+  for (const job of jobs.list()) {
+    if (job.status === 'running') {
+      job.status = 'failed';
+      job.error = 'Server shutting down';
+      job.completedAt = new Date().toISOString();
+    }
+  }
+}
+
 export async function startCrossCompareRun(
   job: CrossCompareJob,
   projectPath: string,

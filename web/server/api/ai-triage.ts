@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { resolve } from 'path';
 import { requireProject } from '../plugins/project.js';
+import { rateLimit } from '../plugins/rate-limit.js';
 import { loadConfig } from '../services/project-service.js';
 import type { VRTConfig } from '../../../src/core/config.js';
 import { loadCrossResults, saveCrossItemAIResults } from '../services/cross-compare-service.js';
@@ -14,7 +15,9 @@ export const aiTriageRoutes: FastifyPluginAsync = async (fastify) => {
     Body?: { itemKeys?: string[] };
   }>(
     '/projects/:id/cross-compare/:key/ai-triage',
-    { preHandler: requireProject },
+    // AI triage burns real API credits — cap at 5/min so a stuck loop or
+    // bad client can't rack up cost before a human intervenes.
+    { preHandler: [rateLimit({ max: 5, windowMs: 60_000 }), requireProject] },
     async (request) => {
       const project = request.project;
       const { key } = request.params;

@@ -15,6 +15,8 @@ import { analyzeRoutes } from './api/analyze.js';
 import { crossCompareRoutes } from './api/cross-compare.js';
 import { aiTriageRoutes } from './api/ai-triage.js';
 import { registerAuth } from './plugins/auth.js';
+import { abortAllRunningJobs } from './services/test-service.js';
+import { markAllRunningJobsAsFailed } from './services/cross-compare-job-service.js';
 import { log } from '../../src/core/logger.js';
 import { isApiError } from '../../src/core/api-errors.js';
 import {
@@ -150,6 +152,24 @@ export async function startServer(options: ServerOptions): Promise<void> {
     // In dev, proxy to Vite dev server
     log.info('Client dist not found. Run `npm run build:client` or use Vite dev server.');
   }
+
+  // Graceful shutdown: on SIGTERM/SIGINT, abort in-flight jobs so Docker
+  // containers don't orphan, then close Fastify to drain open sockets.
+  const shutdown = async (signal: string): Promise<void> => {
+    log.info(`\nReceived ${signal}, shutting down...`);
+    try {
+      await abortAllRunningJobs();
+      markAllRunningJobsAsFailed();
+      await fastify.close();
+      log.info('Shutdown complete.');
+      process.exit(0);
+    } catch (err) {
+      log.error('Shutdown failed:', err);
+      process.exit(1);
+    }
+  };
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+  process.once('SIGINT', () => void shutdown('SIGINT'));
 
   try {
     await fastify.listen({ port, host });

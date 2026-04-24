@@ -500,6 +500,15 @@ export async function abortJob(job: TestJob): Promise<void> {
   }
 }
 
+/**
+ * Abort every running test job. Used by the graceful-shutdown hook so the
+ * server doesn't leak Docker containers on SIGTERM/SIGINT.
+ */
+export async function abortAllRunningJobs(): Promise<void> {
+  const running = jobs.list().filter((job) => job.status === 'running');
+  await Promise.all(running.map((job) => abortJob(job).catch(() => undefined)));
+}
+
 async function runTests(
   job: TestJob,
   projectPath: string,

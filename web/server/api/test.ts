@@ -191,7 +191,31 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
         reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
       };
 
+      // Hard cap so a stalled job or a client that never disconnects can't
+      // keep the event loop busy forever. Tests typically finish in minutes;
+      // 30 min is the upper bound we're willing to stream for.
+      const MAX_STREAM_MS = 30 * 60 * 1000;
+      const deadline = Date.now() + MAX_STREAM_MS;
+
+      let closed = false;
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(interval);
+        try {
+          reply.raw.end();
+        } catch {
+          // socket already gone
+        }
+      };
+
       const interval = setInterval(() => {
+        if (Date.now() > deadline) {
+          sendEvent({ status: job.status, timedOut: true });
+          cleanup();
+          return;
+        }
+
         sendEvent({
           status: job.status,
           progress: job.progress,
@@ -201,14 +225,12 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
 
         if (job.status !== 'running') {
           sendEvent({ status: job.status, results: job.results, error: job.error });
-          clearInterval(interval);
-          reply.raw.end();
+          cleanup();
         }
       }, 500);
 
-      request.raw.on('close', () => {
-        clearInterval(interval);
-      });
+      reply.raw.on('error', cleanup);
+      request.raw.on('close', cleanup);
     }
   );
 };

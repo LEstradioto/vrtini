@@ -21,6 +21,7 @@ import {
 } from '../../../src/core/image-metadata.js';
 import { createJobStore } from '../../../src/core/job-store.js';
 import { saveJsonFile } from '../../../src/core/json-file-store.js';
+import { resolveDiffThresholds } from '../../../src/domain/auto-threshold.js';
 import { updateProject } from './store.js';
 import {
   loadAcceptances,
@@ -71,44 +72,6 @@ export type TestJobStatus = Omit<TestJob, 'abortController'>;
 type ProjectDirs = ReturnType<typeof getProjectDirs>;
 
 const jobs = createJobStore<TestJob>();
-
-function buildAutoThresholdKey(scenarioName: string, viewportName: string): string {
-  return `${scenarioName.trim()}::${viewportName.trim()}`;
-}
-
-function capAtCeiling(value: number | undefined, ceiling: number | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  if (ceiling === undefined) return value;
-  return Math.min(value, ceiling);
-}
-
-function resolveDiffThresholds(
-  scenario: VRTConfig['scenarios'][number],
-  viewport: VRTConfig['viewports'][number],
-  config: VRTConfig,
-  autoThresholdCaps: AutoThresholdCaps | null
-): { maxDiffPercentage?: number; maxDiffPixels?: number } {
-  const baseMaxDiffPercentage =
-    scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage;
-  const baseMaxDiffPixels =
-    scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels;
-
-  let maxDiffPercentage = baseMaxDiffPercentage;
-  let maxDiffPixels = baseMaxDiffPixels;
-
-  if (autoThresholdCaps) {
-    const key = buildAutoThresholdKey(scenario.name, viewport.name);
-    const cap = autoThresholdCaps.caps[key];
-    if (cap?.p95DiffPercentage !== undefined) {
-      maxDiffPercentage = capAtCeiling(cap.p95DiffPercentage, baseMaxDiffPercentage);
-    }
-    if (cap?.p95PixelDiff !== undefined) {
-      maxDiffPixels = capAtCeiling(cap.p95PixelDiff, baseMaxDiffPixels);
-    }
-  }
-
-  return { maxDiffPercentage, maxDiffPixels };
-}
 
 async function loadAutoThresholdCaps(
   projectPath: string,

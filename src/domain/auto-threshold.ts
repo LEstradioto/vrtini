@@ -5,6 +5,7 @@
 
 import type { Acceptance } from './acceptance.js';
 import { parseImageFilename, UNKNOWN_COMPONENT } from './image-naming.js';
+import type { VRTConfig } from '../core/config.js';
 
 export interface AutoThresholdCap {
   scenario: string;
@@ -122,4 +123,56 @@ export function computeAutoThresholdCaps(
   }
 
   return { percentile, minSampleSize, caps };
+}
+
+// ─── Per-scenario threshold resolution ──────────────────────────────────────
+
+/**
+ * Stable key used to pair an auto-threshold cap with a scenario × viewport
+ * combination. Trimmed so trailing whitespace in the config doesn't split
+ * caps.
+ */
+export function buildAutoThresholdKey(scenarioName: string, viewportName: string): string {
+  return `${scenarioName.trim()}::${viewportName.trim()}`;
+}
+
+function capAtCeiling(value: number | undefined, ceiling: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (ceiling === undefined) return value;
+  return Math.min(value, ceiling);
+}
+
+/**
+ * Resolve the effective diff thresholds for one (scenario, viewport).
+ *
+ * Precedence: scenario.diffThreshold → config.diffThreshold → undefined.
+ * If `autoThresholdCaps` has a p95 cap for this (scenario, viewport), it is
+ * applied as a *ceiling* on the user-supplied threshold (never raises it).
+ */
+export function resolveDiffThresholds(
+  scenario: VRTConfig['scenarios'][number],
+  viewport: VRTConfig['viewports'][number],
+  config: VRTConfig,
+  autoThresholdCaps: AutoThresholdCaps | null
+): { maxDiffPercentage?: number; maxDiffPixels?: number } {
+  const baseMaxDiffPercentage =
+    scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage;
+  const baseMaxDiffPixels =
+    scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels;
+
+  if (!autoThresholdCaps) {
+    return { maxDiffPercentage: baseMaxDiffPercentage, maxDiffPixels: baseMaxDiffPixels };
+  }
+
+  const cap = autoThresholdCaps.caps[buildAutoThresholdKey(scenario.name, viewport.name)];
+  return {
+    maxDiffPercentage:
+      cap?.p95DiffPercentage !== undefined
+        ? capAtCeiling(cap.p95DiffPercentage, baseMaxDiffPercentage)
+        : baseMaxDiffPercentage,
+    maxDiffPixels:
+      cap?.p95PixelDiff !== undefined
+        ? capAtCeiling(cap.p95PixelDiff, baseMaxDiffPixels)
+        : baseMaxDiffPixels,
+  };
 }

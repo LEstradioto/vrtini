@@ -34,7 +34,7 @@ import {
 import { compareImages } from '../../../src/compare.js';
 import { formatBrowser, type ComparisonResult } from '../../../src/types/index.js';
 import { getDiffPath } from '../../../src/types/index.js';
-import { buildEnginesConfig } from '../../../src/core/compare-runner.js';
+import { buildCompareOptions } from '../../../src/core/compare-runner.js';
 import { generateReport } from '../../../src/report.js';
 import type { PerceptualHashResult } from '../../../src/phash.js';
 import type { AIAnalysisResult } from '../../../src/domain/ai-prompt.js';
@@ -230,7 +230,6 @@ interface CrossRunPlan {
   itemKeyFilter: Set<string> | null;
   isFilteredRun: boolean;
   quickMode: boolean;
-  enginesConfig: ReturnType<typeof buildEnginesConfig>;
   pairTotal: number;
   itemTotalPerPair: number;
   totalPlannedItems: number;
@@ -298,7 +297,6 @@ function resolveCrossRunPlan(config: VRTConfig, options: CrossCompareRunOptions)
     itemKeyFilter !== null || scenarioFilter.size > 0 || viewportFilter.size > 0;
 
   const quickMode = config.quickMode ?? false;
-  const enginesConfig = buildEnginesConfig(quickMode, config.engines);
   const pairTotal = selectedPairs.length;
   const itemTotalPerPair = scenariosToRun.reduce((acc, scenario) => {
     for (const viewport of viewportsToRun) {
@@ -317,7 +315,6 @@ function resolveCrossRunPlan(config: VRTConfig, options: CrossCompareRunOptions)
     itemKeyFilter,
     isFilteredRun,
     quickMode,
-    enginesConfig,
     pairTotal,
     itemTotalPerPair,
     totalPlannedItems,
@@ -330,7 +327,6 @@ interface CompareCrossItemCtx {
   diffDir: string;
   config: VRTConfig;
   quickMode: boolean;
-  enginesConfig: ReturnType<typeof buildEnginesConfig>;
 }
 
 /**
@@ -346,7 +342,7 @@ async function compareCrossItem(
   itemKey: string,
   ctx: CompareCrossItemCtx
 ): Promise<CrossResultItem> {
-  const { projectPath, outputDir, diffDir, config, quickMode, enginesConfig } = ctx;
+  const { projectPath, outputDir, diffDir, config, quickMode } = ctx;
   const baselineFilename = getScreenshotFilename(
     scenario.name,
     pair.baseline.name,
@@ -374,23 +370,22 @@ async function compareCrossItem(
   );
   const diffPath = resolve(diffDir, diffName);
 
-  const result = await compareImages(baselinePath, testPath, diffPath, {
-    threshold: config.threshold,
-    diffColor: config.diffColor,
-    computePHash: !quickMode,
-    engines: enginesConfig,
-    keepDiffOnMatch: true,
-    sizeNormalization: config.crossCompare?.normalization,
-    sizeMismatchHandling: config.crossCompare?.mismatch,
-    verticalAlign: config.crossCompare?.verticalAlign,
-    antialiasing: config.engines?.pixelmatch?.antialiasing,
-    maxDiffPercentage:
-      scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
-    maxDiffPixels: scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
-    baselineSnapshot:
-      domSnapshotEnabled && baselineSnapshotFound ? baselineSnapshotPath : undefined,
-    testSnapshot: domSnapshotEnabled && testSnapshotFound ? testSnapshotPath : undefined,
-  });
+  const compareOpts = buildCompareOptions(
+    config,
+    scenario,
+    viewport,
+    { baselinePath, testPath },
+    {
+      quickMode,
+      overrides: {
+        keepDiffOnMatch: true,
+        sizeNormalization: config.crossCompare?.normalization,
+        sizeMismatchHandling: config.crossCompare?.mismatch,
+        verticalAlign: config.crossCompare?.verticalAlign,
+      },
+    }
+  );
+  const result = await compareImages(baselinePath, testPath, diffPath, compareOpts);
 
   const diffPathValue = getDiffPath(result);
   const itemBase: CrossResultItem = {
@@ -446,7 +441,6 @@ export async function runCrossCompare(
     itemKeyFilter,
     isFilteredRun,
     quickMode,
-    enginesConfig,
     pairTotal,
     itemTotalPerPair,
     totalPlannedItems,
@@ -517,7 +511,6 @@ export async function runCrossCompare(
       diffDir,
       config,
       quickMode,
-      enginesConfig,
     };
 
     for (const scenario of scenariosToRun) {

@@ -9,7 +9,6 @@ import type { ComparisonResult } from '../../../src/types/index.js';
 import {
   getProjectDirs,
   getScreenshotFilename,
-  getSnapshotFilename,
   getImageMetadataPath,
 } from '../../../src/core/paths.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
@@ -22,6 +21,12 @@ import {
 import { createJobStore } from '../../../src/core/job-store.js';
 import { saveJsonFile } from '../../../src/core/json-file-store.js';
 import { resolveDiffThresholds } from '../../../src/domain/auto-threshold.js';
+import {
+  buildCaptureResultWarnings,
+  buildDiagnosticWarnings,
+  collectCaptureDiagnostics,
+  type CaptureDiagnostics,
+} from '../../../src/domain/capture-diagnostics.js';
 import { updateProject } from './store.js';
 import {
   loadAcceptances,
@@ -144,136 +149,21 @@ async function clearStaleDiffArtifacts(
   }
 }
 
-function collectCaptureDiagnostics(
-  dirs: ProjectDirs,
-  config: VRTConfig,
-  scenarios: VRTConfig['scenarios']
-): {
-  expectedScreenshots: number;
-  capturedScreenshots: number;
-  expectedSnapshots: number;
-  capturedSnapshots: number;
-  missingScreenshotSamples: string[];
-  missingSnapshotSamples: string[];
-} {
-  let expectedScreenshots = 0;
-  let capturedScreenshots = 0;
-  let expectedSnapshots = 0;
-  let capturedSnapshots = 0;
-  const missingScreenshotSamples: string[] = [];
-  const missingSnapshotSamples: string[] = [];
-  const captureSnapshots = !!config.domSnapshot?.enabled;
-
-  for (const scenario of scenarios) {
-    for (const browserConfig of config.browsers) {
-      const { name: browser, version } = normalizeBrowserConfig(browserConfig);
-      for (const viewport of config.viewports) {
-        const screenshotName = getScreenshotFilename(
-          scenario.name,
-          browser,
-          viewport.name,
-          version
-        );
-        const screenshotPath = resolve(dirs.outputDir, screenshotName);
-        expectedScreenshots += 1;
-        if (existsSync(screenshotPath)) {
-          capturedScreenshots += 1;
-        } else if (missingScreenshotSamples.length < 8) {
-          missingScreenshotSamples.push(screenshotName);
-        }
-
-        if (!captureSnapshots) continue;
-
-        const snapshotName = getSnapshotFilename(screenshotName);
-        const snapshotPath = resolve(dirs.outputDir, snapshotName);
-        expectedSnapshots += 1;
-        if (existsSync(snapshotPath)) {
-          capturedSnapshots += 1;
-        } else if (missingSnapshotSamples.length < 8) {
-          missingSnapshotSamples.push(snapshotName);
-        }
-      }
-    }
-  }
-
-  return {
-    expectedScreenshots,
-    capturedScreenshots,
-    expectedSnapshots,
-    capturedSnapshots,
-    missingScreenshotSamples,
-    missingSnapshotSamples,
-  };
-}
-
 function applyCaptureDiagnostics(
   job: TestJob,
-  diagnostics: {
-    expectedScreenshots: number;
-    capturedScreenshots: number;
-    expectedSnapshots: number;
-    capturedSnapshots: number;
-    missingScreenshotSamples: string[];
-    missingSnapshotSamples: string[];
-  },
+  diagnostics: CaptureDiagnostics,
   config: VRTConfig
 ): void {
   job.captureDiagnostics = diagnostics;
-  const warnings: string[] = [...(job.warnings ?? [])];
-
-  if (diagnostics.capturedScreenshots < diagnostics.expectedScreenshots) {
-    warnings.push(
-      `Captured ${diagnostics.capturedScreenshots}/${diagnostics.expectedScreenshots} screenshot(s).`
-    );
-  }
-
-  if (config.domSnapshot?.enabled) {
-    if (diagnostics.capturedSnapshots < diagnostics.expectedSnapshots) {
-      warnings.push(
-        `Captured ${diagnostics.capturedSnapshots}/${diagnostics.expectedSnapshots} DOM snapshot(s).`
-      );
-    }
-    if (diagnostics.expectedSnapshots > 0 && diagnostics.capturedSnapshots === 0) {
-      warnings.push(
-        'DOM snapshot is enabled but no snapshots were generated. Rebuild/update Docker image and rerun tests.'
-      );
-    }
-  }
-
+  const warnings = [
+    ...(job.warnings ?? []),
+    ...buildDiagnosticWarnings(diagnostics, !!config.domSnapshot?.enabled),
+  ];
   job.warnings = warnings.length > 0 ? warnings : undefined;
 }
 
-function formatCaptureTaskLabel(result: ScreenshotResult): string {
-  const versionSuffix = result.task.version ? `-v${result.task.version}` : '';
-  return `${result.task.scenario.name} · ${result.task.browser}${versionSuffix} · ${result.task.viewport.name}`;
-}
-
 function appendCaptureWarnings(job: TestJob, results: ScreenshotResult[]): void {
-  const warnings: string[] = [...(job.warnings ?? [])];
-  const captureWarnings = results.filter(
-    (result) => typeof result.warning === 'string' && result.warning.trim().length > 0
-  );
-  if (captureWarnings.length > 0) {
-    const samples = captureWarnings
-      .slice(0, 3)
-      .map((result) => formatCaptureTaskLabel(result))
-      .join(', ');
-    warnings.push(
-      `Capture fallback was used for ${captureWarnings.length}/${results.length} screenshot(s). Samples: ${samples}`
-    );
-  }
-
-  const failed = results.filter((result) => !result.success);
-  if (failed.length > 0) {
-    const samples = failed
-      .slice(0, 3)
-      .map((result) => formatCaptureTaskLabel(result))
-      .join(', ');
-    warnings.push(
-      `Screenshot capture failed for ${failed.length}/${results.length} item(s). Samples: ${samples}`
-    );
-  }
-
+  const warnings = [...(job.warnings ?? []), ...buildCaptureResultWarnings(results)];
   job.warnings = warnings.length > 0 ? warnings : undefined;
 }
 

@@ -166,6 +166,55 @@ async function clearCrossAcceptancesForItems(
   }
 }
 
+async function getMtimeIso(absolutePath: string): Promise<string | undefined> {
+  try {
+    const s = await stat(absolutePath);
+    return s.mtime.toISOString();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Decorate items with mtime stamps for baseline/test/diff and an `outdated`
+ * flag set when either source screenshot was modified after the cross-compare
+ * report was generated. Stat failures are tolerated (item just shows no
+ * stamp). Reapplies smart-pass metadata since `outdated` participates in it.
+ */
+async function enrichItemsWithMtimes(
+  items: CrossResultItem[],
+  projectPath: string,
+  generatedAtMs: number
+): Promise<CrossResultItem[]> {
+  return Promise.all(
+    items.map(async (item) => {
+      const baselineUpdatedAt = item.baseline
+        ? await getMtimeIso(resolve(projectPath, item.baseline))
+        : undefined;
+      const testUpdatedAt = item.test
+        ? await getMtimeIso(resolve(projectPath, item.test))
+        : undefined;
+      const diffUpdatedAt = item.diff
+        ? await getMtimeIso(resolve(projectPath, item.diff))
+        : undefined;
+
+      const latestSourceMs = Math.max(
+        baselineUpdatedAt ? Date.parse(baselineUpdatedAt) || 0 : 0,
+        testUpdatedAt ? Date.parse(testUpdatedAt) || 0 : 0
+      );
+      const outdated = generatedAtMs > 0 && latestSourceMs > generatedAtMs;
+
+      return withSmartPassMetadata({
+        ...item,
+        baselineUpdatedAt,
+        testUpdatedAt,
+        diffUpdatedAt,
+        outdated,
+      });
+    })
+  );
+}
+
 function withSmartPassMetadata(item: CrossResultItem): CrossResultItem {
   const evaluation = evaluateCrossSmartPass(item);
   return { ...item, smartPass: evaluation.smartPass, smartPassReason: evaluation.reason };
@@ -667,40 +716,8 @@ export async function loadCrossResults(
     (item) => !pairDeletions[item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport)]
   );
 
-  async function getMtimeIso(relativePath: string | undefined): Promise<string | undefined> {
-    if (!relativePath) return undefined;
-    try {
-      const s = await stat(resolve(projectPath, relativePath));
-      return s.mtime.toISOString();
-    } catch {
-      return undefined;
-    }
-  }
-
   const generatedAtMs = Date.parse(results.generatedAt) || 0;
-
-  results.items = await Promise.all(
-    results.items.map(async (item) => {
-      const baselineUpdatedAt = await getMtimeIso(item.baseline);
-      const testUpdatedAt = await getMtimeIso(item.test);
-      const diffUpdatedAt = await getMtimeIso(item.diff);
-
-      // Item is outdated if any source screenshot was modified after the comparison ran
-      const latestMtime = Math.max(
-        baselineUpdatedAt ? Date.parse(baselineUpdatedAt) || 0 : 0,
-        testUpdatedAt ? Date.parse(testUpdatedAt) || 0 : 0
-      );
-      const outdated = generatedAtMs > 0 && latestMtime > generatedAtMs;
-
-      return withSmartPassMetadata({
-        ...item,
-        baselineUpdatedAt,
-        testUpdatedAt,
-        diffUpdatedAt,
-        outdated,
-      });
-    })
-  );
+  results.items = await enrichItemsWithMtimes(results.items, projectPath, generatedAtMs);
 
   return results;
 }

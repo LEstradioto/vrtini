@@ -3,21 +3,20 @@ import { resolve, join, relative } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { loadConfig } from '../core/config.js';
-import { normalizeBrowserConfig } from '../core/browser-versions.js';
 import { getProjectDirs, getScreenshotFilename, getSnapshotFilename } from '../core/paths.js';
 import { compareImages } from '../compare.js';
 import { generateReport } from '../report.js';
-import {
-  formatBrowser,
-  getDiffPath,
-  type BrowserRef,
-  type ComparisonResult,
-} from '../types/index.js';
+import { formatBrowser, getDiffPath, type ComparisonResult } from '../types/index.js';
 import { buildEnginesConfig } from '../core/compare-runner.js';
 import { getErrorMessage } from '../core/errors.js';
 import { log } from '../core/logger.js';
 import { runWithConcurrency } from '../core/async.js';
 import type { VRTConfig, Scenario, Viewport } from '../core/config.js';
+import {
+  buildCrossComparePairs as buildPairsFromBrowsers,
+  type CrossComparePair,
+} from '../domain/cross-pairs.js';
+import { buildCrossItemKey } from '../domain/cross-summary.js';
 
 interface CrossResultItem {
   itemKey?: string;
@@ -58,69 +57,25 @@ interface CrossResults {
   items: CrossResultItem[];
 }
 
-interface CrossPair {
-  key: string;
-  title: string;
-  baseline: BrowserRef;
-  test: BrowserRef;
-}
-
-function buildItemKey(scenario: string, viewport: string): string {
-  return `${scenario}__${viewport}`;
-}
-
 function buildCrossComparePairs(config: VRTConfig): {
-  pairs: CrossPair[];
+  pairs: CrossComparePair[];
   availableKeys: string[];
 } {
-  const all = config.browsers.map(normalizeBrowserConfig);
-  const pairs: CrossPair[] = [];
-  const seen = new Set<string>();
-
-  for (let i = 0; i < all.length; i++) {
-    for (let j = i + 1; j < all.length; j++) {
-      const a = all[i];
-      const b = all[j];
-
-      // Skip identical entries (same name and version)
-      if (a.name === b.name && a.version === b.version) continue;
-
-      // Baseline preference: unversioned (latest) over versioned (old)
-      let baseline: BrowserRef = a;
-      let test: BrowserRef = b;
-      if (a.version && !b.version) {
-        baseline = b;
-        test = a;
-      }
-
-      const key = `${formatBrowser(baseline)}_vs_${formatBrowser(test)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      pairs.push({
-        key,
-        title: `Cross Compare: ${formatBrowser(baseline)} vs ${formatBrowser(test)}`,
-        baseline,
-        test,
-      });
-    }
-  }
-
+  const pairs = buildPairsFromBrowsers(config.browsers);
   if (pairs.length === 0) {
     throw new Error(
       'No valid cross-compare pairs could be built from config browsers. Need at least two distinct browsers.'
     );
   }
-
   return { pairs, availableKeys: pairs.map((p) => p.key) };
 }
 
 function filterPairs(
-  pairs: CrossPair[],
+  pairs: CrossComparePair[],
   availableKeys: string[],
   crossCompare: VRTConfig['crossCompare'],
   cliPair?: string
-): CrossPair[] {
+): CrossComparePair[] {
   const allowedPairs = new Set((crossCompare?.pairs ?? []).map((pair) => pair.trim()));
   let selected = allowedPairs.size > 0 ? pairs.filter((p) => allowedPairs.has(p.key)) : pairs;
 
@@ -204,7 +159,7 @@ function parseAndValidateFilters(
 }
 
 async function runPairComparison(
-  pair: CrossPair,
+  pair: CrossComparePair,
   scenarios: Scenario[],
   viewports: Viewport[],
   config: VRTConfig,
@@ -288,7 +243,7 @@ async function runPairComparison(
 
       const diffPathValue = getDiffPath(result);
       const item: CrossResultItem = {
-        itemKey: buildItemKey(scenario.name, viewport.name),
+        itemKey: buildCrossItemKey(scenario.name, viewport.name),
         name: scenario.name,
         scenario: scenario.name,
         viewport: viewport.name,

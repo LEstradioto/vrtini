@@ -84,6 +84,52 @@ export function scoreRowAlignment(
   return score / overlap;
 }
 
+/**
+ * Find the vertical shift (in rows) that best aligns `test` to `baseline`.
+ * Used by the vision-chunking pipeline to align two screenshots before
+ * splitting into chunks. Lighter cousin of `applyVerticalAlignment`:
+ * returns just the shift (does not mutate, no confidence gating).
+ *
+ * `requestedMaxShift` is clamped to 20% of the smaller image height.
+ */
+export function estimateVerticalOffset(
+  baseline: PngLike,
+  test: PngLike,
+  requestedMaxShift: number
+): number {
+  const safeMaxShift = Math.max(
+    0,
+    Math.min(requestedMaxShift, Math.floor(Math.min(baseline.height, test.height) * 0.2))
+  );
+  if (safeMaxShift === 0) return 0;
+
+  const baselineRows = buildRowSignatureSeries(baseline.data, baseline.width, baseline.height);
+  const testRows = buildRowSignatureSeries(test.data, test.width, test.height);
+  const minOverlapRows = Math.max(120, Math.floor(Math.min(baseline.height, test.height) * 0.35));
+
+  let bestShift = 0;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let shift = -safeMaxShift; shift <= safeMaxShift; shift += 1) {
+    const score = scoreRowAlignment(
+      baselineRows,
+      testRows,
+      baseline.height,
+      test.height,
+      shift,
+      minOverlapRows
+    );
+    if (!Number.isFinite(score)) continue;
+
+    if (score < bestScore || (score === bestScore && Math.abs(shift) < Math.abs(bestShift))) {
+      bestScore = score;
+      bestShift = shift;
+    }
+  }
+
+  return bestShift;
+}
+
 // ─── Apply-vertical-alignment pass ──────────────────────────────────────────
 
 export interface VerticalAlignOptions {

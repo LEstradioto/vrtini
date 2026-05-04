@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { resolve, join, relative } from 'path';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir } from 'fs/promises';
+import { saveJsonFile } from '../core/json-file-store.js';
 import { existsSync } from 'fs';
 import { loadConfig } from '../core/config.js';
 import { getProjectDirs, getScreenshotFilename } from '../core/paths.js';
@@ -313,7 +314,7 @@ async function runPairComparison(
     testLabel: formatBrowser(pair.test),
     items,
   };
-  await writeFile(resultsPath, JSON.stringify(crossResults, null, 2));
+  await saveJsonFile(resultsPath, crossResults);
 
   log.info(`✓ ${pair.title}`);
   log.info(`  Report: ${reportPath}`);

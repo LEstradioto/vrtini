@@ -24,7 +24,7 @@ import {
   loadImageFlags,
   acceptancesToMap,
   imageFlagsToMap,
-} from './acceptance-service.js';
+} from '../../../src/core/acceptance-store.js';
 
 export interface ImageMetadata {
   filename: string;

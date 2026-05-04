@@ -1,6 +1,6 @@
-import { getAcceptancesPath, getImageFlagsPath } from '../../../src/core/paths.js';
-import { loadJsonFile, saveJsonFile } from '../../../src/core/json-file-store.js';
-import type { Acceptance, ImageFlag } from '../../../src/domain/acceptance.js';
+import { getAcceptancesPath, getImageFlagsPath } from './paths.js';
+import { loadJsonFile, saveJsonFile } from './json-file-store.js';
+import type { Acceptance, ImageFlag } from '../domain/acceptance.js';
 
 interface AcceptancesFile {
   acceptances: Acceptance[];

@@ -5,7 +5,7 @@
  */
 
 export * from './config-service.js';
-export * from './acceptance-service.js';
+export * from '../../../src/core/acceptance-store.js';
 export * from './image-service.js';
 
 // Domain re-exports kept for backward compat with existing imports that

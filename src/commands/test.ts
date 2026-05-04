@@ -19,9 +19,11 @@ import {
 } from '../core/compare-runner.js';
 import { runWithConcurrency } from '../core/async.js';
 import { persistImageMetadata } from '../core/image-metadata.js';
+import { loadAcceptances } from '../core/acceptance-store.js';
 import type { VRTConfig } from '../core/config.js';
 import { classifyFindings, classificationToCategory } from '../domain/classification.js';
 import type { DomDiffContext } from '../domain/ai-prompt.js';
+import { computeAutoThresholdCaps, type AutoThresholdCaps } from '../domain/auto-threshold.js';
 
 function buildStatusInfo(result: ComparisonResult): { status: string; info: string } {
   switch (result.reason) {
@@ -105,14 +107,30 @@ async function captureScreenshots(config: VRTConfig, scenarioFilter?: string[]):
   }
 }
 
+async function loadAutoThresholdCaps(
+  projectPath: string,
+  config: VRTConfig
+): Promise<AutoThresholdCaps | null> {
+  if (!config.autoThresholds?.enabled) return null;
+  const acceptances = await loadAcceptances(projectPath);
+  return computeAutoThresholdCaps(acceptances, {
+    percentile: config.autoThresholds.percentile,
+    minSampleSize: config.autoThresholds.minSampleSize,
+  });
+}
+
 async function compareTask(
   task: ComparisonTask,
   config: VRTConfig,
   quickMode: boolean,
-  ai: AISettings
+  ai: AISettings,
+  autoThresholdCaps: AutoThresholdCaps | null
 ): Promise<ComparisonResult> {
   const { scenario, browser, viewport, testPath, baselinePath, diffPath } = task;
-  const compareOptions = buildCompareOptions(config, scenario, viewport, task, { quickMode });
+  const compareOptions = buildCompareOptions(config, scenario, viewport, task, {
+    quickMode,
+    autoThresholdCaps,
+  });
 
   let result: ComparisonResult = await compareImages(
     baselinePath,
@@ -281,6 +299,7 @@ export function registerTestCommand(program: Command): void {
           );
         }
         const ai = resolveAISettings(options, config);
+        const autoThresholdCaps = await loadAutoThresholdCaps(cwd, config);
 
         const comparisonTasks = buildComparisonMatrix(
           outputDir,
@@ -292,7 +311,7 @@ export function registerTestCommand(program: Command): void {
         const comparisons = await runWithConcurrency(
           comparisonTasks,
           config.concurrency ?? 5,
-          (task) => compareTask(task, config, quickMode, ai)
+          (task) => compareTask(task, config, quickMode, ai, autoThresholdCaps)
         );
 
         log.info('\n📊 Generating report...\n');

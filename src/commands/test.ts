@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { mkdir, readdir, writeFile } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import { loadConfig } from '../core/config.js';
 import { runScreenshotTasks } from '../docker.js';
 import { compareImages } from '../compare.js';
@@ -8,12 +8,7 @@ import { isDiff } from '../types/index.js';
 import { generateReport } from '../report.js';
 import { analyzeWithAI, type AIProvider } from '../ai-analysis.js';
 import { calculateConfidence } from '../confidence.js';
-import {
-  getProjectDirs,
-  getReportPath,
-  getImageMetadataPath,
-  getSnapshotFilename,
-} from '../core/paths.js';
+import { getProjectDirs, getReportPath, getSnapshotFilename } from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';
 import { log } from '../core/logger.js';
 import { openInBrowser } from './utils.js';
@@ -23,11 +18,7 @@ import {
   type ComparisonTask,
 } from '../core/compare-runner.js';
 import { runWithConcurrency } from '../core/async.js';
-import {
-  buildImageMetadataIndex,
-  IMAGE_METADATA_SCHEMA_VERSION,
-  type ImageMetadata,
-} from '../core/image-metadata.js';
+import { persistImageMetadata } from '../core/image-metadata.js';
 import type { VRTConfig } from '../core/config.js';
 import { classifyFindings, classificationToCategory } from '../domain/classification.js';
 import type { DomDiffContext } from '../domain/ai-prompt.js';
@@ -67,51 +58,6 @@ function buildStatusInfo(result: ComparisonResult): { status: string; info: stri
       return { status: '✗', info: parts.join(' | ') };
     }
   }
-}
-
-async function listImages(dir: string): Promise<string[]> {
-  try {
-    const files = await readdir(dir);
-    return files.filter((file) => file.endsWith('.png'));
-  } catch {
-    return [];
-  }
-}
-
-async function writeImageMetadataFile(
-  dir: string,
-  metadataIndex: Record<string, ImageMetadata>
-): Promise<void> {
-  const files = await listImages(dir);
-  const images: Record<string, ImageMetadata> = {};
-
-  for (const filename of files) {
-    const metadata = metadataIndex[filename];
-    if (metadata) {
-      images[filename] = metadata;
-    }
-  }
-
-  const payload = {
-    schemaVersion: IMAGE_METADATA_SCHEMA_VERSION,
-    generatedAt: new Date().toISOString(),
-    images,
-  };
-
-  await writeFile(getImageMetadataPath(dir), JSON.stringify(payload, null, 2));
-}
-
-async function persistImageMetadata(
-  config: VRTConfig,
-  scenarios: VRTConfig['scenarios'],
-  dirs: { outputDir: string; baselineDir: string; diffDir: string }
-): Promise<void> {
-  const metadataIndex = buildImageMetadataIndex(config, scenarios);
-  await Promise.all([
-    writeImageMetadataFile(dirs.outputDir, metadataIndex),
-    writeImageMetadataFile(dirs.diffDir, metadataIndex),
-    writeImageMetadataFile(dirs.baselineDir, metadataIndex),
-  ]);
 }
 
 interface AISettings {

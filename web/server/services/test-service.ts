@@ -6,18 +6,10 @@ import { runScreenshotTasks, type ScreenshotResult } from '../../../src/docker.j
 import { normalizeBrowserConfig } from '../../../src/core/browser-versions.js';
 import { compareImages } from '../../../src/compare.js';
 import type { ComparisonResult } from '../../../src/types/index.js';
-import {
-  getProjectDirs,
-  getScreenshotFilename,
-  getImageMetadataPath,
-} from '../../../src/core/paths.js';
+import { getProjectDirs, getScreenshotFilename } from '../../../src/core/paths.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
 import { buildEnginesConfig, buildComparisonMatrix } from '../../../src/core/compare-runner.js';
-import {
-  buildImageMetadataIndex,
-  IMAGE_METADATA_SCHEMA_VERSION,
-  type ImageMetadata,
-} from '../../../src/core/image-metadata.js';
+import { persistImageMetadata } from '../../../src/core/image-metadata.js';
 import { createJobStore } from '../../../src/core/job-store.js';
 import { saveJsonFile } from '../../../src/core/json-file-store.js';
 import { resolveDiffThresholds } from '../../../src/domain/auto-threshold.js';
@@ -31,7 +23,6 @@ import { updateProject } from './store.js';
 import {
   loadAcceptances,
   computeAutoThresholdCaps,
-  listImages,
   type AutoThresholdCaps,
 } from './project-service.js';
 
@@ -94,42 +85,6 @@ async function ensureCaptureDirs(dirs: ProjectDirs): Promise<void> {
   await mkdir(dirs.outputDir, { recursive: true });
   await mkdir(dirs.baselineDir, { recursive: true });
   await mkdir(dirs.diffDir, { recursive: true });
-}
-
-async function writeImageMetadataFile(
-  dir: string,
-  metadataIndex: Record<string, ImageMetadata>
-): Promise<void> {
-  const files = await listImages(dir);
-  const images: Record<string, ImageMetadata> = {};
-
-  for (const filename of files) {
-    const metadata = metadataIndex[filename];
-    if (metadata) {
-      images[filename] = metadata;
-    }
-  }
-
-  const payload = {
-    schemaVersion: IMAGE_METADATA_SCHEMA_VERSION,
-    generatedAt: new Date().toISOString(),
-    images,
-  };
-
-  await saveJsonFile(getImageMetadataPath(dir), payload);
-}
-
-async function persistImageMetadata(
-  config: VRTConfig,
-  scenarios: VRTConfig['scenarios'],
-  dirs: ProjectDirs
-): Promise<void> {
-  const metadataIndex = buildImageMetadataIndex(config, scenarios);
-  await Promise.all([
-    writeImageMetadataFile(dirs.outputDir, metadataIndex),
-    writeImageMetadataFile(dirs.diffDir, metadataIndex),
-    writeImageMetadataFile(dirs.baselineDir, metadataIndex),
-  ]);
 }
 
 async function clearStaleDiffArtifacts(

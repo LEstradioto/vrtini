@@ -167,6 +167,31 @@ function appendCaptureWarnings(job: TestJob, results: ScreenshotResult[]): void 
   job.warnings = warnings.length > 0 ? warnings : undefined;
 }
 
+// ─── Terminal state transitions ─────────────────────────────────────────────
+// Single point where a TestJob enters one of its terminal states. Each helper
+// is the only writer of `status` + `completedAt` together — a precondition
+// that downstream code (SSE, persistence, list filters) relies on.
+
+function markCompleted(job: TestJob, results: ComparisonResult[], timing: TestTiming): void {
+  job.results = results;
+  job.timing = timing;
+  job.phase = 'done';
+  job.status = 'completed';
+  job.completedAt = new Date().toISOString();
+}
+
+function markFailed(job: TestJob, err: unknown): void {
+  if (job.status === 'aborted') return; // abort wins over post-abort errors
+  job.status = 'failed';
+  job.error = getErrorMessage(err);
+  job.completedAt = new Date().toISOString();
+}
+
+function markAborted(job: TestJob): void {
+  job.status = 'aborted';
+  job.completedAt = new Date().toISOString();
+}
+
 async function captureScreenshots(
   job: TestJob,
   projectPath: string,
@@ -335,8 +360,7 @@ export function getJobStatus(job: TestJob): TestJobStatus {
 
 export async function abortJob(job: TestJob): Promise<void> {
   job.abortController?.abort();
-  job.status = 'aborted';
-  job.completedAt = new Date().toISOString();
+  markAborted(job);
 
   if (job.containerIds.length > 0) {
     const Docker = (await import('dockerode')).default;
@@ -389,18 +413,8 @@ async function runTests(
     scenarios,
     dirs
   );
-  job.results = results;
   const totalDuration = Date.now() - testStartTime;
-
-  job.timing = {
-    screenshotDuration,
-    compareDuration,
-    totalDuration,
-  };
-
-  job.phase = 'done';
-  job.status = 'completed';
-  job.completedAt = new Date().toISOString();
+  markCompleted(job, results, { screenshotDuration, compareDuration, totalDuration });
   await persistResults(job, projectPath);
   await persistImageMetadata(config, scenarios, dirs);
 }
@@ -414,10 +428,6 @@ export async function startTestRun(
   try {
     await runTests(job, projectPath, config, scenarios);
   } catch (err) {
-    if (job.status !== 'aborted') {
-      job.status = 'failed';
-      job.error = getErrorMessage(err);
-      job.completedAt = new Date().toISOString();
-    }
+    markFailed(job, err);
   }
 }

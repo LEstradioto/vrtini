@@ -60,6 +60,25 @@ function applyProgress(job: CrossCompareJob, update: CrossCompareProgressUpdate)
   job.currentPairTitle = update.pairTitle;
 }
 
+// ─── Terminal state transitions ─────────────────────────────────────────────
+// Single point where a CrossCompareJob enters a terminal state. Mirrors the
+// pattern in test-service.ts so SSE/persistence sees a consistent invariant:
+// terminal status ⇒ completedAt set.
+
+function markCompleted(job: CrossCompareJob, reports: CrossReport[]): void {
+  job.reports = reports;
+  job.status = 'completed';
+  job.phase = 'done';
+  job.progress = Math.max(job.progress, job.total);
+  job.completedAt = new Date().toISOString();
+}
+
+function markFailed(job: CrossCompareJob, err: unknown): void {
+  job.status = 'failed';
+  job.error = getErrorMessage(err);
+  job.completedAt = new Date().toISOString();
+}
+
 /**
  * On server shutdown: mark any in-flight cross-compare job as failed so
  * observers see terminal state on next poll. The underlying Docker work
@@ -69,9 +88,7 @@ function applyProgress(job: CrossCompareJob, update: CrossCompareProgressUpdate)
 export function markAllRunningJobsAsFailed(): void {
   for (const job of jobs.list()) {
     if (job.status === 'running') {
-      job.status = 'failed';
-      job.error = 'Server shutting down';
-      job.completedAt = new Date().toISOString();
+      markFailed(job, 'Server shutting down');
     }
   }
 }
@@ -86,14 +103,8 @@ export async function startCrossCompareRun(
     const reports = await runCrossCompare(job.projectId, projectPath, config, options, (update) => {
       applyProgress(job, update);
     });
-    job.reports = reports;
-    job.status = 'completed';
-    job.phase = 'done';
-    job.progress = Math.max(job.progress, job.total);
-    job.completedAt = new Date().toISOString();
+    markCompleted(job, reports);
   } catch (err) {
-    job.status = 'failed';
-    job.error = getErrorMessage(err);
-    job.completedAt = new Date().toISOString();
+    markFailed(job, err);
   }
 }

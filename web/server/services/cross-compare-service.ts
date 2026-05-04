@@ -800,18 +800,10 @@ export async function revokeCrossAcceptance(
   config?: VRTConfig
 ): Promise<boolean> {
   const store = await loadCrossAcceptances(projectPath);
-  const pair = store[key];
-  if (!pair || !pair[itemKey]) return false;
+  const next = removeEntryFromPair(store, key, itemKey);
+  if (!next.removed) return false;
 
-  const { [itemKey]: _removed, ...remaining } = pair;
-  let nextStore: CrossAcceptanceStore = { ...store, [key]: remaining };
-
-  if (Object.keys(remaining).length === 0) {
-    const { [key]: _pair, ...rest } = nextStore;
-    nextStore = rest;
-  }
-
-  await saveCrossAcceptances(projectPath, nextStore);
+  await saveCrossAcceptances(projectPath, next.store as CrossAcceptanceStore);
   if (config) {
     await updateCrossResultsAcceptance(projectPath, config, key, itemKey);
   }
@@ -843,18 +835,10 @@ export async function revokeCrossFlag(
   config?: VRTConfig
 ): Promise<boolean> {
   const store = await loadCrossFlags(projectPath);
-  const pair = store[key];
-  if (!pair || !pair[itemKey]) return false;
+  const next = removeEntryFromPair(store, key, itemKey);
+  if (!next.removed) return false;
 
-  const { [itemKey]: _removed, ...remaining } = pair;
-  let nextStore: CrossFlagStore = { ...store, [key]: remaining };
-
-  if (Object.keys(remaining).length === 0) {
-    const { [key]: _pair, ...rest } = nextStore;
-    nextStore = rest;
-  }
-
-  await saveCrossFlags(projectPath, nextStore);
+  await saveCrossFlags(projectPath, next.store as CrossFlagStore);
   if (config) {
     await updateCrossResultsFlag(projectPath, config, key, itemKey);
   }
@@ -879,12 +863,19 @@ async function loadCrossResultsRaw(
   }
 }
 
-async function updateCrossResultsAcceptance(
+/**
+ * Patch a single item inside a pair's `results.json` and persist if changed.
+ * Common shell behind acceptance/flag/AI-result update flows: load, locate
+ * the item by `itemKey`, hand it to `mutate` for a targeted edit, atomically
+ * save. Missing files are tolerated (no-op); invalid JSON is logged and
+ * swallowed to match prior behavior.
+ */
+async function patchCrossResultsItem(
   projectPath: string,
   config: VRTConfig,
   key: string,
   itemKey: string,
-  record?: CrossAcceptanceRecord
+  mutate: (item: CrossResultItem, resolvedKey: string) => CrossResultItem
 ): Promise<void> {
   const { outputDir } = getProjectDirs(projectPath, config);
   const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
@@ -898,18 +889,7 @@ async function updateCrossResultsAcceptance(
       const resolvedKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
       if (resolvedKey !== itemKey) return item;
       changed = true;
-
-      if (record) {
-        return {
-          ...item,
-          itemKey: resolvedKey,
-          accepted: true,
-          acceptedAt: record.acceptedAt,
-        };
-      }
-
-      const { accepted: _accepted, acceptedAt: _acceptedAt, ...rest } = item;
-      return { ...rest, itemKey: resolvedKey };
+      return mutate(item, resolvedKey);
     });
 
     if (changed) {
@@ -920,6 +900,65 @@ async function updateCrossResultsAcceptance(
   }
 }
 
+/**
+ * Remove a single (pairKey, itemKey) entry from a two-level store. Returns
+ * the new store and whether anything was actually removed. Drops the pair
+ * key entirely when its inner record becomes empty so listings don't show
+ * stale pair stubs.
+ */
+function removeEntryFromPair<T>(
+  store: Record<string, Record<string, T>>,
+  pairKey: string,
+  itemKey: string
+): { store: Record<string, Record<string, T>>; removed: boolean } {
+  const pair = store[pairKey];
+  if (!pair || !pair[itemKey]) return { store, removed: false };
+
+  const { [itemKey]: _removed, ...remaining } = pair;
+  if (Object.keys(remaining).length === 0) {
+    const { [pairKey]: _pair, ...rest } = store;
+    return { store: rest, removed: true };
+  }
+  return { store: { ...store, [pairKey]: remaining }, removed: true };
+}
+
+/**
+ * Bulk variant of `removeEntryFromPair` used during cross-item deletion:
+ * filter out every itemKey in `removeKeys` and drop the pair if empty.
+ */
+function removeEntriesFromPair<T>(
+  store: Record<string, Record<string, T>>,
+  pairKey: string,
+  removeKeys: Set<string>
+): { store: Record<string, Record<string, T>>; changed: boolean } {
+  const pair = store[pairKey] ?? {};
+  const remaining = Object.fromEntries(Object.entries(pair).filter(([k]) => !removeKeys.has(k)));
+  if (Object.keys(remaining).length === Object.keys(pair).length) {
+    return { store, changed: false };
+  }
+  if (Object.keys(remaining).length === 0) {
+    const { [pairKey]: _removed, ...rest } = store;
+    return { store: rest, changed: true };
+  }
+  return { store: { ...store, [pairKey]: remaining }, changed: true };
+}
+
+async function updateCrossResultsAcceptance(
+  projectPath: string,
+  config: VRTConfig,
+  key: string,
+  itemKey: string,
+  record?: CrossAcceptanceRecord
+): Promise<void> {
+  await patchCrossResultsItem(projectPath, config, key, itemKey, (item, resolvedKey) => {
+    if (record) {
+      return { ...item, itemKey: resolvedKey, accepted: true, acceptedAt: record.acceptedAt };
+    }
+    const { accepted: _accepted, acceptedAt: _acceptedAt, ...rest } = item;
+    return { ...rest, itemKey: resolvedKey };
+  });
+}
+
 async function updateCrossResultsFlag(
   projectPath: string,
   config: VRTConfig,
@@ -927,38 +966,13 @@ async function updateCrossResultsFlag(
   itemKey: string,
   record?: CrossFlagRecord
 ): Promise<void> {
-  const { outputDir } = getProjectDirs(projectPath, config);
-  const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
-  if (!existsSync(resultsPath)) return;
-
-  try {
-    const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
-    let changed = false;
-
-    data.items = data.items.map((item) => {
-      const resolvedKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
-      if (resolvedKey !== itemKey) return item;
-      changed = true;
-
-      if (record) {
-        return {
-          ...item,
-          itemKey: resolvedKey,
-          flagged: true,
-          flaggedAt: record.flaggedAt,
-        };
-      }
-
-      const { flagged: _flagged, flaggedAt: _flaggedAt, ...rest } = item;
-      return { ...rest, itemKey: resolvedKey };
-    });
-
-    if (changed) {
-      await saveJsonFile(resultsPath, data);
+  await patchCrossResultsItem(projectPath, config, key, itemKey, (item, resolvedKey) => {
+    if (record) {
+      return { ...item, itemKey: resolvedKey, flagged: true, flaggedAt: record.flaggedAt };
     }
-  } catch (err) {
-    log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
-  }
+    const { flagged: _flagged, flaggedAt: _flaggedAt, ...rest } = item;
+    return { ...rest, itemKey: resolvedKey };
+  });
 }
 
 export async function deleteCrossItems(
@@ -1002,36 +1016,18 @@ export async function deleteCrossItems(
   await saveCrossDeletions(projectPath, deletions);
 
   if (deleted.length > 0) {
-    const acceptances = await loadCrossAcceptances(projectPath);
-    const pair = acceptances[key] || {};
     const deletedSet = new Set(deleted);
-    const remaining = Object.fromEntries(
-      Object.entries(pair).filter(([itemKey]) => !deletedSet.has(itemKey))
-    );
-    const changed = Object.keys(remaining).length !== Object.keys(pair).length;
-    if (changed) {
-      if (Object.keys(remaining).length === 0) {
-        const { [key]: _removed, ...rest } = acceptances;
-        await saveCrossAcceptances(projectPath, rest);
-      } else {
-        await saveCrossAcceptances(projectPath, { ...acceptances, [key]: remaining });
-      }
+
+    const acceptances = await loadCrossAcceptances(projectPath);
+    const nextAcceptances = removeEntriesFromPair(acceptances, key, deletedSet);
+    if (nextAcceptances.changed) {
+      await saveCrossAcceptances(projectPath, nextAcceptances.store as CrossAcceptanceStore);
     }
 
     const flags = await loadCrossFlags(projectPath);
-    const pairFlags = flags[key] || {};
-    const deletedFlagsSet = new Set(deleted);
-    const remainingFlags = Object.fromEntries(
-      Object.entries(pairFlags).filter(([itemKey]) => !deletedFlagsSet.has(itemKey))
-    );
-    const flagsChanged = Object.keys(remainingFlags).length !== Object.keys(pairFlags).length;
-    if (flagsChanged) {
-      if (Object.keys(remainingFlags).length === 0) {
-        const { [key]: _removed, ...rest } = flags;
-        await saveCrossFlags(projectPath, rest);
-      } else {
-        await saveCrossFlags(projectPath, { ...flags, [key]: remainingFlags });
-      }
+    const nextFlags = removeEntriesFromPair(flags, key, deletedSet);
+    if (nextFlags.changed) {
+      await saveCrossFlags(projectPath, nextFlags.store as CrossFlagStore);
     }
   }
 

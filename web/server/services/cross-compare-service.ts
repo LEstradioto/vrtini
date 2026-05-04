@@ -721,27 +721,18 @@ export async function listCrossResults(
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const resultsPath = resolve(root, entry.name, 'results.json');
-      if (!existsSync(resultsPath)) continue;
-      try {
-        const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
-        const key = data.key ?? entry.name;
-        const summary = summarizeCrossItems(
-          data.items,
-          acceptances[key],
-          flags[key],
-          deletions[key]
-        );
-        summariesByKey.set(key, {
-          key,
-          title: data.title,
-          generatedAt: data.generatedAt,
-          baselineLabel: data.baselineLabel,
-          testLabel: data.testLabel,
-          ...summary,
-        });
-      } catch (err) {
-        log.warn(`Unreadable cross results at ${resultsPath}: ${getErrorMessage(err)}`);
-      }
+      const data = await readResultsFileSoft(resultsPath);
+      if (!data) continue;
+      const key = data.key ?? entry.name;
+      const summary = summarizeCrossItems(data.items, acceptances[key], flags[key], deletions[key]);
+      summariesByKey.set(key, {
+        key,
+        title: data.title,
+        generatedAt: data.generatedAt,
+        baselineLabel: data.baselineLabel,
+        testLabel: data.testLabel,
+        ...summary,
+      });
     }
   }
 
@@ -863,6 +854,22 @@ async function loadCrossResultsRaw(
 }
 
 /**
+ * Read a results.json from a known path, returning null when missing or
+ * malformed (logged). Shared shell behind the patcher + AI-result writer
+ * + listing loop, so a corrupt file shows up consistently as a logged
+ * warning rather than a hard throw.
+ */
+async function readResultsFileSoft(resultsPath: string): Promise<CrossResults | null> {
+  if (!existsSync(resultsPath)) return null;
+  try {
+    return JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
+  } catch (err) {
+    log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
+    return null;
+  }
+}
+
+/**
  * Patch a single item inside a pair's `results.json` and persist if changed.
  * Common shell behind acceptance/flag/AI-result update flows: load, locate
  * the item by `itemKey`, hand it to `mutate` for a targeted edit, atomically
@@ -878,24 +885,19 @@ async function patchCrossResultsItem(
 ): Promise<void> {
   const { outputDir } = getProjectDirs(projectPath, config);
   const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
-  if (!existsSync(resultsPath)) return;
+  const data = await readResultsFileSoft(resultsPath);
+  if (!data) return;
 
-  try {
-    const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
-    let changed = false;
+  let changed = false;
+  data.items = data.items.map((item) => {
+    const resolvedKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
+    if (resolvedKey !== itemKey) return item;
+    changed = true;
+    return mutate(item, resolvedKey);
+  });
 
-    data.items = data.items.map((item) => {
-      const resolvedKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
-      if (resolvedKey !== itemKey) return item;
-      changed = true;
-      return mutate(item, resolvedKey);
-    });
-
-    if (changed) {
-      await saveJsonFile(resultsPath, data);
-    }
-  } catch (err) {
-    log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
+  if (changed) {
+    await saveJsonFile(resultsPath, data);
   }
 }
 
@@ -1073,25 +1075,20 @@ export async function saveCrossItemAIResults(
 ): Promise<void> {
   const { outputDir } = getProjectDirs(projectPath, config);
   const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
-  if (!existsSync(resultsPath)) return;
+  const data = await readResultsFileSoft(resultsPath);
+  if (!data) return;
 
-  try {
-    const data = JSON.parse(await readFile(resultsPath, 'utf-8')) as CrossResults;
-    let changed = false;
+  let changed = false;
+  data.items = data.items.map((item) => {
+    const itemKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
+    const analysis = updates.get(itemKey);
+    if (!analysis) return item;
+    changed = true;
+    const updated: CrossResultItem = { ...item, itemKey, aiAnalysis: analysis };
+    return withSmartPassMetadata(updated);
+  });
 
-    data.items = data.items.map((item) => {
-      const itemKey = item.itemKey ?? buildCrossItemKey(item.scenario, item.viewport);
-      const analysis = updates.get(itemKey);
-      if (!analysis) return item;
-      changed = true;
-      const updated: CrossResultItem = { ...item, itemKey, aiAnalysis: analysis };
-      return withSmartPassMetadata(updated);
-    });
-
-    if (changed) {
-      await saveJsonFile(resultsPath, data);
-    }
-  } catch (err) {
-    log.warn(`Invalid results.json at ${resultsPath}: ${getErrorMessage(err)}`);
+  if (changed) {
+    await saveJsonFile(resultsPath, data);
   }
 }

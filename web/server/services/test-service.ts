@@ -8,11 +8,10 @@ import { compareImages } from '../../../src/compare.js';
 import type { ComparisonResult } from '../../../src/types/index.js';
 import { getProjectDirs, getScreenshotFilename } from '../../../src/core/paths.js';
 import { getErrorMessage } from '../../../src/core/errors.js';
-import { buildEnginesConfig, buildComparisonMatrix } from '../../../src/core/compare-runner.js';
+import { buildCompareOptions, buildComparisonMatrix } from '../../../src/core/compare-runner.js';
 import { persistImageMetadata } from '../../../src/core/image-metadata.js';
 import { createJobStore } from '../../../src/core/job-store.js';
 import { saveJsonFile } from '../../../src/core/json-file-store.js';
-import { resolveDiffThresholds } from '../../../src/domain/auto-threshold.js';
 import {
   buildCaptureResultWarnings,
   buildDiagnosticWarnings,
@@ -201,25 +200,22 @@ async function compareScreenshots(
 
   const CONCURRENCY = config.concurrency ?? 5;
   const quickMode = config.quickMode ?? false;
-  const enginesConfig = buildEnginesConfig(quickMode, config.engines);
   const autoThresholdCaps = await loadAutoThresholdCaps(projectPath, config);
   const results: ComparisonResult[] = [];
 
   async function runBatch(batch: typeof comparisons): Promise<ComparisonResult[]> {
     return Promise.all(
-      batch.map(({ baselinePath, testPath, diffPath, scenario, viewport }) => {
-        const thresholds = resolveDiffThresholds(scenario, viewport, config, autoThresholdCaps);
-        return compareImages(baselinePath, testPath, diffPath, {
-          threshold: config.threshold,
-          diffColor: config.diffColor,
-          computePHash: !quickMode && (config.engines?.phash?.enabled ?? true),
-          engines: enginesConfig,
-          antialiasing: config.engines?.pixelmatch?.antialiasing,
-          keepDiffOnMatch: config.keepDiffOnMatch,
-          maxDiffPercentage: thresholds.maxDiffPercentage,
-          maxDiffPixels: thresholds.maxDiffPixels,
-        });
-      })
+      batch.map((task) =>
+        compareImages(
+          task.baselinePath,
+          task.testPath,
+          task.diffPath,
+          buildCompareOptions(config, task.scenario, task.viewport, task, {
+            quickMode,
+            autoThresholdCaps,
+          })
+        )
+      )
     );
   }
 

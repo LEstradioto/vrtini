@@ -8,12 +8,12 @@ import { isDiff } from '../types/index.js';
 import { generateReport } from '../report.js';
 import { analyzeWithAI, type AIProvider } from '../ai-analysis.js';
 import { calculateConfidence } from '../confidence.js';
-import { getProjectDirs, getReportPath, getSnapshotFilename } from '../core/paths.js';
+import { getProjectDirs, getReportPath } from '../core/paths.js';
 import { getErrorMessage } from '../core/errors.js';
 import { log } from '../core/logger.js';
 import { openInBrowser } from './utils.js';
 import {
-  buildEnginesConfig,
+  buildCompareOptions,
   buildComparisonMatrix,
   type ComparisonTask,
 } from '../core/compare-runner.js';
@@ -112,30 +112,14 @@ async function compareTask(
   ai: AISettings
 ): Promise<ComparisonResult> {
   const { scenario, browser, viewport, testPath, baselinePath, diffPath } = task;
-  const enginesConfig = buildEnginesConfig(quickMode, config.engines);
+  const compareOptions = buildCompareOptions(config, scenario, viewport, task, { quickMode });
 
-  // Derive snapshot paths from image paths
-  const snapshotFilename = getSnapshotFilename(task.filename);
-  const baselineSnapshotPath = config.domSnapshot?.enabled
-    ? baselinePath.replace(task.filename, snapshotFilename)
-    : undefined;
-  const testSnapshotPath = config.domSnapshot?.enabled
-    ? testPath.replace(task.filename, snapshotFilename)
-    : undefined;
-
-  let result: ComparisonResult = await compareImages(baselinePath, testPath, diffPath, {
-    threshold: config.threshold,
-    diffColor: config.diffColor,
-    computePHash: !quickMode,
-    engines: enginesConfig,
-    antialiasing: config.engines?.pixelmatch?.antialiasing,
-    keepDiffOnMatch: config.keepDiffOnMatch,
-    maxDiffPercentage:
-      scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
-    maxDiffPixels: scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
-    baselineSnapshot: baselineSnapshotPath,
-    testSnapshot: testSnapshotPath,
-  });
+  let result: ComparisonResult = await compareImages(
+    baselinePath,
+    testPath,
+    diffPath,
+    compareOptions
+  );
 
   if (isDiff(result)) {
     result = await enrichDiffResult(result, task, ai);

@@ -678,18 +678,7 @@ export async function loadCrossResults(
   config: VRTConfig,
   key: string
 ): Promise<CrossResults> {
-  const { outputDir } = getProjectDirs(projectPath, config);
-  const resultsPath = resolve(outputDir, 'cross-reports', key, 'results.json');
-  if (!existsSync(resultsPath)) {
-    throw new Error(`Cross results not found: ${resultsPath}`);
-  }
-  const data = await readFile(resultsPath, 'utf-8');
-  let results: CrossResults;
-  try {
-    results = JSON.parse(data) as CrossResults;
-  } catch {
-    throw new Error(`Invalid JSON in cross results: ${resultsPath}`);
-  }
+  const results = await loadCrossResultsRaw(projectPath, config, key);
   const acceptances = await loadCrossAcceptances(projectPath);
   const pairAcceptances = acceptances[key] || {};
   const flags = await loadCrossFlags(projectPath);

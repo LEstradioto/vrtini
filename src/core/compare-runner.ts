@@ -1,4 +1,4 @@
-import { resolve } from 'path';
+import { resolve, basename, dirname, join } from 'path';
 import type { VRTConfig, Scenario, Viewport } from './config.js';
 import { normalizeBrowserConfig } from './browser-versions.js';
 import { getScreenshotFilename, getSnapshotFilename } from './paths.js';
@@ -60,6 +60,10 @@ export function buildComparisonMatrix(
   return comparisons;
 }
 
+function deriveSnapshotPath(imagePath: string): string {
+  return join(dirname(imagePath), getSnapshotFilename(basename(imagePath)));
+}
+
 /**
  * Build the per-task `compareImages` options for a (scenario, viewport)
  * pair. Single source of truth so the CLI and web runners agree on:
@@ -70,30 +74,33 @@ export function buildComparisonMatrix(
  *   and always ran phash unless `--quick`),
  * - the effective diff thresholds (auto-threshold caps applied when
  *   `caps` is provided, otherwise scenario → config fallback),
- * - DOM snapshot sidecar paths derived from the image filename.
+ * - DOM snapshot sidecar paths derived from each side's own image
+ *   filename (so cross-compare's mismatched-browser case still resolves
+ *   the right `.snapshot.json` for each side).
+ *
+ * `overrides` lets cross-compare add its own knobs (verticalAlign,
+ * sizeNormalization, sizeMismatchHandling, keepDiffOnMatch override)
+ * without forking the helper.
  */
 export function buildCompareOptions(
   config: VRTConfig,
   scenario: Scenario,
   viewport: Viewport,
-  task: { baselinePath: string; testPath: string; filename: string },
-  options: { quickMode: boolean; autoThresholdCaps?: AutoThresholdCaps | null }
+  task: { baselinePath: string; testPath: string },
+  options: {
+    quickMode: boolean;
+    autoThresholdCaps?: AutoThresholdCaps | null;
+    overrides?: Partial<CompareOptions>;
+  }
 ): CompareOptions {
-  const { quickMode, autoThresholdCaps = null } = options;
+  const { quickMode, autoThresholdCaps = null, overrides = {} } = options;
   const enginesConfig = buildEnginesConfig(quickMode, config.engines);
   const phashEnabled = config.engines?.phash?.enabled ?? true;
   const thresholds = resolveDiffThresholds(scenario, viewport, config, autoThresholdCaps);
 
   const snapshotEnabled = !!config.domSnapshot?.enabled;
-  const snapshotFilename = snapshotEnabled ? getSnapshotFilename(task.filename) : undefined;
-  const baselineSnapshot =
-    snapshotFilename && task.baselinePath.endsWith(task.filename)
-      ? task.baselinePath.slice(0, -task.filename.length) + snapshotFilename
-      : undefined;
-  const testSnapshot =
-    snapshotFilename && task.testPath.endsWith(task.filename)
-      ? task.testPath.slice(0, -task.filename.length) + snapshotFilename
-      : undefined;
+  const baselineSnapshot = snapshotEnabled ? deriveSnapshotPath(task.baselinePath) : undefined;
+  const testSnapshot = snapshotEnabled ? deriveSnapshotPath(task.testPath) : undefined;
 
   return {
     threshold: config.threshold,
@@ -106,5 +113,6 @@ export function buildCompareOptions(
     maxDiffPixels: thresholds.maxDiffPixels,
     baselineSnapshot,
     testSnapshot,
+    ...overrides,
   };
 }

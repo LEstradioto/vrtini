@@ -3,11 +3,11 @@ import { resolve, join, relative } from 'path';
 import { mkdir, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { loadConfig } from '../core/config.js';
-import { getProjectDirs, getScreenshotFilename, getSnapshotFilename } from '../core/paths.js';
+import { getProjectDirs, getScreenshotFilename } from '../core/paths.js';
 import { compareImages } from '../compare.js';
 import { generateReport } from '../report.js';
 import { formatBrowser, getDiffPath, type ComparisonResult } from '../types/index.js';
-import { buildEnginesConfig } from '../core/compare-runner.js';
+import { buildCompareOptions } from '../core/compare-runner.js';
 import { getErrorMessage } from '../core/errors.js';
 import { log } from '../core/logger.js';
 import { runWithConcurrency } from '../core/async.js';
@@ -165,7 +165,6 @@ async function runPairComparison(
   config: VRTConfig,
   cwd: string,
   outputDir: string,
-  enginesConfig: VRTConfig['engines'],
   quickMode: boolean,
   concurrency: number
 ): Promise<void> {
@@ -219,27 +218,34 @@ async function runPairComparison(
     comparisonTasks,
     concurrency,
     async ({ scenario, viewport, baselinePath, testPath, diffPath }) => {
+      const compareOpts = buildCompareOptions(
+        config,
+        scenario,
+        viewport,
+        { baselinePath, testPath },
+        {
+          quickMode,
+          overrides: {
+            keepDiffOnMatch: true,
+            sizeNormalization: crossCompare?.normalization,
+            sizeMismatchHandling: crossCompare?.mismatch,
+            verticalAlign: crossCompare?.verticalAlign,
+          },
+        }
+      );
+
+      // Surface snapshot presence on the report item so the UI can show
+      // "DOM snapshot missing" diagnostics; compareImages itself tolerates
+      // missing files via try/catch.
       const domSnapshotEnabled = !!config.domSnapshot?.enabled;
-      const baselineSnapshotPath = resolve(outputDir, getSnapshotFilename(baselinePath));
-      const testSnapshotPath = resolve(outputDir, getSnapshotFilename(testPath));
-      const baselineSnapshotFound = domSnapshotEnabled && existsSync(baselineSnapshotPath);
-      const testSnapshotFound = domSnapshotEnabled && existsSync(testSnapshotPath);
-      const result = await compareImages(baselinePath, testPath, diffPath, {
-        threshold: config.threshold,
-        diffColor: config.diffColor,
-        computePHash: !quickMode,
-        engines: enginesConfig,
-        keepDiffOnMatch: true,
-        sizeNormalization: crossCompare?.normalization,
-        sizeMismatchHandling: crossCompare?.mismatch,
-        verticalAlign: crossCompare?.verticalAlign,
-        antialiasing: config.engines?.pixelmatch?.antialiasing,
-        maxDiffPercentage:
-          scenario.diffThreshold?.maxDiffPercentage ?? config.diffThreshold?.maxDiffPercentage,
-        maxDiffPixels: scenario.diffThreshold?.maxDiffPixels ?? config.diffThreshold?.maxDiffPixels,
-        baselineSnapshot: baselineSnapshotFound ? baselineSnapshotPath : undefined,
-        testSnapshot: testSnapshotFound ? testSnapshotPath : undefined,
-      });
+      const baselineSnapshotFound =
+        domSnapshotEnabled &&
+        !!compareOpts.baselineSnapshot &&
+        existsSync(compareOpts.baselineSnapshot);
+      const testSnapshotFound =
+        domSnapshotEnabled && !!compareOpts.testSnapshot && existsSync(compareOpts.testSnapshot);
+
+      const result = await compareImages(baselinePath, testPath, diffPath, compareOpts);
 
       const diffPathValue = getDiffPath(result);
       const item: CrossResultItem = {
@@ -345,7 +351,6 @@ export function registerCrossCompareCommand(program: Command): void {
         );
 
         const quickMode = config.quickMode ?? false;
-        const enginesConfig = buildEnginesConfig(quickMode, config.engines);
         const concurrency = config.concurrency ?? 5;
 
         for (const pair of selectedPairs) {
@@ -356,7 +361,6 @@ export function registerCrossCompareCommand(program: Command): void {
             config,
             cwd,
             outputDir,
-            enginesConfig,
             quickMode,
             concurrency
           );

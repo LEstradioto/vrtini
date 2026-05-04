@@ -90,7 +90,7 @@ export async function runScreenshotTasks(options: RunOptions): Promise<Screensho
     throw new Error(
       `Missing Docker images: ${missingImages.join(', ')}\n` +
         `Build them with:\n` +
-        pwVersions.map((v) => `  vrt build --version ${v}`).join('\n')
+        pwVersions.map((v) => `  vrtini build --version ${v}`).join('\n')
     );
   }
 

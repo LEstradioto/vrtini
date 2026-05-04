@@ -24,6 +24,7 @@ import {
   type AIVisionCompareOptions,
   type VisionChunk,
 } from './domain/vision-chunking.js';
+import { aggregateChunkAnalyses } from './domain/ai-aggregation.js';
 
 export type { AIAnalysisResult, ChangeCategory, Severity, Recommendation };
 export type { AIProviderName as AIProvider };
@@ -75,98 +76,6 @@ function getProvider(options: AIAnalysisOptions): AIProvider {
     default:
       throw new Error(`Unsupported AI provider: ${options.provider}`);
   }
-}
-
-function aggregateChunkAnalyses(
-  chunks: { chunk: VisionChunk; analysis: AIAnalysisResult }[],
-  provider: AIProviderName,
-  model: string,
-  verticalOffset: number
-): AIAnalysisResult {
-  if (chunks.length === 1) {
-    return chunks[0].analysis;
-  }
-
-  const recommendationScores: Record<Recommendation, number> = {
-    approve: 1,
-    review: 0,
-    reject: -1,
-  };
-  const severityRank: Record<Severity, number> = {
-    info: 0,
-    warning: 1,
-    critical: 2,
-  };
-
-  let weightedScore = 0;
-  let weightedTotal = 0;
-  let confidenceSum = 0;
-  let tokensUsed = 0;
-  let highestSeverity: Severity = 'info';
-  let rejectCount = 0;
-
-  const categoryWeights = new Map<ChangeCategory, number>();
-  const detailLines: string[] = [];
-
-  for (const { chunk, analysis } of chunks) {
-    const confidence = Math.max(0, Math.min(1, analysis.confidence));
-    weightedScore += (recommendationScores[analysis.recommendation] ?? 0) * confidence;
-    weightedTotal += confidence;
-    confidenceSum += confidence;
-    tokensUsed += analysis.tokensUsed ?? 0;
-    if (analysis.recommendation === 'reject') rejectCount += 1;
-    if (severityRank[analysis.severity] > severityRank[highestSeverity]) {
-      highestSeverity = analysis.severity;
-    }
-    categoryWeights.set(
-      analysis.category,
-      (categoryWeights.get(analysis.category) ?? 0) + confidence
-    );
-    detailLines.push(
-      `Chunk ${chunk.index}: ${analysis.recommendation} (${(confidence * 100).toFixed(0)}%) - ${analysis.summary}`
-    );
-  }
-
-  const averageScore = weightedTotal > 0 ? weightedScore / weightedTotal : 0;
-  const avgConfidence = chunks.length > 0 ? confidenceSum / chunks.length : 0;
-  let recommendation: Recommendation = 'review';
-  if (averageScore >= 0.35 && rejectCount === 0) recommendation = 'approve';
-  else if (averageScore <= -0.35 || rejectCount >= Math.ceil(chunks.length / 2)) {
-    recommendation = 'reject';
-  }
-  if (recommendation === 'approve' && highestSeverity === 'critical') recommendation = 'review';
-
-  let category: ChangeCategory = 'layout_shift';
-  let bestCategoryWeight = -1;
-  for (const [candidate, weight] of categoryWeights.entries()) {
-    if (weight > bestCategoryWeight) {
-      bestCategoryWeight = weight;
-      category = candidate;
-    }
-  }
-
-  const approveCount = chunks.filter((entry) => entry.analysis.recommendation === 'approve').length;
-  const reviewCount = chunks.filter((entry) => entry.analysis.recommendation === 'review').length;
-  const rejectChunks = chunks.length - approveCount - reviewCount;
-  const summary =
-    recommendation === 'approve'
-      ? `Chunked AI compare approved (${approveCount}/${chunks.length} chunks).`
-      : recommendation === 'reject'
-        ? `Chunked AI compare rejected (${rejectChunks}/${chunks.length} chunks signaled reject).`
-        : `Chunked AI compare requires review (approve:${approveCount}, review:${reviewCount}, reject:${rejectChunks}).`;
-
-  return {
-    category,
-    severity: highestSeverity,
-    confidence: Number(avgConfidence.toFixed(2)),
-    summary,
-    details: detailLines.slice(0, 12),
-    recommendation,
-    reasoning: `Aggregated from ${chunks.length} vertically aligned chunks (offset ${verticalOffset}px). Weighted score ${averageScore.toFixed(3)}.`,
-    provider,
-    model,
-    tokensUsed,
-  };
 }
 
 async function runSingleAnalysis(

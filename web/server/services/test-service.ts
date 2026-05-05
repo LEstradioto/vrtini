@@ -38,6 +38,15 @@ export interface ImageResultData {
   engineResults?: { engine: string; similarity: number; diffPercent: number; error?: string }[];
 }
 
+export interface CaptureDiagnosticsSummary {
+  expectedScreenshots: number;
+  capturedScreenshots: number;
+  expectedSnapshots: number;
+  capturedSnapshots: number;
+  missingScreenshotSamples: string[];
+  missingSnapshotSamples: string[];
+}
+
 export interface TestJob {
   id: string;
   projectId: string;
@@ -51,19 +60,63 @@ export interface TestJob {
   completedAt?: string;
   timing?: TestTiming;
   warnings?: string[];
-  captureDiagnostics?: {
-    expectedScreenshots: number;
-    capturedScreenshots: number;
-    expectedSnapshots: number;
-    capturedSnapshots: number;
-    missingScreenshotSamples: string[];
-    missingSnapshotSamples: string[];
-  };
+  captureDiagnostics?: CaptureDiagnosticsSummary;
   abortController?: AbortController;
   containerIds: string[];
 }
 
-export type TestJobStatus = Omit<TestJob, 'abortController'>;
+// ─── Public snapshot shape ───────────────────────────────────────────────────
+// Discriminated by status so consumers (HTTP handlers, SSE encoders, persisted
+// JSON readers) get type-safe access to terminal-only fields. The internal
+// TestJob struct stays mutable and flat — `toTestJobSnapshot` does the case
+// analysis and is the one place where the runtime invariants set by
+// markCompleted/markFailed/markAborted in this file are translated into the
+// type system.
+
+interface TestJobSnapshotBase {
+  id: string;
+  projectId: string;
+  progress: number;
+  total: number;
+  phase: 'capturing' | 'comparing' | 'done';
+  results: ComparisonResult[];
+  startedAt: string;
+  containerIds: string[];
+  warnings?: string[];
+  captureDiagnostics?: CaptureDiagnosticsSummary;
+}
+
+export interface TestJobRunningSnapshot extends TestJobSnapshotBase {
+  status: 'running';
+}
+
+export interface TestJobCompletedSnapshot extends TestJobSnapshotBase {
+  status: 'completed';
+  phase: 'done';
+  completedAt: string;
+  timing: TestTiming;
+}
+
+export interface TestJobFailedSnapshot extends TestJobSnapshotBase {
+  status: 'failed';
+  completedAt: string;
+  error: string;
+  timing?: TestTiming;
+}
+
+export interface TestJobAbortedSnapshot extends TestJobSnapshotBase {
+  status: 'aborted';
+  completedAt: string;
+}
+
+export type TestJobSnapshot =
+  | TestJobRunningSnapshot
+  | TestJobCompletedSnapshot
+  | TestJobFailedSnapshot
+  | TestJobAbortedSnapshot;
+
+/** @deprecated Use TestJobSnapshot. Kept as alias during migration. */
+export type TestJobStatus = TestJobSnapshot;
 type ProjectDirs = ReturnType<typeof getProjectDirs>;
 
 const jobs = createJobStore<TestJob>();
@@ -292,21 +345,75 @@ export function getJob(jobId: string): TestJob | undefined {
   return jobs.get(jobId);
 }
 
-export function getJobStatus(job: TestJob): TestJobStatus {
+export function getJobStatus(job: TestJob): TestJobSnapshot {
+  return toTestJobSnapshot(job);
+}
+
+function snapshotBase(job: TestJob): TestJobSnapshotBase {
   return {
     id: job.id,
     projectId: job.projectId,
-    status: job.status,
     progress: job.progress,
     total: job.total,
     phase: job.phase,
     results: job.results,
-    error: job.error,
     startedAt: job.startedAt,
+    containerIds: job.containerIds,
+    warnings: job.warnings,
+    captureDiagnostics: job.captureDiagnostics,
+  };
+}
+
+function completedSnapshot(job: TestJob): TestJobCompletedSnapshot {
+  if (!job.completedAt || !job.timing) {
+    throw new Error(`TestJob ${job.id} is completed but missing completedAt/timing`);
+  }
+  return {
+    ...snapshotBase(job),
+    status: 'completed',
+    phase: 'done',
     completedAt: job.completedAt,
     timing: job.timing,
-    containerIds: job.containerIds,
   };
+}
+
+function failedSnapshot(job: TestJob): TestJobFailedSnapshot {
+  if (!job.completedAt || !job.error) {
+    throw new Error(`TestJob ${job.id} is failed but missing completedAt/error`);
+  }
+  return {
+    ...snapshotBase(job),
+    status: 'failed',
+    completedAt: job.completedAt,
+    error: job.error,
+    timing: job.timing,
+  };
+}
+
+function abortedSnapshot(job: TestJob): TestJobAbortedSnapshot {
+  if (!job.completedAt) {
+    throw new Error(`TestJob ${job.id} is aborted but missing completedAt`);
+  }
+  return { ...snapshotBase(job), status: 'aborted', completedAt: job.completedAt };
+}
+
+/**
+ * Project a mutable TestJob into its discriminated public snapshot. Encodes
+ * the invariant locked in by markCompleted/markFailed/markAborted: terminal
+ * statuses always carry `completedAt`. Inconsistent runtime state (manual
+ * mutation bypassing the helpers) throws loudly via the per-status builders.
+ */
+export function toTestJobSnapshot(job: TestJob): TestJobSnapshot {
+  switch (job.status) {
+    case 'running':
+      return { ...snapshotBase(job), status: 'running' };
+    case 'completed':
+      return completedSnapshot(job);
+    case 'failed':
+      return failedSnapshot(job);
+    case 'aborted':
+      return abortedSnapshot(job);
+  }
 }
 
 export async function abortJob(job: TestJob): Promise<void> {

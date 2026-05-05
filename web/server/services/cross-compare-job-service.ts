@@ -46,8 +46,85 @@ export function getCrossCompareJob(jobId: string): CrossCompareJob | undefined {
   return jobs.get(jobId);
 }
 
-export function getCrossCompareJobStatus(job: CrossCompareJob): CrossCompareJob {
-  return { ...job, reports: [...job.reports] };
+export function getCrossCompareJobStatus(job: CrossCompareJob): CrossCompareJobSnapshot {
+  return toCrossCompareJobSnapshot(job);
+}
+
+// ─── Public snapshot shape ───────────────────────────────────────────────────
+// Discriminated by status. Same rationale as TestJobSnapshot in test-service.ts:
+// terminal-only fields (completedAt, error) get type-safe access at consumers.
+
+interface CrossCompareJobSnapshotBase {
+  id: string;
+  projectId: string;
+  phase: 'preparing' | 'running' | 'done';
+  progress: number;
+  total: number;
+  pairIndex: number;
+  pairTotal: number;
+  currentPairKey?: string;
+  currentPairTitle?: string;
+  reports: CrossReport[];
+  startedAt: string;
+}
+
+export interface CrossCompareJobRunningSnapshot extends CrossCompareJobSnapshotBase {
+  status: 'running';
+}
+export interface CrossCompareJobCompletedSnapshot extends CrossCompareJobSnapshotBase {
+  status: 'completed';
+  phase: 'done';
+  completedAt: string;
+}
+export interface CrossCompareJobFailedSnapshot extends CrossCompareJobSnapshotBase {
+  status: 'failed';
+  completedAt: string;
+  error: string;
+}
+export type CrossCompareJobSnapshot =
+  | CrossCompareJobRunningSnapshot
+  | CrossCompareJobCompletedSnapshot
+  | CrossCompareJobFailedSnapshot;
+
+function ccBase(job: CrossCompareJob): CrossCompareJobSnapshotBase {
+  return {
+    id: job.id,
+    projectId: job.projectId,
+    phase: job.phase,
+    progress: job.progress,
+    total: job.total,
+    pairIndex: job.pairIndex,
+    pairTotal: job.pairTotal,
+    currentPairKey: job.currentPairKey,
+    currentPairTitle: job.currentPairTitle,
+    reports: [...job.reports],
+    startedAt: job.startedAt,
+  };
+}
+
+function ccCompletedSnapshot(job: CrossCompareJob): CrossCompareJobCompletedSnapshot {
+  if (!job.completedAt) {
+    throw new Error(`CrossCompareJob ${job.id} is completed but missing completedAt`);
+  }
+  return { ...ccBase(job), status: 'completed', phase: 'done', completedAt: job.completedAt };
+}
+
+function ccFailedSnapshot(job: CrossCompareJob): CrossCompareJobFailedSnapshot {
+  if (!job.completedAt || !job.error) {
+    throw new Error(`CrossCompareJob ${job.id} is failed but missing completedAt/error`);
+  }
+  return { ...ccBase(job), status: 'failed', completedAt: job.completedAt, error: job.error };
+}
+
+export function toCrossCompareJobSnapshot(job: CrossCompareJob): CrossCompareJobSnapshot {
+  switch (job.status) {
+    case 'running':
+      return { ...ccBase(job), status: 'running' };
+    case 'completed':
+      return ccCompletedSnapshot(job);
+    case 'failed':
+      return ccFailedSnapshot(job);
+  }
 }
 
 function applyProgress(job: CrossCompareJob, update: CrossCompareProgressUpdate): void {

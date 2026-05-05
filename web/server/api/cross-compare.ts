@@ -124,22 +124,11 @@ export const crossCompareRoutes: FastifyPluginAsync = async (fastify) => {
       const job = getJobForProject(request.params.jobId, request.params.id);
       if (!job) throw new NotFoundError('Job not found');
 
-      const status = getCrossCompareJobStatus(job);
-      return reply.send({
-        id: status.id,
-        status: status.status,
-        phase: status.phase,
-        progress: status.progress,
-        total: status.total,
-        pairIndex: status.pairIndex,
-        pairTotal: status.pairTotal,
-        currentPairKey: status.currentPairKey,
-        currentPairTitle: status.currentPairTitle,
-        reports: status.reports,
-        error: status.error,
-        startedAt: status.startedAt,
-        completedAt: status.completedAt,
-      });
+      // Snapshot is a discriminated union by status; returning it directly
+      // serializes the right shape per status (error/completedAt only on
+      // failed/completed). The previous explicit re-spread would leak a
+      // `error: undefined` field on running jobs.
+      return reply.send(getCrossCompareJobStatus(job));
     }
   );
 

@@ -1,12 +1,12 @@
 {
   "coverage": {
-    "lines": 48.23,
-    "branches": 39.86
+    "lines": 48.62,
+    "branches": 40.47
   },
   "eslintWarnings": {
     "complexity": 79,
-    "max-lines-per-function": 190,
-    "max-lines": 40,
+    "max-lines-per-function": 187,
+    "max-lines": 41,
     "max-params": 26
   },
   "circularDependencies": 0

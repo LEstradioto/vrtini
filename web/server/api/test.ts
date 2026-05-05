@@ -157,21 +157,9 @@ export const testRoutes: FastifyPluginAsync = async (fastify) => {
     '/projects/:id/test/:jobId',
     async (request) => {
       const job = requireJob(request.params.jobId, request.params.id);
-      const status = getJobStatus(job);
-      return {
-        id: status.id,
-        status: status.status,
-        progress: status.progress,
-        total: status.total,
-        phase: status.phase,
-        results: status.results,
-        error: status.error,
-        startedAt: status.startedAt,
-        completedAt: status.completedAt,
-        timing: status.timing,
-        warnings: status.warnings,
-        captureDiagnostics: status.captureDiagnostics,
-      };
+      // Returning the snapshot directly preserves all fields (warnings,
+      // captureDiagnostics) — the previous re-spread was dropping them.
+      return getJobStatus(job);
     }
   );
 

@@ -12,74 +12,12 @@ import type {
   DomFinding,
   DomDiffResult,
 } from '../domain/dom-snapshot.js';
+import { matchElements, type MatchedPair } from './dom-element-match.js';
 
 // Re-export for backward compatibility — these types now live in
 // domain/dom-snapshot.ts so the domain layer doesn't have to reach up
 // into engines/ for shared diff types.
 export type { FindingType, FindingSeverity, DomFinding, DomDiffResult };
-
-interface MatchedPair {
-  baseline: SnapshotElement;
-  test: SnapshotElement;
-}
-
-// --- Element matching ---
-
-function matchKey(el: SnapshotElement): string {
-  if (el.testId) return `testid:${el.testId}`;
-  if (el.id) return `id:${el.id}`;
-  return `path:${el.path}`;
-}
-
-function positionKey(el: SnapshotElement): string {
-  return `${el.tag}:${Math.round(el.box.x / 20)}:${Math.round(el.box.y / 20)}`;
-}
-
-function matchElements(
-  baselineEls: SnapshotElement[],
-  testEls: SnapshotElement[]
-): { matched: MatchedPair[]; added: SnapshotElement[]; removed: SnapshotElement[] } {
-  const matched: MatchedPair[] = [];
-  const testByKey = new Map<string, SnapshotElement>();
-  const testByPos = new Map<string, SnapshotElement>();
-  const matchedTestIndices = new Set<number>();
-
-  // Build test lookup maps
-  for (const el of testEls) {
-    testByKey.set(matchKey(el), el);
-    testByPos.set(positionKey(el), el);
-  }
-
-  // Match baseline elements to test elements
-  const matchedBaselineIndices = new Set<number>();
-  for (let i = 0; i < baselineEls.length; i++) {
-    const bEl = baselineEls[i];
-    const key = matchKey(bEl);
-
-    // Primary: match by key (path / id / testid)
-    let tEl = testByKey.get(key);
-
-    // Fallback: match by tag + approximate position
-    if (!tEl) {
-      tEl = testByPos.get(positionKey(bEl));
-      if (tEl && tEl.tag !== bEl.tag) tEl = undefined;
-    }
-
-    if (tEl) {
-      const tIdx = testEls.indexOf(tEl);
-      if (!matchedTestIndices.has(tIdx)) {
-        matched.push({ baseline: bEl, test: tEl });
-        matchedBaselineIndices.add(i);
-        matchedTestIndices.add(tIdx);
-      }
-    }
-  }
-
-  const removed = baselineEls.filter((_, i) => !matchedBaselineIndices.has(i));
-  const added = testEls.filter((_, i) => !matchedTestIndices.has(i));
-
-  return { matched, added, removed };
-}
 
 // --- Box / style comparison helpers ---
 
@@ -126,7 +64,6 @@ function compareMatchedPair(pair: MatchedPair): DomFinding[] {
   // 1. Text changes
   if (b.text !== t.text) {
     if (b.text && t.text) {
-      // Text content differs
       findings.push({
         type: 'text_changed',
         path: b.path,
@@ -169,10 +106,9 @@ function compareMatchedPair(pair: MatchedPair): DomFinding[] {
     }
   }
 
-  // 2. Layout shift (box position/size)
+  // 2. Layout shift
   const delta = boxDelta(b.box, t.box);
   if (delta > 2 && !(b.text && t.text && b.text === t.text)) {
-    // Don't duplicate text_moved findings
     findings.push({
       type: 'layout_shift',
       path: b.path,
